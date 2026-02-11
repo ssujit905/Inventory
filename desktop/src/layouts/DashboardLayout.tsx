@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, Settings, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
 
 export default function DashboardLayout({ children, role }: { children: React.ReactNode, role: 'admin' | 'staff' }) {
     const navigate = useNavigate();
+    const location = useLocation();
     const { query, setQuery } = useSearchStore();
     const { signOut } = useAuthStore();
     const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [pendingCostCount, setPendingCostCount] = useState(0);
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -51,9 +53,67 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         return () => clearTimeout(timer);
     }, [query]);
 
-    const handleLogout = async () => {
-        await signOut();
-        navigate('/');
+    useEffect(() => {
+        if (role !== 'admin') {
+            setPendingCostCount(0);
+            return;
+        }
+
+        let active = true;
+
+        const fetchPendingCosts = async () => {
+            const { count } = await supabase
+                .from('product_lots')
+                .select('id', { count: 'exact', head: true })
+                .eq('cost_price', 0);
+
+            if (active) {
+                setPendingCostCount(count || 0);
+            }
+        };
+
+        fetchPendingCosts();
+
+        const refreshTimer = setInterval(fetchPendingCosts, 10000);
+
+        const channel = supabase
+            .channel('pending-cost-badge')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_lots' }, (payload) => {
+                const newRow: any = payload.new;
+                if (newRow?.cost_price === 0) {
+                    setPendingCostCount(prev => prev + 1);
+                }
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'product_lots' }, (payload) => {
+                const oldRow: any = payload.old;
+                const newRow: any = payload.new;
+                const wasPending = (oldRow?.cost_price ?? 0) === 0;
+                const isPending = (newRow?.cost_price ?? 0) === 0;
+
+                if (wasPending && !isPending) {
+                    setPendingCostCount(prev => Math.max(0, prev - 1));
+                } else if (!wasPending && isPending) {
+                    setPendingCostCount(prev => prev + 1);
+                }
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'product_lots' }, (payload) => {
+                const oldRow: any = payload.old;
+                if ((oldRow?.cost_price ?? 0) === 0) {
+                    setPendingCostCount(prev => Math.max(0, prev - 1));
+                }
+            })
+            .subscribe();
+
+        return () => {
+            active = false;
+            clearInterval(refreshTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [role]);
+
+    const handleLogout = () => {
+        signOut();
+        navigate('/', { replace: true });
     };
 
     const handleSelectSuggestion = (text: string) => {
@@ -74,19 +134,26 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </div>
 
                 <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-                    <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" path="/admin/dashboard" active={window.location.pathname.includes('dashboard')} />
-                    <NavItem icon={<Package size={20} />} label="Inventory" path="/admin/inventory" active={window.location.pathname.includes('inventory')} />
-                    <NavItem icon={<ArrowDownCircle size={20} />} label="Stock In" path="/admin/stock-in" active={window.location.pathname.includes('stock-in')} />
-                    <NavItem icon={<DollarSign size={20} />} label="Expenses" path="/admin/expenses" active={window.location.pathname.includes('expenses')} />
-                    <NavItem icon={<ShoppingCart size={20} />} label="Sales" path="/admin/sales" active={window.location.pathname.includes('sales')} />
-                    <NavItem icon={<FileText size={20} />} label="Reports" path="/admin/reports" />
+                    <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" path="/admin/dashboard" active={location.pathname === '/admin/dashboard'} />
+                    <NavItem icon={<Package size={20} />} label="Inventory" path="/admin/inventory" active={location.pathname === '/admin/inventory'} />
+                    <NavItem
+                        icon={<ArrowDownCircle size={20} />}
+                        label="Stock In"
+                        path="/admin/stock-in"
+                        active={location.pathname === '/admin/stock-in'}
+                        badge={role === 'admin' && pendingCostCount > 0 ? pendingCostCount : undefined}
+                    />
+                    <NavItem icon={<DollarSign size={20} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
+                    <NavItem icon={<ShoppingCart size={20} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
                     {role === 'admin' && (
                         <>
                             <div className="pt-4 pb-2">
                                 <p className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Admin</p>
                             </div>
-                            <NavItem icon={<Users size={20} />} label="Staff Management" path="/admin/users" />
-                            <NavItem icon={<Settings size={20} />} label="Settings" path="/admin/settings" />
+                            <NavItem icon={<TrendingUp size={20} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
+                            <NavItem icon={<FileText size={20} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
+                            <NavItem icon={<FileText size={20} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
+                            <NavItem icon={<Users size={20} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
                         </>
                     )}
                 </nav>
@@ -125,7 +192,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     }
                                 }}
                                 placeholder="Search Name or Phone..."
-                                className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-gray-900 dark:text-gray-100"
                             />
 
                             {/* Suggestions Dropdown */}
@@ -171,7 +238,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     )
 }
 
-function NavItem({ icon, label, path, active = false }: { icon: React.ReactNode, label: string, path: string, active?: boolean }) {
+function NavItem({ icon, label, path, active = false, badge }: { icon: React.ReactNode, label: string, path: string, active?: boolean, badge?: number }) {
     const navigate = useNavigate();
     return (
         <button
@@ -181,7 +248,12 @@ function NavItem({ icon, label, path, active = false }: { icon: React.ReactNode,
                 : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                 }`}>
             {icon}
-            {label}
+            <span className="flex-1 text-left">{label}</span>
+            {badge !== undefined && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-100 text-rose-600">
+                    {badge}
+                </span>
+            )}
         </button>
     )
 }

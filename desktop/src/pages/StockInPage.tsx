@@ -12,7 +12,7 @@ type RecentTransaction = {
     quantity_changed: number;
     type: string;
     product: { name: string; sku: string; description: string };
-    lot: { id: string; lot_number: string; cost_price: number; expiry_date: string };
+    lot: { id: string; lot_number: string; cost_price: number; expiry_date: string | null; received_date: string };
 };
 
 export default function StockInPage() {
@@ -74,7 +74,7 @@ export default function StockInPage() {
     }, []);
 
     const fetchRecentTransactions = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('transactions')
             .select(`
                 id,
@@ -82,29 +82,63 @@ export default function StockInPage() {
                 quantity_changed,
                 type,
                 product:products(name, sku, description),
-                lot:product_lots(id, lot_number, cost_price, expiry_date)
+                lot:product_lots(id, lot_number, cost_price, expiry_date, received_date)
             `)
             .eq('type', 'in')
             .order('created_at', { ascending: false })
             .limit(20);
 
-        if (data) setRecentTransactions(data as any);
+        if (error) {
+            console.error('Error fetching transactions:', error);
+            return;
+        }
+
+        if (data) {
+            const sorted = [...data].sort((a: any, b: any) => {
+                const aDate = new Date(a.lot?.received_date || a.created_at).getTime();
+                const bDate = new Date(b.lot?.received_date || b.created_at).getTime();
+                return bDate - aDate;
+            });
+            setRecentTransactions(sorted as any);
+        }
     };
 
     const handleUpdateCost = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedLot || !isAdmin) return;
+        if (!Number.isFinite(newCost) || newCost <= 0) {
+            setMessage({ type: 'error', text: 'Enter a valid cost greater than 0.' });
+            return;
+        }
         setLoading(true);
 
         try {
-            const { error } = await supabase
+            const { data: updatedLot, error } = await supabase
                 .from('product_lots')
                 .update({ cost_price: newCost })
-                .eq('id', selectedLot.id);
+                .eq('id', selectedLot.id)
+                .select('id, cost_price')
+                .maybeSingle();
 
             if (error) throw error;
+            if (!updatedLot) {
+                throw new Error('Update failed. No row updated (check permissions or lot id).');
+            }
 
             setMessage({ type: 'success', text: 'Cost price updated!' });
+            setRecentTransactions(prev =>
+                prev.map(tx =>
+                    tx.lot?.id === updatedLot.id
+                        ? {
+                            ...tx,
+                            lot: {
+                                ...tx.lot,
+                                cost_price: updatedLot.cost_price,
+                            },
+                        }
+                        : tx
+                )
+            );
             await fetchRecentTransactions();
             setTimeout(() => {
                 setIsUpdateModalOpen(false);
@@ -119,6 +153,10 @@ export default function StockInPage() {
     };
 
     const openUpdateModal = (lotId: string, sku: string, qty: number, currentCost: number) => {
+        if (!lotId) {
+            setMessage({ type: 'error', text: 'Missing lot id for update.' });
+            return;
+        }
         setSelectedLot({ id: lotId, sku, qty });
         setNewCost(currentCost);
         setIsUpdateModalOpen(true);
@@ -179,7 +217,8 @@ export default function StockInPage() {
                 .insert([{
                     product_id: productId,
                     lot_number: lotNumber,
-                    expiry_date: entryDate || null,
+                    expiry_date: null,
+                    received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
                     quantity_remaining: quantity,
                     cost_price: isAdmin ? costPrice : 0,
                     created_by: user.id
@@ -248,9 +287,9 @@ export default function StockInPage() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="space-y-3">
                         {recentTransactions.length === 0 ? (
-                            <div className="col-span-full py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2.5rem] bg-gray-50/50 dark:bg-gray-900/20">
+                            <div className="py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2.5rem] bg-gray-50/50 dark:bg-gray-900/20">
                                 <Package size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
                                 <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No Intake records yet</p>
                                 <button onClick={openEntryForm} className="mt-4 text-primary font-black flex items-center gap-2 hover:underline">
@@ -258,84 +297,77 @@ export default function StockInPage() {
                                 </button>
                             </div>
                         ) : (
-                            recentTransactions.map(tx => {
-                                const isPendingCost = (tx.lot?.cost_price || 0) === 0;
-                                return (
-                                    <div key={tx.id} className="group relative bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
-                                        {/* Status Header */}
-                                        <div className="p-5 pb-3 flex items-center justify-between border-b border-gray-50 dark:border-gray-800/50">
-                                            {isPendingCost ? (
-                                                <div className="px-3 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-500 text-[9px] font-black uppercase tracking-widest rounded-full border border-rose-100 dark:border-rose-900/30 animate-pulse">
-                                                    Pending Cost Entry
+                            <>
+                                <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <div className="col-span-2">Date</div>
+                                    <div className="col-span-3">SKU</div>
+                                    <div className="col-span-3">Description</div>
+                                    <div className="col-span-2 text-right">Qty</div>
+                                    <div className="col-span-2 text-right">Lot</div>
+                                </div>
+                                {recentTransactions.map((tx, index) => {
+                                    const isPendingCost = (tx.lot?.cost_price || 0) === 0;
+                                    const displayIndex = recentTransactions.length - index;
+                                    return (
+                                        <div key={tx.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center">
+                                                <div className="md:col-span-2 flex items-center gap-3">
+                                                    <div className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center text-xs font-black">
+                                                        {displayIndex}
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
+                                                        {format(new Date(tx.lot?.received_date || tx.created_at), 'MMM dd, yyyy')}
+                                                    </span>
                                                 </div>
-                                            ) : (
-                                                <div className="px-3 py-1 bg-green-50 dark:bg-green-950/20 text-green-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-green-100 dark:border-green-900/30">
-                                                    Value Verified
+                                                <div className="md:col-span-3 flex items-center gap-3">
+                                                    <div className="h-9 w-9 bg-primary/5 dark:bg-primary/10 rounded-lg flex items-center justify-center text-primary flex-shrink-0">
+                                                        <Barcode size={14} />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{tx.product?.sku}</div>
+                                                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">SKU</div>
+                                                    </div>
                                                 </div>
-                                            )}
-                                            <div className="text-right">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter block line-clamp-1">
-                                                    {format(new Date(tx.created_at), 'MMM dd, HH:mm')}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="p-6 space-y-5">
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Product SKU</div>
-                                                    <h4 className="font-outfit font-black text-lg text-gray-900 dark:text-gray-100 truncate">{tx.product?.sku}</h4>
-                                                    <p className="text-[10px] font-medium text-gray-500 line-clamp-1 mt-1 italic italic">
-                                                        "{tx.product?.description || 'No description provided'}"
-                                                    </p>
+                                                <div className="md:col-span-3 text-xs text-gray-600 dark:text-gray-300 line-clamp-1 italic leading-relaxed">
+                                                    {tx.product?.description || 'No description provided'}
                                                 </div>
-                                                <div className="h-10 w-10 bg-primary/5 dark:bg-primary/10 rounded-xl flex items-center justify-center text-primary flex-shrink-0">
-                                                    <Barcode size={18} />
+                                                <div className="md:col-span-2 text-right text-sm font-black text-primary font-mono tracking-tight">
+                                                    +{tx.quantity_changed}
                                                 </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-3 bg-gray-50/50 dark:bg-gray-800/30 p-4 rounded-3xl border border-gray-100 dark:border-gray-800/50">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Qty Received</span>
-                                                    <span className="text-lg font-black text-primary font-mono tracking-tighter">+{tx.quantity_changed}</span>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Lot Batch</span>
-                                                    <span className="text-xs font-black text-gray-700 dark:text-gray-300 font-mono">#{tx.lot?.lot_number}</span>
+                                                <div className="md:col-span-2 text-right text-xs font-black text-gray-700 dark:text-gray-300 font-mono tracking-tight">
+                                                    #{tx.lot?.lot_number}
                                                 </div>
                                             </div>
 
                                             {isAdmin && (
-                                                <div className="pt-2">
-                                                    {isPendingCost ? (
+                                                <div className="px-6 pb-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                                                        <span className="md:text-left">Unit: ₹{Number(tx.lot?.cost_price || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                                        <span className="md:text-left">Total: ₹{(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                                        <span className="md:text-left">
+                                                            {isPendingCost ? (
+                                                                <span className="inline-flex px-2.5 py-1 bg-rose-50 dark:bg-rose-950/20 text-rose-500 text-[9px] font-black uppercase tracking-widest rounded-full border border-rose-100 dark:border-rose-900/30">
+                                                                    Pending
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex px-2.5 py-1 bg-green-50 dark:bg-green-950/20 text-green-600 text-[9px] font-black uppercase tracking-widest rounded-full border border-green-100 dark:border-green-900/30">
+                                                                    Verified
+                                                                </span>
+                                                            )}
+                                                        </span>
                                                         <button
-                                                            onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, 0)}
-                                                            className="w-full h-11 bg-primary text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-primary/20"
+                                                            onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
+                                                            className="md:justify-self-end px-5 py-2.5 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-colors"
                                                         >
                                                             Update Cost Price
                                                         </button>
-                                                    ) : (
-                                                        <div className="flex items-center justify-between p-4 bg-primary/5 dark:bg-primary/10 rounded-2xl border border-primary/10">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[9px] font-black text-primary/60 uppercase">Batch Valuation</span>
-                                                                <span className="text-lg font-black text-primary font-mono select-none">
-                                                                    ${(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                                </span>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
-                                                                className="h-8 w-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded-lg text-gray-400 hover:text-primary transition-colors"
-                                                            >
-                                                                <History size={14} />
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                );
-                            })
+                                    );
+                                })}
+                            </>
                         )}
                     </div>
                 </div>
@@ -376,7 +408,7 @@ export default function StockInPage() {
                                                 type="text"
                                                 value={sku}
                                                 onChange={e => setSku(e.target.value)}
-                                                className="w-full h-16 pl-14 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 font-black text-lg transition-all"
+                                                className="w-full h-16 pl-14 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 font-black text-lg transition-all text-gray-900 dark:text-gray-100"
                                                 placeholder="Enter SKU or Product ID"
                                             />
                                         </div>
@@ -389,7 +421,7 @@ export default function StockInPage() {
                                             rows={2}
                                             value={details}
                                             onChange={e => setDetails(e.target.value)}
-                                            className="w-full p-5 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 font-medium transition-all"
+                                            className="w-full p-5 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 focus:ring-4 focus:ring-primary/5 font-medium transition-all text-gray-900 dark:text-gray-100"
                                             placeholder="Notes about this product intake..."
                                         />
                                     </div>
@@ -401,19 +433,19 @@ export default function StockInPage() {
                                             type="text"
                                             value={lotNumber}
                                             onChange={e => setLotNumber(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-bold"
+                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100"
                                             placeholder="LOT-2024-X"
                                         />
                                     </div>
 
                                     <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Date <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Received Date <span className="text-red-500">*</span></label>
                                         <input
                                             required
                                             type="date"
                                             value={entryDate}
                                             onChange={e => setEntryDate(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black"
+                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100"
                                         />
                                     </div>
 
@@ -425,7 +457,7 @@ export default function StockInPage() {
                                             min="1"
                                             value={quantity || ''}
                                             onChange={e => setQuantity(Number(e.target.value))}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black text-2xl text-primary"
+                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black text-2xl text-primary text-gray-900 dark:text-gray-100"
                                         />
                                     </div>
 
@@ -436,10 +468,10 @@ export default function StockInPage() {
                                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                                                 <input
                                                     type="number"
-                                                    step="0.01"
+                                                    step="1"
                                                     value={costPrice || ''}
                                                     onChange={e => setCostPrice(Number(e.target.value))}
-                                                    className="w-full h-14 pl-12 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black"
+                                                    className="w-full h-14 pl-12 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100"
                                                 />
                                             </div>
                                         </div>
@@ -451,7 +483,7 @@ export default function StockInPage() {
                                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Transaction Value</span>
                                                 <span className="text-xs text-primary/60 font-medium">Automatic Calculation</span>
                                             </div>
-                                            <span className="text-3xl font-black text-primary font-mono">${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            <span className="text-3xl font-black text-primary font-mono">${totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                                         </div>
                                     )}
 
@@ -463,7 +495,7 @@ export default function StockInPage() {
                                             type="text"
                                             value={imageUrl}
                                             onChange={e => setImageUrl(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 text-xs text-gray-400 font-medium"
+                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 text-xs text-gray-400 font-medium text-gray-900 dark:text-gray-100"
                                             placeholder="https://cloud-storage.com/product-img.jpg"
                                         />
                                     </div>
@@ -518,7 +550,7 @@ export default function StockInPage() {
                                         <input
                                             required
                                             type="number"
-                                            step="0.01"
+                                            step="1"
                                             value={newCost || ''}
                                             onChange={e => setNewCost(Number(e.target.value))}
                                             className="w-full h-14 pl-12 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-primary/50 font-black text-lg"
@@ -529,7 +561,7 @@ export default function StockInPage() {
 
                                 <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex justify-between items-center">
                                     <span className="text-[10px] font-black text-gray-400 uppercase">Projected Total</span>
-                                    <span className="text-xl font-black text-primary font-mono">${(selectedLot.qty * newCost).toLocaleString()}</span>
+                                    <span className="text-xl font-black text-primary font-mono">${(selectedLot.qty * newCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                                 </div>
 
                                 <button

@@ -3,12 +3,22 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
-import { Plus, ShoppingCart, User, MapPin, Phone, DollarSign, X, History, CheckCircle2, Edit2 } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 type SaleItem = {
+    id?: string;
     product: { sku: string };
     quantity: number;
+    sold_amount?: number | null;
+    product_id?: string;
+};
+
+type SaleItemRow = {
+    id: string;
+    quantity: number;
+    sold_amount: number | null;
+    product: { sku: string } | null;
 };
 
 type Sale = {
@@ -21,8 +31,11 @@ type Sale = {
     phone1: string;
     phone2: string;
     cod_amount: number;
+    sold_amount?: number | null;
+    return_cost?: number | null;
+    ad_id?: string | null;
     created_at: string;
-    // We'll derive products from transactions or sale_items
+    // We'll derive products from sale_items
     items?: SaleItem[];
 };
 
@@ -32,15 +45,27 @@ type ProductOption = {
     total_stock: number;
 };
 
+type AdOption = {
+    id: string;
+    description: string;
+    amount: number;
+};
+
 export default function SalesPage() {
-    const { user } = useAuthStore();
+    const { user, profile } = useAuthStore();
     const { query } = useSearchStore();
 
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+    const [viewSale, setViewSale] = useState<Sale | null>(null);
+    const [saleItems, setSaleItems] = useState<SaleItemRow[]>([]);
+    const [soldAmountInput, setSoldAmountInput] = useState<number | ''>('');
+    const [returnCostInput, setReturnCostInput] = useState<number | ''>('');
     const [sales, setSales] = useState<Sale[]>([]);
+    const [pendingStatus, setPendingStatus] = useState<'delivered' | 'returned' | null>(null);
 
     const filteredSales = useMemo(() => {
         if (!query.trim()) return sales;
@@ -61,12 +86,14 @@ export default function SalesPage() {
     const [phone1, setPhone1] = useState('');
     const [phone2, setPhone2] = useState('');
     const [codAmount, setCodAmount] = useState<number>(0);
+    const [adId, setAdId] = useState('');
 
     // Multi-Product State
     const [orderItems, setOrderItems] = useState<{ productId: string, quantity: number }[]>([
         { productId: '', quantity: 1 }
     ]);
-    const [availableProducts, setAvailableProducts] = useState<ProductOption[]>([]);
+    const [baseAvailableProducts, setBaseAvailableProducts] = useState<ProductOption[]>([]);
+    const [adsOptions, setAdsOptions] = useState<AdOption[]>([]);
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -96,8 +123,10 @@ export default function SalesPage() {
             .from('sales')
             .select(`
                 *,
-                transactions (
-                    quantity_changed,
+                sale_items (
+                    id,
+                    quantity,
+                    sold_amount,
                     product:products(sku)
                 )
             `)
@@ -106,20 +135,13 @@ export default function SalesPage() {
 
         if (data) {
             const processedSales = data.map((sale: any) => {
-                // Group transactions by product SKU to show items
-                const itemMap = new Map<string, number>();
-                (sale.transactions || []).forEach((t: any) => {
-                    if (t.product?.sku) {
-                        const qty = Math.abs(t.quantity_changed);
-                        itemMap.set(t.product.sku, (itemMap.get(t.product.sku) || 0) + qty);
-                    }
-                });
-
                 return {
                     ...sale,
-                    items: Array.from(itemMap.entries()).map(([sku, quantity]) => ({
-                        product: { sku },
-                        quantity
+                    items: (sale.sale_items || []).map((i: any) => ({
+                        id: i.id,
+                        product: { sku: i.product?.sku || 'SKU' },
+                        quantity: i.quantity,
+                        sold_amount: i.sold_amount ?? null
                     }))
                 };
             });
@@ -172,13 +194,14 @@ export default function SalesPage() {
                 };
             }).filter(p => p.total_stock > 0);
 
-            setAvailableProducts(options);
+            setBaseAvailableProducts(options);
         }
     };
 
     useEffect(() => {
         if (isFormOpen) {
             fetchAvailableProducts();
+            fetchAds();
         }
     }, [isFormOpen]);
 
@@ -191,9 +214,20 @@ export default function SalesPage() {
         setPhone1('');
         setPhone2('');
         setCodAmount(0);
+        setAdId('');
         setOrderItems([{ productId: '', quantity: 1 }]);
         setIsFormOpen(true);
         setMessage(null);
+    };
+
+    const fetchAds = async () => {
+        const { data } = await supabase
+            .from('expenses')
+            .select('id, description, amount')
+            .eq('category', 'ads')
+            .order('created_at', { ascending: false });
+
+        if (data) setAdsOptions(data as AdOption[]);
     };
 
     const handleStatusUpdate = async (newStatus: Sale['parcel_status']) => {
@@ -201,9 +235,24 @@ export default function SalesPage() {
         setLoading(true);
 
         try {
+            if (newStatus === 'delivered') {
+                if (!soldAmountInput || Number(soldAmountInput) <= 0) {
+                    throw new Error('Enter sold amount before marking as delivered.');
+                }
+            }
+            if (newStatus === 'returned') {
+                if (!returnCostInput || Number(returnCostInput) <= 0) {
+                    throw new Error('Enter return courier cost before marking as returned.');
+                }
+            }
+
             const { error } = await supabase
                 .from('sales')
-                .update({ parcel_status: newStatus })
+                .update({
+                    parcel_status: newStatus,
+                    sold_amount: newStatus === 'delivered' ? Number(soldAmountInput || 0) : selectedSale.sold_amount,
+                    return_cost: newStatus === 'returned' ? Number(returnCostInput || 0) : selectedSale.return_cost
+                })
                 .eq('id', selectedSale.id);
 
             if (error) throw error;
@@ -233,10 +282,27 @@ export default function SalesPage() {
         }
     };
 
-    const openStatusModal = (sale: Sale) => {
+    const openStatusModal = async (sale: Sale) => {
         setSelectedSale(sale);
         setIsStatusModalOpen(true);
         setMessage(null);
+        setSoldAmountInput(sale.sold_amount ?? '');
+        setReturnCostInput(sale.return_cost ?? '');
+        setPendingStatus(null);
+
+        const { data, error } = await supabase
+            .from('sale_items')
+            .select(`
+                id,
+                quantity,
+                sold_amount,
+                product:products(sku)
+            `)
+            .eq('sale_id', sale.id);
+
+        if (!error && data) {
+            setSaleItems(data as any);
+        }
     };
 
     const handleCreateSale = async (e: React.FormEvent) => {
@@ -291,7 +357,7 @@ export default function SalesPage() {
                 }).filter(l => l.calculatedRemaining > 0);
 
                 const totalStock = processedLots.reduce((sum, l) => sum + l.calculatedRemaining, 0);
-                const productSku = availableProducts.find(p => p.id === item.productId)?.sku || 'Unknown';
+                const productSku = baseAvailableProducts.find(p => p.id === item.productId)?.sku || 'Unknown';
 
                 if (totalStock < item.quantity) {
                     throw new Error(`Insufficient stock for ${productSku}. Available: ${totalStock}`);
@@ -326,6 +392,7 @@ export default function SalesPage() {
                     phone1,
                     phone2: phone2 || null,
                     cod_amount: codAmount,
+                    ad_id: adId || null,
                     // Legacy column support (optional: use first item)
                     product_id: deductionsToMake[0]?.productId,
                     quantity: orderItems.reduce((s, i) => s + i.quantity, 0),
@@ -336,7 +403,19 @@ export default function SalesPage() {
 
             if (saleError) throw saleError;
 
-            // 3. Commit Deductions and Log Transactions
+            // 3. Insert sale items (for accurate sold amount tracking)
+            const saleItemsPayload = orderItems.map(i => ({
+                sale_id: newSale.id,
+                product_id: i.productId,
+                quantity: i.quantity
+            }));
+            const { error: itemsError } = await supabase
+                .from('sale_items')
+                .insert(saleItemsPayload);
+
+            if (itemsError) throw itemsError;
+
+            // 4. Commit Deductions and Log Transactions
             for (const step of deductionsToMake) {
                 // Update Lot Physical Column (Stock In - Sold - New Deduction)
                 await supabase.from('product_lots')
@@ -369,6 +448,11 @@ export default function SalesPage() {
         setOrderItems([...orderItems, { productId: '', quantity: 1 }]);
     };
 
+    const openViewModal = (sale: Sale) => {
+        setViewSale(sale);
+        setIsViewModalOpen(true);
+    };
+
     const removeOrderItem = (index: number) => {
         if (orderItems.length > 1) {
             setOrderItems(orderItems.filter((_, i) => i !== index));
@@ -381,6 +465,17 @@ export default function SalesPage() {
         setOrderItems(newItems);
     };
 
+    const getRemainingForProduct = (productId: string, excludeIndex: number) => {
+        const base = baseAvailableProducts.find(p => p.id === productId);
+        if (!base) return 0;
+        const reserved = orderItems.reduce((sum, item, idx) => {
+            if (idx === excludeIndex) return sum;
+            if (item.productId !== productId) return sum;
+            return sum + Number(item.quantity || 0);
+        }, 0);
+        return Math.max(0, base.total_stock - reserved);
+    };
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'processing': return 'bg-amber-100 text-amber-700 border-amber-200';
@@ -390,8 +485,6 @@ export default function SalesPage() {
             default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
     };
-
-    const { profile } = useAuthStore();
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
@@ -423,119 +516,71 @@ export default function SalesPage() {
                         <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 font-outfit">Recent Shipments</h3>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    <div className="space-y-3">
                         {filteredSales.length === 0 ? (
-                            <div className="col-span-full py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2.5rem] bg-gray-50/50 dark:bg-gray-900/20">
+                            <div className="py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2.5rem] bg-gray-50/50 dark:bg-gray-900/20">
                                 <ShoppingCart size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
                                 <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No sales records found</p>
                             </div>
                         ) : (
-                            filteredSales.map(sale => (
-                                <div key={sale.id} className="group relative bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
-                                    {/* Top Status Bar */}
-                                    <div className="p-6 pb-4 flex items-center justify-between border-b border-gray-50 dark:border-gray-800/50">
-                                        <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
-                                            {sale.parcel_status}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => openStatusModal(sale)}
-                                                className="h-10 w-10 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-xl text-gray-400 hover:text-primary transition-all hover:scale-110"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-6 space-y-6">
-                                        {/* Customer Header */}
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">Recipient</div>
-                                                <h4 className="font-black text-xl text-gray-900 dark:text-gray-100 truncate font-outfit">{sale.customer_name}</h4>
-                                                <div className="flex items-center gap-1.5 mt-2 text-xs font-bold text-gray-500">
-                                                    <div className="p-1 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-                                                        <MapPin size={10} className="text-blue-500" />
-                                                    </div>
-                                                    <span className="truncate">{sale.destination_branch}</span>
-                                                </div>
-                                            </div>
-                                            <div className="text-right flex-shrink-0">
-                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter block mb-1">Order Date</span>
-                                                <div className="px-3 py-1 bg-gray-50 dark:bg-gray-800/80 rounded-lg text-[11px] font-black text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700/50">
-                                                    {format(new Date(sale.order_date), 'MMM dd')}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Contact & Address Section */}
-                                        <div className="grid grid-cols-1 gap-4 bg-gray-50/50 dark:bg-gray-800/30 p-4 rounded-3xl border border-gray-100 dark:border-gray-800/50">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-8 w-8 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center text-green-500">
-                                                    <Phone size={14} />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Contact Info</span>
-                                                    <span className="text-xs font-black text-gray-700 dark:text-gray-300 tracking-wider">
-                                                        {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-start gap-3">
-                                                <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-500 flex-shrink-0">
-                                                    <ShoppingCart size={14} />
-                                                </div>
-                                                <div className="flex flex-col min-w-0">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Delivery Address</span>
-                                                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed italic">
-                                                        "{sale.customer_address}"
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Products Section */}
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between px-1">
-                                                <span className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Package Manifest</span>
-                                                <span className="text-[10px] font-black text-primary px-2 py-0.5 bg-primary/10 rounded-md">
-                                                    {(sale.items || []).length} SKU(s)
-                                                </span>
-                                            </div>
-                                            <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                                                {(sale.items || []).map((item: any, idx: number) => (
-                                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 px-4 py-2.5 rounded-2xl shadow-sm">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-2 w-2 rounded-full bg-primary/40"></div>
-                                                            <span className="text-xs font-black text-gray-700 dark:text-gray-300">{item.product.sku}</span>
-                                                        </div>
-                                                        <span className="text-xs font-black bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded-lg border border-gray-100 dark:border-gray-800 text-primary font-mono select-none">
-                                                            x{item.quantity}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Action/Price Footer */}
-                                    <div className="p-6 pt-2 bg-gradient-to-br from-primary/5 to-primary/[0.02] dark:from-primary/10 dark:to-transparent border-t border-primary/10">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex flex-col">
-                                                <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Total COD (Payable)</span>
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-2xl font-black text-primary font-outfit tracking-tighter">
-                                                        ${Number(sale.cod_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="h-12 w-12 rounded-full bg-white dark:bg-gray-800 shadow-lg flex items-center justify-center text-primary group-hover:rotate-12 transition-transform">
-                                                <DollarSign size={20} />
-                                            </div>
-                                        </div>
-                                    </div>
+                            <>
+                                <div className="hidden md:grid grid-cols-12 gap-5 px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <div className="col-span-2">Date</div>
+                                    <div className="col-span-2">Customer</div>
+                                    <div className="col-span-2">Branch</div>
+                                    <div className="col-span-2 text-right">COD</div>
+                                    <div className="col-span-2 text-right">Status</div>
+                                    <div className="col-span-2 text-right">Actions</div>
                                 </div>
-                            ))
+                                {filteredSales.map((sale, index) => {
+                                    const displayIndex = filteredSales.length - index;
+                                    return (
+                                        <div key={sale.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 px-6 py-4 items-center">
+                                                <div className="md:col-span-2 flex items-center gap-3">
+                                                    <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
+                                                        {displayIndex}
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
+                                                        {format(new Date(sale.order_date), 'MMM dd, yyyy')}
+                                                    </span>
+                                                </div>
+                                                <div className="md:col-span-2 min-w-0 pr-2">
+                                                    <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                                        {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
+                                                    </div>
+                                                </div>
+                                                <div className="md:col-span-2 text-xs text-gray-600 dark:text-gray-300 truncate pr-2">
+                                                    {sale.destination_branch}
+                                                </div>
+                                                <div className="md:col-span-2 text-right text-sm font-black text-primary font-mono tracking-tight">
+                                                    ${Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </div>
+                                                <div className="md:col-span-2 flex items-center justify-end">
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
+                                                        {sale.parcel_status}
+                                                    </span>
+                                                </div>
+                                                <div className="md:col-span-2 flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => openStatusModal(sale)}
+                                                        className="h-9 w-9 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-400 hover:text-primary transition-all"
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openViewModal(sale)}
+                                                        className="px-4 py-2 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-colors"
+                                                    >
+                                                        View
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </>
                         )}
                     </div>
                 </div>
@@ -604,13 +649,13 @@ export default function SalesPage() {
 
                                     <div className="md:col-span-2 space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Full Delivery Address *</label>
-                                        <textarea required rows={2} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-medium" placeholder="House no, Street, City, Landmark..." />
+                                        <textarea required rows={2} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-medium text-gray-900 dark:text-gray-100" placeholder="House no, Street, City, Landmark..." />
                                     </div>
                                     <div className="space-y-2 lg:col-span-1 md:col-span-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phone Number 2 (Optional - 10 Digits)</label>
                                         <div className="relative">
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest" placeholder="1234567890" />
+                                            <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest text-gray-900 dark:text-gray-100" placeholder="1234567890" />
                                         </div>
                                     </div>
 
@@ -636,14 +681,18 @@ export default function SalesPage() {
                                                             required
                                                             value={item.productId}
                                                             onChange={e => updateOrderItem(index, 'productId', e.target.value)}
-                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm text-gray-900 dark:text-gray-100"
                                                         >
                                                             <option value="">-- Choose SKU --</option>
-                                                            {availableProducts.map(p => (
-                                                                <option key={p.id} value={p.id}>
-                                                                    {p.sku} (Available: {p.total_stock})
-                                                                </option>
-                                                            ))}
+                                                            {baseAvailableProducts.map(p => {
+                                                                const remaining = getRemainingForProduct(p.id, index);
+                                                                const isSelected = item.productId === p.id;
+                                                                return (
+                                                                    <option key={p.id} value={p.id} disabled={!isSelected && remaining <= 0}>
+                                                                        {p.sku} (Available: {remaining})
+                                                                    </option>
+                                                                );
+                                                            })}
                                                         </select>
                                                     </div>
 
@@ -655,7 +704,7 @@ export default function SalesPage() {
                                                             min="1"
                                                             value={item.quantity}
                                                             onChange={e => updateOrderItem(index, 'quantity', Number(e.target.value))}
-                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black"
+                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100"
                                                         />
                                                     </div>
 
@@ -677,8 +726,24 @@ export default function SalesPage() {
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount ($) *</label>
                                         <div className="relative">
                                             <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="number" step="0.01" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-xl text-primary" placeholder="0.00" />
+                                            <input required type="number" step="1" min="1" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-xl text-primary text-gray-900 dark:text-gray-100" placeholder="0" />
                                         </div>
+                                    </div>
+
+                                    <div className="space-y-2 col-span-full">
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Ads Campaign (Optional)</label>
+                                        <select
+                                            value={adId}
+                                            onChange={e => setAdId(e.target.value)}
+                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-sm text-gray-900 dark:text-gray-100"
+                                        >
+                                            <option value="">-- Select Ads Campaign --</option>
+                                            {adsOptions.map(ad => (
+                                                <option key={ad.id} value={ad.id}>
+                                                    {ad.description} (${Number(ad.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 
@@ -698,7 +763,7 @@ export default function SalesPage() {
                 {/* Status Update Modal */}
                 {isStatusModalOpen && selectedSale && (
                     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
                             <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent">
                                 <div>
                                     <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit uppercase">Update Status</h2>
@@ -709,7 +774,7 @@ export default function SalesPage() {
                                 </button>
                             </div>
 
-                            <div className="p-8 space-y-6">
+                            <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
                                 {message && (
                                     <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                         <CheckCircle2 size={16} /> {message.text}
@@ -720,7 +785,13 @@ export default function SalesPage() {
                                     {(['processing', 'sent', 'delivered', 'returned'] as const).map((status) => (
                                         <button
                                             key={status}
-                                            onClick={() => handleStatusUpdate(status)}
+                                            onClick={() => {
+                                                if (status === 'delivered' || status === 'returned') {
+                                                    setPendingStatus(status);
+                                                    return;
+                                                }
+                                                handleStatusUpdate(status);
+                                            }}
                                             disabled={loading}
                                             className={`h-14 px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
                                                 ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
@@ -731,6 +802,147 @@ export default function SalesPage() {
                                             {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
                                         </button>
                                     ))}
+                                </div>
+
+                                <div className={`transition-all duration-300 ease-out overflow-hidden ${pendingStatus ? 'max-h-60 opacity-100 mt-4' : 'max-h-0 opacity-0 mt-0'}`}>
+                                    {pendingStatus === 'delivered' && (
+                                        <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
+                                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={soldAmountInput}
+                                                    onChange={(e) => setSoldAmountInput(Number(e.target.value))}
+                                                    className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                    placeholder="Total sold amount"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => handleStatusUpdate('delivered')}
+                                                disabled={loading}
+                                                className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
+                                            >
+                                                Confirm Delivered
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {pendingStatus === 'returned' && (
+                                        <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
+                                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={returnCostInput}
+                                                    onChange={(e) => setReturnCostInput(Number(e.target.value))}
+                                                    className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                    placeholder="Return cost"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => handleStatusUpdate('returned')}
+                                                disabled={loading}
+                                                className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
+                                            >
+                                                Confirm Returned
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* View Sale Modal */}
+                {isViewModalOpen && viewSale && (
+                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
+                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent">
+                                <div>
+                                    <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit uppercase">Sale Details</h2>
+                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mt-1">
+                                        {viewSale.customer_name}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setIsViewModalOpen(false)}
+                                    className="h-10 w-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 text-gray-500 hover:text-red-500 transition-all"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="p-8 space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Date</p>
+                                        <p className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                            {format(new Date(viewSale.order_date), 'MMM dd, yyyy')}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</p>
+                                        <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(viewSale.parcel_status)}`}>
+                                            {viewSale.parcel_status}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Destination</p>
+                                        <p className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                            {viewSale.destination_branch}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">COD Amount</p>
+                                        <p className="text-sm font-black text-primary font-mono">
+                                            ${Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</p>
+                                        <p className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                            {viewSale.customer_name}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contact</p>
+                                        <p className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                            {viewSale.phone1}{viewSale.phone2 ? ` / ${viewSale.phone2}` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Address</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                        {viewSale.customer_address}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</p>
+                                        <span className="text-[10px] font-black text-primary px-2 py-0.5 bg-primary/10 rounded-md">
+                                            {(viewSale.items || []).length} SKU(s)
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 space-y-2">
+                                        {(viewSale.items || []).map((item: any, idx: number) => (
+                                            <div key={idx} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/60 px-4 py-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                <span className="text-xs font-black text-gray-700 dark:text-gray-300">{item.product.sku}</span>
+                                                <span className="text-xs font-black bg-white dark:bg-gray-900 px-2 py-1 rounded-lg border border-gray-100 dark:border-gray-800 text-primary font-mono select-none">
+                                                    x{item.quantity}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>

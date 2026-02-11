@@ -8,20 +8,24 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [
     react(),
-    electron([
-      {
-        // Main-Process
-        entry: 'electron/main.ts',
-      },
-      {
-        // Preload-Scripts
-        entry: 'electron/preload.ts',
-        onstart(options) {
-          options.reload()
-        },
-      },
-    ]),
-    renderer(),
+    ...(process.env.VITE_ELECTRON === '0'
+      ? []
+      : [
+          electron([
+            {
+              // Main-Process
+              entry: 'electron/main.ts',
+            },
+            {
+              // Preload-Scripts
+              entry: 'electron/preload.ts',
+              onstart(options) {
+                options.reload()
+              },
+            },
+          ]),
+          renderer(),
+        ]),
   ],
   resolve: {
     alias: {

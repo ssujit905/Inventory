@@ -7,6 +7,8 @@ import ExpensesPage from './pages/ExpensesPage';
 import SalesPage from './pages/SalesPage';
 import ReportsPage from './pages/ReportsPage';
 import StaffManagementPage from './pages/StaffManagementPage';
+import IncomePage from './pages/IncomePage';
+import ProfitPage from './pages/ProfitPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 
@@ -33,31 +35,35 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={
-          !user ? <LoginPage /> : (
-            profile?.role === 'admin'
-              ? <Navigate to="/admin/dashboard" replace />
-              : <Navigate to="/staff/dashboard" replace />
-          )
+          !user ? <LoginPage /> : <Navigate to="/admin/dashboard" replace />
         } />
 
         <Route path="/admin/dashboard" element={
-          user && profile?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" replace />
+          user ? <AdminDashboard /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/stock-in" element={
-          user && profile?.role === 'admin' ? <StockInPage /> : <Navigate to="/" replace />
+          user ? <StockInPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/inventory" element={
-          user && profile?.role === 'admin' ? <InventoryPage /> : <Navigate to="/" replace />
+          user ? <InventoryPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/expenses" element={
-          user && profile?.role === 'admin' ? <ExpensesPage /> : <Navigate to="/" replace />
+          user ? <ExpensesPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/income" element={
+          user && profile?.role === 'admin' ? <IncomePage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/profit" element={
+          user && profile?.role === 'admin' ? <ProfitPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/sales" element={
-          user && profile?.role === 'admin' ? <SalesPage /> : <Navigate to="/" replace />
+          user ? <SalesPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/reports" element={
@@ -68,7 +74,8 @@ function App() {
           user && profile?.role === 'admin' ? <StaffManagementPage /> : <Navigate to="/" replace />
         } />
 
-        <Route path="/staff/dashboard" element={<Navigate to="/" replace />} />
+
+        <Route path="/staff/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
       </Routes>
     </Router>
   )

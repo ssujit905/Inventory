@@ -9,6 +9,7 @@ interface AuthState { // Corrected 'interfactype' to 'interface'
     loading: boolean;
     initialized: boolean; // Added 'initialized' flag
     initialize: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
     signIn: (email: string, password: string) => Promise<void>; // Changed return type
     signOut: () => Promise<void>;
 }
@@ -18,6 +19,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     profile: null,
     loading: true,
     initialized: false, // Initial state for 'initialized'
+
+    refreshProfile: async () => {
+        const user = get().user;
+        if (!user) {
+            set({ profile: null });
+            return;
+        }
+
+        const adminEmails = ['ssujit905@gmail.com'];
+        const isForceAdmin = user.email ? adminEmails.includes(user.email) : false;
+
+        const buildFallbackProfile = (): Profile => ({
+            id: user.id,
+            full_name: (user.user_metadata as any)?.full_name || user.email?.split('@')[0] || 'User',
+            role: isForceAdmin || (user.user_metadata as any)?.role === 'admin' ? 'admin' : 'staff',
+            created_at: new Date().toISOString()
+        });
+
+        try {
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (profileError || !profile) {
+                set({ profile: buildFallbackProfile() });
+                return;
+            }
+
+            const currentProfile = profile as Profile;
+
+            if (isForceAdmin && currentProfile.role !== 'admin') {
+                await supabase
+                    .from('profiles')
+                    .update({ role: 'admin' })
+                    .eq('id', user.id);
+                set({ profile: { ...currentProfile, role: 'admin' } });
+                return;
+            }
+
+            set({ profile: currentProfile });
+        } catch {
+            set({ profile: buildFallbackProfile() });
+        }
+    },
 
     initialize: async () => {
         // Prevent multiple initializations
@@ -42,30 +89,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             if (session?.user) {
                 console.log('User session found:', session.user.id);
 
-                // Fetch profile with better error handling
-                const { data: profile, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', session.user.id)
-                    .maybeSingle()
-
-                // If there's a 500 error or any profile fetch error, use a default profile
-                if (profileError || !profile) {
-                    console.error('Profile fetch error or not found:', profileError);
-                    console.log('Using fallback profile');
-
-                    // Create a fallback profile from user metadata
-                    const fallbackProfile: Profile = {
-                        id: session.user.id,
-                        full_name: session.user.email?.split('@')[0] || 'User',
-                        role: 'admin', // Default to admin to allow access
-                        created_at: new Date().toISOString()
-                    };
-
-                    set({ user: session.user, profile: fallbackProfile, loading: false })
-                } else {
-                    set({ user: session.user, profile: profile as Profile, loading: false })
-                }
+                set({ user: session.user });
+                await get().refreshProfile();
+                set({ loading: false });
             } else {
                 console.log('No active session');
                 set({ user: null, profile: null, loading: false })
@@ -80,25 +106,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
                 if (event === 'SIGNED_OUT') {
                     set({ user: null, profile: null, loading: false })
                 } else if (event === 'SIGNED_IN' && session?.user) {
-                    // Try to fetch profile
-                    const { data: profile } = await supabase
-                        .from('profiles')
-                        .select('*')
-                        .eq('id', session.user.id)
-                        .maybeSingle()
-
-                    if (profile) {
-                        set({ user: session.user, profile: profile as Profile, loading: false })
-                    } else {
-                        // Use fallback
-                        const fallbackProfile: Profile = {
-                            id: session.user.id,
-                            full_name: session.user.email?.split('@')[0] || 'User',
-                            role: 'admin',
-                            created_at: new Date().toISOString()
-                        };
-                        set({ user: session.user, profile: fallbackProfile, loading: false })
-                    }
+                    set({ user: session.user });
+                    await get().refreshProfile();
+                    set({ loading: false });
                 }
                 // Ignore INITIAL_SESSION and other events to prevent loops
             })
@@ -117,7 +127,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     },
 
     signOut: async () => {
-        await supabase.auth.signOut()
-        set({ user: null, profile: null })
+        try {
+            set({ user: null, profile: null });
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error('Sign out error:', error);
+        }
     },
 }))

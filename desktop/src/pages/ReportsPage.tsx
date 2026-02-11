@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { TrendingUp, TrendingDown, DollarSign, PieChart, Briefcase } from 'lucide-react';
+import { TrendingUp, DollarSign, PieChart, Briefcase } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
@@ -10,20 +10,45 @@ type FinanceStats = {
     totalRevenue: number;
     totalCOGS: number;
     totalExpenses: number;
-    netProfit: number;
+    totalInvestment: number;
+    totalStockValue: number;
     margin: number;
 };
 
+type LotProfitRow = {
+    lot_id: string;
+    lot_number: string;
+    sku: string;
+    qty_sold: number;
+    cost_total: number;
+    revenue_allocated: number;
+    profit: number;
+};
+
+type SaleProfitRow = {
+    sale_id: string;
+    lot_number: string;
+    sku: string;
+    quantity: number;
+    cost_price: number;
+    cost_total: number;
+    sold_amount: number;
+    return_cost: number;
+};
+
 export default function ReportsPage() {
-    const { user } = useAuthStore();
+    const { user, profile } = useAuthStore();
     const [stats, setStats] = useState<FinanceStats>({
         totalRevenue: 0,
         totalCOGS: 0,
         totalExpenses: 0,
-        netProfit: 0,
+        totalInvestment: 0,
+        totalStockValue: 0,
         margin: 0
     });
     const [monthlyData, setMonthlyData] = useState<any[]>([]);
+    const [lotProfitRows, setLotProfitRows] = useState<LotProfitRow[]>([]);
+    const [saleProfitRows, setSaleProfitRows] = useState<SaleProfitRow[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -35,6 +60,7 @@ export default function ReportsPage() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchFinanceData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => fetchFinanceData())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => fetchFinanceData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'income_entries' }, () => fetchFinanceData())
             .subscribe();
 
         return () => {
@@ -45,15 +71,14 @@ export default function ReportsPage() {
     const fetchFinanceData = async () => {
         setLoading(true);
         try {
-            // 1. Fetch all delivered sales for Revenue
-            const { data: deliveredSales, error: salesError } = await supabase
-                .from('sales')
-                .select('id, cod_amount, order_date')
-                .eq('parcel_status', 'delivered');
+            // 1. Fetch income entries for Revenue
+            const { data: incomeEntries, error: incomeError } = await supabase
+                .from('income_entries')
+                .select('amount, income_date, category');
 
-            if (salesError) throw salesError;
+            if (incomeError) throw incomeError;
 
-            // 2. Fetch all sale transactions linked to delivered sales for COGS
+            // 2. Fetch all stock-in transactions for COGS
             const { data: saleTransactions, error: transError } = await supabase
                 .from('transactions')
                 .select(`
@@ -61,7 +86,7 @@ export default function ReportsPage() {
                     lot:product_lots(cost_price),
                     sale:sales(parcel_status)
                 `)
-                .eq('type', 'sale');
+                .eq('type', 'in');
 
             if (transError) throw transError;
 
@@ -72,15 +97,92 @@ export default function ReportsPage() {
 
             if (expError) throw expError;
 
-            // Calculate Stats
-            const totalRevenue = (deliveredSales || []).reduce((sum, s) => sum + Number(s.cod_amount), 0);
+            // 4. Fetch lot-level sales transactions for profit allocation
+            const { data: lotSales, error: lotSalesError } = await supabase
+                .from('transactions')
+                .select(`
+                    id,
+                    sale_id,
+                    quantity_changed,
+                    lot:product_lots(
+                        id,
+                        lot_number,
+                        cost_price,
+                        products(sku)
+                    ),
+                    sale:sales(id, sold_amount, return_cost, parcel_status, order_date)
+                `)
+                .eq('type', 'sale');
 
-            // Calculate COGS only for delivered items
-            const totalCOGS = (saleTransactions || [])
+            if (lotSalesError) throw lotSalesError;
+
+            // 4. Fetch lots with transactions to compute remaining (Inventory logic)
+            const { data: lotsData, error: lotsError } = await supabase
+                .from('product_lots')
+                .select(`
+                    id,
+                    cost_price,
+                    transactions (
+                        type,
+                        quantity_changed,
+                        sales (parcel_status)
+                    )
+                `);
+
+            if (lotsError) throw lotsError;
+
+            // Calculate Stats
+            // 5. Calculate Revenue from Delivered Sales (Avoiding double-counting lots)
+            const deliveredSalesMap = new Map<string, { amount: number, date: string }>();
+            (lotSales || []).forEach((t: any) => {
+                if (t.sale?.parcel_status === 'delivered' && t.sale?.sold_amount) {
+                    deliveredSalesMap.set(t.sale.id, {
+                        amount: Number(t.sale.sold_amount),
+                        date: t.sale.order_date || t.sale.created_at
+                    });
+                }
+            });
+
+            const salesRevenue = Array.from(deliveredSalesMap.values()).reduce((sum, s) => sum + s.amount, 0);
+
+            // Manual income entries can also be added if needed, but per request we focus on sold amounts
+            const otherIncome = (incomeEntries || [])
+                .filter((i: any) => i.category === 'income')
+                .reduce((sum, i) => sum + Number(i.amount), 0);
+
+            const totalRevenue = salesRevenue + otherIncome;
+
+            // Calculate COGS from all sold quantities * cost price (delivered only)
+            const totalCOGS = (lotSales || [])
                 .filter((t: any) => t.sale?.parcel_status === 'delivered')
                 .reduce((sum, t: any) => sum + (Math.abs(t.quantity_changed) * Number(t.lot?.cost_price || 0)), 0);
 
             const totalExpenses = (expensesData || []).reduce((sum, e) => sum + Number(e.amount), 0);
+            const totalInvestment = (incomeEntries || [])
+                .filter((i: any) => i.category === 'investment')
+                .reduce((sum, i) => sum + Number(i.amount), 0);
+
+            const totalStockValue = (lotsData || [])
+                .map((lot: any) => {
+                    const txs = lot.transactions || [];
+                    const stockIn = txs
+                        .filter((t: any) => t.type === 'in')
+                        .reduce((sum: number, t: any) => sum + Number(t.quantity_changed || 0), 0);
+
+                    const sold = txs
+                        .filter((t: any) => {
+                            if (t.type !== 'sale') return false;
+                            if (t.sales) {
+                                return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
+                            }
+                            return true;
+                        })
+                        .reduce((sum: number, t: any) => sum + Math.abs(Number(t.quantity_changed || 0)), 0);
+
+                    const remaining = stockIn - sold;
+                    return Math.max(0, remaining) * Number(lot.cost_price || 0);
+                })
+                .reduce((sum: number, v: number) => sum + v, 0);
 
             const netProfit = totalRevenue - totalCOGS - totalExpenses;
             const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -89,9 +191,83 @@ export default function ReportsPage() {
                 totalRevenue,
                 totalCOGS,
                 totalExpenses,
-                netProfit,
+                totalInvestment,
+                totalStockValue,
                 margin
             });
+
+            const deliveredSales = new Map<string, number>();
+            deliveredSalesMap.forEach((val, key) => deliveredSales.set(key, val.amount));
+
+            // Group lot sales by sale_id for allocation
+            const saleTotals = new Map<string, number>();
+            (lotSales || []).forEach((t: any) => {
+                if (t.type !== 'sale') return;
+                if (!t.sale_id) return;
+                const qty = Math.abs(Number(t.quantity_changed || 0));
+                saleTotals.set(t.sale_id, (saleTotals.get(t.sale_id) || 0) + qty);
+            });
+
+            const lotAgg = new Map<string, LotProfitRow>();
+            (lotSales || []).forEach((t: any) => {
+                if (t.type !== 'sale') return;
+                if (!t.sale_id) return;
+                if (!deliveredSales.has(t.sale_id)) return;
+
+                const qty = Math.abs(Number(t.quantity_changed || 0));
+                const totalQtyInSale = saleTotals.get(t.sale_id) || 0;
+                if (totalQtyInSale <= 0) return;
+
+                const lotId = t.lot?.id || 'unknown';
+                const lotNumber = t.lot?.lot_number || 'N/A';
+                const sku = t.lot?.products?.sku || 'SKU';
+                const costPrice = Number(t.lot?.cost_price || 0);
+                const saleRevenue = deliveredSales.get(t.sale_id) || 0;
+                const revenueAllocated = (qty / totalQtyInSale) * saleRevenue;
+                const costTotal = qty * costPrice;
+
+                const existing = lotAgg.get(lotId);
+                if (existing) {
+                    existing.qty_sold += qty;
+                    existing.cost_total += costTotal;
+                    existing.revenue_allocated += revenueAllocated;
+                    existing.profit += (revenueAllocated - costTotal);
+                } else {
+                    lotAgg.set(lotId, {
+                        lot_id: lotId,
+                        lot_number: lotNumber,
+                        sku,
+                        qty_sold: qty,
+                        cost_total: costTotal,
+                        revenue_allocated: revenueAllocated,
+                        profit: revenueAllocated - costTotal
+                    });
+                }
+            });
+
+            setLotProfitRows(
+                Array.from(lotAgg.values()).sort((a, b) => b.profit - a.profit)
+            );
+
+            // Sale-wise rows (per lot deduction)
+            const saleRows: SaleProfitRow[] = (lotSales || [])
+                .filter((t: any) => t.sale_id && t.lot)
+                .map((t: any) => {
+                    const qty = Math.abs(Number(t.quantity_changed || 0));
+                    const costPrice = Number(t.lot?.cost_price || 0);
+                    return {
+                        sale_id: t.sale_id,
+                        lot_number: t.lot?.lot_number || 'N/A',
+                        sku: t.lot?.products?.sku || 'SKU',
+                        quantity: qty,
+                        cost_price: costPrice,
+                        cost_total: qty * costPrice,
+                        sold_amount: Number(t.sale?.sold_amount || 0),
+                        return_cost: Number(t.sale?.return_cost || 0)
+                    };
+                });
+
+            setSaleProfitRows(saleRows);
 
             // Calculate Monthly Trends (Last 6 months)
             const now = new Date();
@@ -105,12 +281,30 @@ export default function ReportsPage() {
                 const mEnd = endOfMonth(month);
                 const mLabel = format(month, 'MMM');
 
-                const mRevenue = (deliveredSales || [])
+                const mSalesRevenue = Array.from(deliveredSalesMap.values())
                     .filter(s => {
-                        const d = new Date(s.order_date);
+                        const d = new Date(s.date);
                         return d >= mStart && d <= mEnd;
                     })
-                    .reduce((sum, s) => sum + Number(s.cod_amount), 0);
+                    .reduce((sum, s) => sum + s.amount, 0);
+
+                const mOtherIncome = (incomeEntries || [])
+                    .filter((i: any) => i.category === 'income')
+                    .filter((i: any) => {
+                        const d = new Date(i.income_date);
+                        return d >= mStart && d <= mEnd;
+                    })
+                    .reduce((sum, i) => sum + Number(i.amount), 0);
+
+                const mRevenue = mSalesRevenue + mOtherIncome;
+
+                const mInvestment = (incomeEntries || [])
+                    .filter((i: any) => i.category === 'investment')
+                    .filter((i: any) => {
+                        const d = new Date(i.income_date);
+                        return d >= mStart && d <= mEnd;
+                    })
+                    .reduce((sum, i) => sum + Number(i.amount), 0);
 
                 const mExpenses = (expensesData || [])
                     .filter(e => {
@@ -123,7 +317,7 @@ export default function ReportsPage() {
                     name: mLabel,
                     revenue: mRevenue,
                     expenses: mExpenses,
-                    profit: mRevenue - mExpenses
+                    investment: mInvestment
                 };
             });
 
@@ -135,8 +329,6 @@ export default function ReportsPage() {
             setLoading(false);
         }
     };
-
-    const { profile } = useAuthStore();
 
     if (loading) {
         return (
@@ -153,13 +345,13 @@ export default function ReportsPage() {
             <div className="space-y-8 pb-12">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Performance</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Revenue, Profit & Expenditure Analytics</p>
+                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Dashboard</h1>
+                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Revenue, Investment & Expenditure Analytics</p>
                     </div>
                 </div>
 
                 {/* Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                     <FinanceStatCard
                         title="Total Revenue"
                         value={stats.totalRevenue}
@@ -183,12 +375,18 @@ export default function ReportsPage() {
                         color="rose"
                     />
                     <FinanceStatCard
-                        title="Net Profit"
-                        value={stats.netProfit}
-                        icon={stats.netProfit >= 0 ? <TrendingUp className="text-primary" /> : <TrendingDown className="text-rose-500" />}
+                        title="Total Investment"
+                        value={stats.totalInvestment}
+                        icon={<TrendingUp className="text-blue-600" />}
                         trend={`${stats.margin.toFixed(1)}% Margin`}
-                        color={stats.netProfit >= 0 ? "blue" : "rose"}
-                        isProfit
+                        color="blue"
+                    />
+                    <FinanceStatCard
+                        title="Remaining Stock Value"
+                        value={stats.totalStockValue}
+                        icon={<PieChart className="text-indigo-600" />}
+                        trend="Inventory"
+                        color="indigo"
                     />
                 </div>
 
@@ -215,11 +413,11 @@ export default function ReportsPage() {
                         </div>
                     </div>
 
-                    {/* Profit Trend */}
+                    {/* Investment Trend */}
                     <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
                         <div className="mb-8">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Profit Trajectory</h3>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Net gain over time</p>
+                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Investment Trend</h3>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Monthly investment</p>
                         </div>
                         <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
@@ -236,23 +434,25 @@ export default function ReportsPage() {
                                     <Tooltip
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                                     />
-                                    <Area type="monotone" dataKey="profit" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Net Profit" />
+                                    <Area type="monotone" dataKey="investment" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Investment" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
                 </div>
+
             </div>
         </DashboardLayout>
     );
 }
 
-function FinanceStatCard({ title, value, icon, trend, color, isProfit, sub }: any) {
+function FinanceStatCard({ title, value, icon, trend, color, sub }: any) {
     const colors: any = {
         emerald: "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-100 dark:border-emerald-800",
         amber: "bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-100 dark:border-amber-800",
         rose: "bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-100 dark:border-rose-800",
-        blue: "bg-blue-50 dark:bg-blue-900/10 text-blue-600 border-blue-100 dark:border-blue-800"
+        blue: "bg-blue-50 dark:bg-blue-900/10 text-blue-600 border-blue-100 dark:border-blue-800",
+        indigo: "bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 border-indigo-100 dark:border-indigo-800"
     };
 
     return (
@@ -262,7 +462,7 @@ function FinanceStatCard({ title, value, icon, trend, color, isProfit, sub }: an
                     {icon}
                 </div>
                 <div className="flex flex-col items-end">
-                    <div className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-widest ${isProfit ? 'text-primary' : 'text-gray-400'}`}>
+                    <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
                         {trend}
                     </div>
                     {sub && <span className="text-[9px] font-bold text-gray-400 uppercase mt-1">{sub}</span>}
@@ -272,7 +472,7 @@ function FinanceStatCard({ title, value, icon, trend, color, isProfit, sub }: an
             <div className="space-y-1">
                 <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">{title}</h3>
                 <div className="text-3xl font-black text-gray-900 dark:text-gray-100 font-mono tracking-tighter">
-                    ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </div>
             </div>
 

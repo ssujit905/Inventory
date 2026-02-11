@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { UserPlus, Shield, Mail, Edit2, Check, X, AlertCircle, Trash2, Key, UserCheck } from 'lucide-react';
+import { UserPlus, Shield, Mail, Edit2, Check, X, AlertCircle, Key, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Profile = {
     id: string;
-    full_name: string;
+    full_name: string | null;
     role: 'admin' | 'staff';
     created_at: string;
 };
@@ -46,11 +46,32 @@ export default function StaffManagementPage() {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            if (data) setProfiles(data as Profile[]);
+            if (error) {
+                console.error('Error fetching profiles:', error);
+                // If there's a database error, at least show the current user
+                if (currentUserProfile) {
+                    setProfiles([currentUserProfile]);
+                    setMessage({
+                        type: 'error',
+                        text: 'Database connection issue. Showing limited data. Please check your Supabase configuration.'
+                    });
+                } else {
+                    throw error;
+                }
+            } else if (data) {
+                setProfiles(data as Profile[]);
+                setMessage(null);
+            }
         } catch (error: any) {
             console.error('Error fetching profiles:', error);
-            setMessage({ type: 'error', text: 'Failed to load personnel list.' });
+            // Fallback: show at least the current user
+            if (currentUserProfile) {
+                setProfiles([currentUserProfile]);
+            }
+            setMessage({
+                type: 'error',
+                text: 'Failed to load personnel list. Database configuration needed.'
+            });
         } finally {
             setLoading(false);
         }
@@ -178,8 +199,8 @@ export default function StaffManagementPage() {
 
                 {message && (
                     <div className={`p-6 rounded-3xl text-sm font-black flex items-center justify-between animate-in slide-in-from-top-4 ${message.type === 'success'
-                            ? 'bg-green-100 text-green-700 border border-green-200 shadow-lg shadow-green-500/10'
-                            : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-lg shadow-rose-500/10'
+                        ? 'bg-green-100 text-green-700 border border-green-200 shadow-lg shadow-green-500/10'
+                        : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-lg shadow-rose-500/10'
                         }`}>
                         <div className="flex items-center gap-4">
                             <div className={`p-2 rounded-xl ${message.type === 'success' ? 'bg-green-500/20' : 'bg-rose-500/20'}`}>
@@ -256,8 +277,8 @@ export default function StaffManagementPage() {
                                                 </select>
                                             ) : (
                                                 <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
-                                                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                                        : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
                                                     }`}>
                                                     <Shield size={12} /> {p.role}
                                                 </div>
@@ -325,6 +346,9 @@ export default function StaffManagementPage() {
                             </div>
 
                             <form onSubmit={handleAddStaff} className="p-12 space-y-8">
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
+                                    New accounts can log in immediately only if Supabase email confirmation is disabled.
+                                </div>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2">
