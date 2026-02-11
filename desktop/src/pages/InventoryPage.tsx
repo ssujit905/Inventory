@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { Package, AlertTriangle, Hash, Barcode, ArrowUpDown } from 'lucide-react';
+import { Package, AlertTriangle, RotateCcw, Barcode, Hash } from 'lucide-react';
 
 type InventoryLot = {
     id: string;
     lot_number: string;
     sku: string;
+    product_name: string;
     stock_in: number;
     sold: number;
     returned: number;
@@ -19,6 +20,7 @@ export default function InventoryPage() {
     const { profile } = useAuthStore();
     const [inventory, setInventory] = useState<InventoryLot[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchInventory();
@@ -38,7 +40,6 @@ export default function InventoryPage() {
     const fetchInventory = async (isInitial = true) => {
         if (isInitial) setLoading(true);
         try {
-            // 1. Fetch lots with their transactions AND linked sales status
             const { data: lotsData, error: lotsError } = await supabase
                 .from('product_lots')
                 .select(`
@@ -46,47 +47,39 @@ export default function InventoryPage() {
                     lot_number,
                     quantity_remaining,
                     product_id,
-                    products (sku, min_stock_alert),
+                    products (name, sku, min_stock_alert),
                     transactions (
                         type, 
                         quantity_changed,
-                        sale_id,
                         sales (parcel_status)
                     )
                 `);
 
             if (lotsError) throw lotsError;
 
-            // 2. Process each lot individually
             const processedData: InventoryLot[] = (lotsData || []).map((lot: any) => {
                 const transactions = lot.transactions || [];
 
-                // Stock In: Sum of all 'in' type transactions for this specific lot
                 const stock_in = transactions
                     .filter((t: any) => t.type === 'in')
                     .reduce((sum: number, t: any) => sum + t.quantity_changed, 0);
 
-                // Sold: Processing, Sent, or Delivered (or legacy sales with no link)
                 const sold = transactions
                     .filter((t: any) => {
                         if (t.type !== 'sale') return false;
-                        // If we have a linked sale, check its status
                         if (t.sales) {
                             return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
                         }
-                        // Default for legacy transactions with no sale_id link
                         return true;
                     })
                     .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
 
-                // Returned: Only count if explicitly marked as 'returned' in sales table
                 const returned = transactions
                     .filter((t: any) => t.type === 'sale' && t.sales?.parcel_status === 'returned')
                     .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
 
-                // Formula: Remaining = Stock In - Sold
                 const remaining = stock_in - sold;
-                const minStock = 5;
+                const minStock = lot.products?.min_stock_alert || 5;
 
                 let status: InventoryLot['status'] = 'Healthy';
                 if (remaining <= 0) status = 'Out of Stock';
@@ -96,6 +89,7 @@ export default function InventoryPage() {
                     id: lot.id,
                     lot_number: lot.lot_number,
                     sku: lot.products?.sku || 'N/A',
+                    product_name: lot.products?.name || 'Unknown Product',
                     stock_in,
                     sold,
                     returned,
@@ -105,8 +99,10 @@ export default function InventoryPage() {
             });
 
             setInventory(processedData);
-        } catch (error: any) {
-            console.error('Error fetching inventory:', error.message);
+            setError(null);
+        } catch (err: any) {
+            console.error('Error fetching inventory:', err);
+            setError(err.message || 'Failed to sync inventory data');
         } finally {
             setLoading(false);
         }
@@ -114,108 +110,107 @@ export default function InventoryPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="space-y-8 pb-12">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Inventory Ledger</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Real-time Batch Tracking</p>
+            <div className="max-w-7xl mx-auto space-y-6 pb-12">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
+                        <p className="text-gray-400 font-medium text-xs">Real-time batch movement and stock status tracking.</p>
                     </div>
                     <button
                         onClick={() => fetchInventory()}
                         disabled={loading}
-                        className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all active:scale-95 shadow-sm"
+                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50"
                     >
-                        <ArrowUpDown size={16} className={loading ? 'animate-spin' : ''} />
+                        <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
                         Refresh Data
                     </button>
                 </div>
 
-                {loading ? (
-                    <div className="flex h-96 items-center justify-center">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                            <span className="text-sm font-black text-gray-400 uppercase tracking-widest">Synchronizing Stock...</span>
+                {error ? (
+                    <div className="p-10 bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col items-center gap-4 text-center">
+                        <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-xl">
+                            <AlertTriangle size={24} strokeWidth={1.5} />
                         </div>
+                        <div className="space-y-1">
+                            <h2 className="text-sm font-bold text-rose-800 dark:text-rose-400 uppercase tracking-widest">Sync Disrupted</h2>
+                            <p className="text-xs text-rose-600/80 dark:text-rose-400/60 font-medium max-w-sm">{error}</p>
+                        </div>
+                        <button
+                            onClick={() => fetchInventory()}
+                            className="px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors"
+                        >
+                            Retry Sync
+                        </button>
+                    </div>
+                ) : loading && inventory.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-32 space-y-4">
+                        <div className="h-10 w-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Scanning Databases...</p>
                     </div>
                 ) : (
-                    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-gray-200/50 dark:shadow-none">
-                        <div className="overflow-x-auto overflow-y-hidden custom-scrollbar">
-                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
                                 <thead>
-                                    <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Product ID</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Batch / Lot #</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-center">Stock In</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-center">Sold</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-center">Returned</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-center">Remaining</th>
-                                        <th className="p-6 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Status</th>
+                                    <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                                        <th className="px-6 py-4">Product Info</th>
+                                        <th className="px-6 py-4">Batch #</th>
+                                        <th className="px-6 py-4 text-center">In</th>
+                                        <th className="px-6 py-4 text-center">Sold</th>
+                                        <th className="px-6 py-4 text-center">Ret</th>
+                                        <th className="px-6 py-4 text-center">Remaining</th>
+                                        <th className="px-6 py-4">Status</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                                     {inventory.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} className="p-24 text-center">
-                                                <div className="flex flex-col items-center gap-4">
-                                                    <div className="p-6 bg-gray-50 dark:bg-gray-800 rounded-3xl">
-                                                        <Package size={48} className="text-gray-200" />
-                                                    </div>
-                                                    <p className="font-bold text-gray-400 uppercase tracking-widest text-sm">No inventory records found</p>
+                                            <td colSpan={7} className="px-6 py-20 text-center">
+                                                <div className="flex flex-col items-center gap-3 opacity-30">
+                                                    <Package size={40} strokeWidth={1.5} />
+                                                    <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
                                                 </div>
                                             </td>
                                         </tr>
                                     ) : (
                                         inventory.map((item) => (
-                                            <tr key={item.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-all">
-                                                <td className="p-6">
+                                            <tr key={item.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
+                                                <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-primary/5 rounded-lg">
-                                                            <Barcode size={18} className="text-primary" />
+                                                        <div className="h-8 w-8 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                                            <Barcode size={16} strokeWidth={1.5} />
                                                         </div>
-                                                        <span className="font-black text-gray-900 dark:text-gray-100 font-mono tracking-tighter">{item.sku}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                                                            <Hash size={18} className="text-gray-500" />
-                                                        </div>
-                                                        <span className="font-bold text-gray-700 dark:text-gray-300">#{item.lot_number}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6 text-center">
-                                                    <span className="font-black text-lg text-gray-900 dark:text-gray-100 font-mono">{item.stock_in}</span>
-                                                </td>
-                                                <td className="p-6 text-center">
-                                                    <span className="font-black text-lg text-rose-500 font-mono">{item.sold}</span>
-                                                </td>
-                                                <td className="p-6 text-center">
-                                                    <span className="font-black text-lg text-blue-500 font-mono">{item.returned}</span>
-                                                </td>
-                                                <td className="p-6 text-center">
-                                                    <div className="inline-flex flex-col items-center">
-                                                        <span className={`text-2xl font-black font-mono ${item.remaining <= 5 ? 'text-amber-500' : 'text-primary'}`}>
-                                                            {item.remaining}
-                                                        </span>
-                                                        <div className="w-12 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-1 overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-primary"
-                                                                style={{ width: `${Math.min(100, (item.remaining / (item.stock_in || 1)) * 100)}%` }}
-                                                            ></div>
+                                                        <div>
+                                                            <p className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</p>
+                                                            <p className="text-[10px] text-gray-400 font-medium">{item.sku}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="p-6">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2 text-gray-500 font-medium">
+                                                        <Hash size={12} strokeWidth={1.5} />
+                                                        <span>{item.lot_number}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-300">{item.stock_in}</td>
+                                                <td className="px-6 py-4 text-center font-bold text-emerald-500">{item.sold}</td>
+                                                <td className="px-6 py-4 text-center font-bold text-rose-400">{item.returned}</td>
+                                                <td className="px-6 py-4 text-center font-bold">
+                                                    <span className={`px-2 py-1 rounded-md ${item.remaining <= 5 ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600' : 'text-primary'}`}>
+                                                        {item.remaining}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
                                                     {item.status === 'Healthy' ? (
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-green-100 text-green-700 border border-green-200 tracking-widest outline outline-4 outline-green-500/10">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border border-emerald-100 dark:border-emerald-900/30">
                                                             Healthy
                                                         </span>
                                                     ) : item.status === 'Low Stock' ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-700 border border-amber-200 tracking-widest animate-pulse">
-                                                            <AlertTriangle size={12} /> Low Stock
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-amber-50 dark:bg-amber-900/10 text-amber-600 border border-amber-100 dark:border-amber-900/30">
+                                                            Low Stock
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-700 border border-rose-200 tracking-widest">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-rose-50 dark:bg-rose-900/10 text-rose-600 border border-rose-100 dark:border-rose-900/30">
                                                             Out of Stock
                                                         </span>
                                                     )}

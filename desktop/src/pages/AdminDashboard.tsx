@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom"
 import DashboardLayout from "../layouts/DashboardLayout"
-import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock } from 'lucide-react'
+import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
 import {
@@ -17,18 +17,22 @@ export default function AdminDashboard() {
         totalReturns: 0,
         thisMonthDelivered: 0,
         thisMonthReturns: 0,
-        lowStock: 0
+        lowStock: 0,
+        outOfStock: 0,
+        returnRate: 0,
+        deliverySuccessRate: 0
     });
 
     const [chartData, setChartData] = useState<{ date: string; sales: number }[]>([]);
     const [monthlySalesCount, setMonthlySalesCount] = useState<{ month: string; delivered: number; returns: number }[]>([]);
     const [statusData, setStatusData] = useState<{ name: string; value: number; color: string }[]>([]);
+    const [fastMovingSkus, setFastMovingSkus] = useState<{ sku: string; qty: number }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchDashboardData();
 
-        // Subscribe to changes in sales and product_lots
         const channel = supabase
             .channel('dashboard-updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
@@ -50,35 +54,100 @@ export default function AdminDashboard() {
             const now = new Date();
             const monthStartStr = format(startOfMonth(now), 'yyyy-MM-dd');
             const monthEndStr = format(endOfMonth(now), 'yyyy-MM-dd');
+            const todayStr = format(now, 'yyyy-MM-dd');
             const yearStart = startOfYear(now);
 
-            // 1. Get Global Sales Data for calculations
-            const { data: globalSales } = await supabase
+            const { data: globalSales, error: salesError } = await supabase
                 .from('sales')
                 .select('parcel_status, order_date');
+
+            if (salesError) throw salesError;
 
             const totalDelivered = globalSales?.filter(s => s.parcel_status === 'delivered').length || 0;
             const totalReturns = globalSales?.filter(s => s.parcel_status === 'returned').length || 0;
 
-            // 2. Low Stock Alerts
-            const { data: productsData } = await supabase
+            const { data: productsData, error: prodError } = await supabase
                 .from('products')
-                .select('id, min_stock_alert, product_lots(quantity_remaining)');
+                .select(`
+                    id,
+                    min_stock_alert,
+                    product_lots(
+                        id,
+                        transactions(
+                            type,
+                            quantity_changed,
+                            sales(parcel_status)
+                        )
+                    )
+                `);
 
-            const lowStockCount = productsData?.filter(p => {
-                const totalSlats = (p.product_lots as any[]).reduce((sum, l) => sum + l.quantity_remaining, 0);
-                return totalSlats <= 5;
-            }).length || 0;
+            if (prodError) throw prodError;
 
-            // 3. Current Month Stats
+            const productRemaining = (productsData || []).map((p: any) => {
+                const totalRemaining = (p.product_lots || []).reduce((sum: number, lot: any) => {
+                    const txs = lot.transactions || [];
+                    const stockIn = txs
+                        .filter((t: any) => t.type === 'in')
+                        .reduce((s: number, t: any) => s + Number(t.quantity_changed || 0), 0);
+                    const sold = txs
+                        .filter((t: any) => {
+                            if (t.type !== 'sale') return false;
+                            if (t.sales) return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
+                            return true;
+                        })
+                        .reduce((s: number, t: any) => s + Math.abs(Number(t.quantity_changed || 0)), 0);
+                    return sum + Math.max(0, stockIn - sold);
+                }, 0);
+                return {
+                    minStock: Number(p.min_stock_alert || 5),
+                    remaining: totalRemaining
+                };
+            });
+
+            const lowStockCount = productRemaining.filter((p: any) => p.remaining <= p.minStock).length;
+            const outOfStockCount = productRemaining.filter((p: any) => p.remaining <= 0).length;
+
             const monthSales = globalSales?.filter(s =>
                 s.order_date >= monthStartStr && s.order_date <= monthEndStr
             ) || [];
 
             const thisMonthDelivered = monthSales.filter(s => s.parcel_status === 'delivered').length || 0;
             const thisMonthReturns = monthSales.filter(s => s.parcel_status === 'returned').length || 0;
+            const returnRate = totalDelivered > 0 ? (totalReturns / totalDelivered) * 100 : 0;
+            const monthHandled = thisMonthDelivered + thisMonthReturns;
+            const deliverySuccessRate = monthHandled > 0 ? (thisMonthDelivered / monthHandled) * 100 : 0;
 
-            // 4. Trend Data (Last 6 Days)
+            const last30StartStr = format(subDays(now, 29), 'yyyy-MM-dd');
+            const { data: movementRows, error: movementError } = await supabase
+                .from('transactions')
+                .select(`
+                    quantity_changed,
+                    sale:sales(order_date, parcel_status),
+                    lot:product_lots(
+                        products(sku)
+                    )
+                `)
+                .eq('type', 'sale');
+
+            if (movementError) throw movementError;
+
+            const skuQtyMap = new Map<string, number>();
+            (movementRows || []).forEach((r: any) => {
+                const orderDate = r.sale?.order_date;
+                if (!orderDate || orderDate < last30StartStr || orderDate > todayStr) return;
+                const status = r.sale?.parcel_status;
+                if (!['processing', 'sent', 'delivered'].includes(status)) return;
+                const sku = r.lot?.products?.sku;
+                if (!sku) return;
+                const qty = Math.abs(Number(r.quantity_changed || 0));
+                skuQtyMap.set(sku, (skuQtyMap.get(sku) || 0) + qty);
+            });
+
+            const topFastMoving = Array.from(skuQtyMap.entries())
+                .map(([sku, qty]) => ({ sku, qty }))
+                .sort((a, b) => b.qty - a.qty)
+                .slice(0, 5);
+
             const last6Days = Array.from({ length: 6 }).map((_, i) => {
                 const d = subDays(now, 5 - i);
                 return format(d, 'yyyy-MM-dd');
@@ -92,7 +161,6 @@ export default function AdminDashboard() {
                 };
             });
 
-            // 5. Yearly Monthly Breakdown
             const monthInterval = eachMonthOfInterval({
                 start: yearStart,
                 end: now
@@ -114,7 +182,6 @@ export default function AdminDashboard() {
                 };
             });
 
-            // 6. Status Breakdown
             const statuses = ['processing', 'sent', 'delivered', 'returned'];
             const colors = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444'];
 
@@ -129,14 +196,19 @@ export default function AdminDashboard() {
                 totalReturns,
                 thisMonthDelivered,
                 thisMonthReturns,
-                lowStock: lowStockCount
+                lowStock: lowStockCount,
+                outOfStock: outOfStockCount,
+                returnRate,
+                deliverySuccessRate
             });
             setChartData(trendData);
             setMonthlySalesCount(yearlyData);
             setStatusData(statusBreakdown);
-
-        } catch (error) {
-            console.error('Error fetching dashboard stats:', error);
+            setFastMovingSkus(topFastMoving);
+            setError(null);
+        } catch (error: any) {
+            console.error('Error fetching dashboard data:', error);
+            setError(error.message || 'Failed to sync dashboard stats');
         } finally {
             setLoading(false);
         }
@@ -147,48 +219,63 @@ export default function AdminDashboard() {
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-10 pb-20">
-
-                {/* Hero Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2">
-                    <div className="space-y-1">
-                        <h1 className="text-4xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Executive Dashboard</h1>
-                        <p className="text-gray-500 font-bold uppercase tracking-[0.3em] text-[10px] ml-1">Daily Performance Oversight</p>
-                    </div>
-
-                    <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-2 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                        <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
-                            <Clock size={20} />
+                {error ? (
+                    <div className="p-10 bg-rose-50 dark:bg-rose-950/10 border-2 border-rose-200 dark:border-rose-900/30 rounded-[3rem] flex flex-col items-center gap-4 text-center mt-6">
+                        <div className="p-4 bg-rose-100 dark:bg-rose-900/10 text-rose-600 rounded-2xl">
+                            <AlertTriangle size={36} />
                         </div>
-                        <div className="pr-4">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Current Session</p>
-                            <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{format(new Date(), 'EEEE, MMM dd')}</p>
+                        <div className="space-y-1">
+                            <h2 className="text-xl font-black text-rose-700 dark:text-rose-400 font-outfit uppercase">Synchronization Failed</h2>
+                            <p className="text-sm text-rose-600/70 dark:text-rose-400/60 font-medium max-w-md">{error}</p>
                         </div>
+                        <button
+                            onClick={() => fetchDashboardData()}
+                            className="mt-2 px-8 py-3 bg-rose-600 text-white rounded-xl font-black uppercase text-xs tracking-[0.2em] shadow-lg shadow-rose-600/20 hover:scale-[1.02] transition-all"
+                        >
+                            Reconnect
+                        </button>
                     </div>
-                </div>
-
-                {loading ? (
-                    <div className="flex h-96 items-center justify-center">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                            <span className="text-sm font-black text-gray-400 uppercase tracking-widest">Compiling Analytics...</span>
+                ) : loading ? (
+                    <div className="flex h-[60vh] items-center justify-center">
+                        <div className="flex flex-col items-center gap-4 animate-pulse">
+                            <div className="h-16 w-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-xs font-black text-gray-400 uppercase tracking-widest mt-4">Harmonizing Data Records...</span>
                         </div>
                     </div>
                 ) : (
                     <>
+                        {/* Hero Header */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2">
+                            <div className="space-y-1">
+                                <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Executive Dashboard</h1>
+                                <p className="text-gray-400 font-medium uppercase tracking-widest text-[10px]">Daily Performance Oversight</p>
+                            </div>
+
+                            <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-2 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                                <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                                    <Clock size={20} />
+                                </div>
+                                <div className="pr-4">
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Current Session</p>
+                                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{format(new Date(), 'EEEE, MMM dd')}</p>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Stats Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                             <StatCard
                                 title="Total Delivered"
                                 value={stats.totalDelivered.toString()}
                                 desc="Global successful orders"
-                                icon={<ShoppingBag size={24} />}
+                                icon={<ShoppingBag size={20} strokeWidth={1.5} />}
                                 accent="bg-emerald-500"
                             />
                             <StatCard
                                 title="Total Returns"
                                 value={stats.totalReturns.toString()}
                                 desc="Global parcel returns"
-                                icon={<ArrowRightLeft size={24} />}
+                                icon={<ArrowRightLeft size={20} strokeWidth={1.5} />}
                                 accent="bg-rose-500"
                                 isWarning={stats.totalReturns > 0}
                             />
@@ -196,22 +283,27 @@ export default function AdminDashboard() {
                                 title="This Month Delivered"
                                 value={stats.thisMonthDelivered.toString()}
                                 desc="Delivered this month"
-                                icon={<TrendingUp size={24} />}
+                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
                                 accent="bg-blue-500"
                             />
                             <StatCard
                                 title="This Month Returns"
                                 value={stats.thisMonthReturns.toString()}
                                 desc="Returns this month"
-                                icon={<Activity size={24} />}
+                                icon={<Activity size={20} strokeWidth={1.5} />}
                                 accent="bg-amber-500"
+                            />
+                            <StatCard
+                                title="MTD Success Rate"
+                                value={`${stats.deliverySuccessRate.toFixed(1)}%`}
+                                desc="Delivered / (Delivered + Returned)"
+                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
+                                accent="bg-emerald-500"
                             />
                         </div>
 
                         {/* Charts Section */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                            {/* Revenue Trend (Area Chart) */}
                             <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 p-8 shadow-sm">
                                 <div className="flex items-center justify-between mb-8">
                                     <div>
@@ -222,7 +314,6 @@ export default function AdminDashboard() {
                                         Live Data
                                     </div>
                                 </div>
-
                                 <div className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={chartData}>
@@ -245,13 +336,11 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* Delivery Status (Pie) */}
                             <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 p-8 shadow-sm">
                                 <div className="mb-8">
                                     <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Status Pipeline</h3>
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Order Fulfillment Breakdown</p>
                                 </div>
-
                                 <div className="h-[250px] w-full relative">
                                     {statusData.length === 0 ? (
                                         <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2">
@@ -280,7 +369,6 @@ export default function AdminDashboard() {
                                                     />
                                                 </PieChart>
                                             </ResponsiveContainer>
-
                                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                                 <span className="text-[10px] font-black text-gray-400 uppercase">Total Orders</span>
                                                 <span className="text-2xl font-black text-gray-900 dark:text-gray-100">
@@ -290,7 +378,6 @@ export default function AdminDashboard() {
                                         </>
                                     )}
                                 </div>
-
                                 <div className="mt-6 space-y-3">
                                     {statusData.map((item, i) => (
                                         <div key={i} className="flex items-center justify-between text-xs font-bold">
@@ -303,9 +390,9 @@ export default function AdminDashboard() {
                                     ))}
                                 </div>
                             </div>
-
                         </div>
 
+                        {/* Annual Performance */}
                         <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 p-8 shadow-sm">
                             <div className="flex items-center justify-between mb-8">
                                 <div>
@@ -313,7 +400,6 @@ export default function AdminDashboard() {
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Monthly sales vs returns comparison</p>
                                 </div>
                             </div>
-
                             <div className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={monthlySalesCount}>
@@ -331,7 +417,7 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Lower Grid (Actionable Alerts) */}
+                        {/* Actionable Alerts */}
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                             <div className="lg:col-span-3 bg-gradient-to-br from-gray-900 to-gray-800 rounded-[2.5rem] p-10 text-white relative overflow-hidden group shadow-2xl">
                                 <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8 h-full">
@@ -347,12 +433,12 @@ export default function AdminDashboard() {
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 flex flex-col items-center">
-                                        <div className="h-16 w-16 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-4">
-                                            <Activity size={32} />
+                                    <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl border border-white/10 flex flex-col items-center">
+                                        <div className="h-12 w-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-4">
+                                            <Activity size={24} strokeWidth={1.5} />
                                         </div>
-                                        <span className="text-3xl font-black">98.2%</span>
-                                        <span className="text-[10px] font-black uppercase text-emerald-400 tracking-[0.2em] mt-2">Accuracy Rate</span>
+                                        <span className="text-2xl font-bold">{stats.returnRate.toFixed(1)}%</span>
+                                        <span className="text-[10px] font-bold uppercase text-emerald-400 tracking-widest mt-2">Return Rate</span>
                                     </div>
                                 </div>
                                 <div className="absolute top-0 right-0 h-full w-1/3 bg-white/5 skew-x-[-20deg] translate-x-12 group-hover:bg-white/10 transition-colors duration-700"></div>
@@ -366,11 +452,14 @@ export default function AdminDashboard() {
                                     <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Critical Alerts</h3>
                                     <p className="text-sm text-gray-500 font-medium mt-2">Inventory items requiring immediate restock action.</p>
                                 </div>
-
                                 <div className="mt-8 border-t dark:border-gray-800 pt-6">
                                     <div className="flex items-center justify-between">
                                         <span className="text-4xl font-black text-gray-900 dark:text-gray-100">{stats.lowStock}</span>
                                         <span className="px-3 py-1 bg-rose-50 dark:bg-rose-900/10 text-rose-600 text-[10px] font-black uppercase rounded-lg">Items Low</span>
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-between">
+                                        <span className="text-xl font-black text-gray-900 dark:text-gray-100">{stats.outOfStock}</span>
+                                        <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-black uppercase rounded-lg">Out of Stock</span>
                                     </div>
                                     <button onClick={() => navigate('/admin/inventory')} className="w-full h-12 mt-6 flex items-center justify-center gap-2 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-black rounded-xl text-xs uppercase tracking-widest hover:bg-gray-100 transition-colors">
                                         View Alerts
@@ -378,31 +467,56 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Fast Moving SKUs */}
+                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 p-8 shadow-sm">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Top 5 Fast-Moving SKUs</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Last 30 days by sold quantity</p>
+                                </div>
+                            </div>
+
+                            {fastMovingSkus.length === 0 ? (
+                                <div className="py-10 text-center text-sm text-gray-400 font-bold uppercase tracking-widest">
+                                    No SKU movement in the last 30 days
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {fastMovingSkus.map((item, idx) => (
+                                        <div key={item.sku} className="flex items-center justify-between rounded-xl border border-gray-100 dark:border-gray-800 px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <span className="h-7 w-7 rounded-full bg-primary/10 text-primary text-xs font-black flex items-center justify-center">{idx + 1}</span>
+                                                <span className="text-sm font-black text-gray-900 dark:text-gray-100">{item.sku}</span>
+                                            </div>
+                                            <span className="text-sm font-black text-gray-700 dark:text-gray-300">{item.qty} units</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </>
                 )}
-
             </div>
         </DashboardLayout>
-    )
+    );
 }
 
 function StatCard({ title, value, desc, icon, accent, isWarning = false }: any) {
     return (
-        <div className={`group relative bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-2xl hover:scale-[1.02] ${isWarning ? 'ring-2 ring-rose-500/20 shadow-rose-500/5' : ''}`}>
+        <div className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''}`}>
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{title}</p>
-                    <h4 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-mono tracking-tighter">{value}</h4>
-                    <p className="text-[11px] text-gray-500 font-medium mt-2 flex items-center gap-1.5">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">{title}</p>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight">{value}</h4>
+                    <p className="text-[10px] text-gray-400 font-medium mt-1.5 flex items-center gap-1">
                         {desc}
                     </p>
                 </div>
-                <div className={`h-14 w-14 ${accent} text-white rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-current/20 transition-transform group-hover:rotate-12`}>
+                <div className={`h-10 w-10 ${accent} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
                     {icon}
                 </div>
             </div>
-
-            <div className={`absolute bottom-6 left-8 right-8 h-1 rounded-full ${accent} opacity-10`}></div>
         </div>
-    )
+    );
 }

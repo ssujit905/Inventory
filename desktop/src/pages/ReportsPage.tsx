@@ -2,38 +2,19 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { TrendingUp, DollarSign, PieChart, Briefcase } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { DollarSign } from 'lucide-react';
 
 type FinanceStats = {
     totalRevenue: number;
     totalCOGS: number;
+    grossProfit: number;
     totalExpenses: number;
     totalInvestment: number;
     totalStockValue: number;
+    cashInHand: number;
     margin: number;
-};
-
-type LotProfitRow = {
-    lot_id: string;
-    lot_number: string;
-    sku: string;
-    qty_sold: number;
-    cost_total: number;
-    revenue_allocated: number;
-    profit: number;
-};
-
-type SaleProfitRow = {
-    sale_id: string;
-    lot_number: string;
-    sku: string;
-    quantity: number;
-    cost_price: number;
-    cost_total: number;
-    sold_amount: number;
-    return_cost: number;
 };
 
 export default function ReportsPage() {
@@ -41,14 +22,15 @@ export default function ReportsPage() {
     const [stats, setStats] = useState<FinanceStats>({
         totalRevenue: 0,
         totalCOGS: 0,
+        grossProfit: 0,
         totalExpenses: 0,
         totalInvestment: 0,
         totalStockValue: 0,
+        cashInHand: 0,
         margin: 0
     });
     const [monthlyData, setMonthlyData] = useState<any[]>([]);
-    const [lotProfitRows, setLotProfitRows] = useState<LotProfitRow[]>([]);
-    const [saleProfitRows, setSaleProfitRows] = useState<SaleProfitRow[]>([]);
+    const [grossProfitMonthlyData, setGrossProfitMonthlyData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -93,7 +75,7 @@ export default function ReportsPage() {
             // 3. Fetch all expenses
             const { data: expensesData, error: expError } = await supabase
                 .from('expenses')
-                .select('amount, expense_date');
+                .select('id, amount, expense_date, category, created_at');
 
             if (expError) throw expError;
 
@@ -110,7 +92,7 @@ export default function ReportsPage() {
                         cost_price,
                         products(sku)
                     ),
-                    sale:sales(id, sold_amount, return_cost, parcel_status, order_date)
+                    sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
                 `)
                 .eq('type', 'sale');
 
@@ -152,10 +134,103 @@ export default function ReportsPage() {
 
             const totalRevenue = salesRevenue + otherIncome;
 
-            // Calculate COGS from all sold quantities * cost price (delivered only)
-            const totalCOGS = (lotSales || [])
-                .filter((t: any) => t.sale?.parcel_status === 'delivered')
+            // Calculate Stock Purchase Value (Requested as COGS by user)
+            const totalCOGS = (saleTransactions || [])
                 .reduce((sum, t: any) => sum + (Math.abs(t.quantity_changed) * Number(t.lot?.cost_price || 0)), 0);
+            // Gross Profit synced with Profit page sale-wise Profit/Loss total
+            const toTimeKey = (value: any) => {
+                if (!value) return '';
+                if (typeof value === 'string') return value;
+                if (value instanceof Date) return value.toISOString();
+                return '';
+            };
+
+            const adBudgetMap = new Map<string, number>();
+            (expensesData || [])
+                .filter((e: any) => e.category === 'ads')
+                .forEach((e: any) => adBudgetMap.set(e.id, Number(e.amount || 0)));
+
+            const packagingHistory = (expensesData || [])
+                .filter((e: any) => e.category === 'packaging')
+                .map((e: any) => ({
+                    timeKey: toTimeKey(e.created_at),
+                    amount: Number(e.amount || 0)
+                }))
+                .filter((p: any) => p.timeKey)
+                .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
+
+            const adSaleIds = new Map<string, Set<string>>();
+            (lotSales || []).forEach((t: any) => {
+                const adId = t.sale?.ad_id;
+                if (!adId || !t.sale_id) return;
+                if (!adSaleIds.has(adId)) adSaleIds.set(adId, new Set());
+                adSaleIds.get(adId)!.add(t.sale_id);
+            });
+
+            const packagingBySale = new Map<string, number>();
+            (lotSales || []).forEach((t: any) => {
+                if (!t.sale_id || !t.sale) return;
+                const saleTimeKey = toTimeKey(t.sale.created_at);
+                if (!saleTimeKey) return;
+                let selected = 0;
+                for (const p of packagingHistory) {
+                    if (p.timeKey <= saleTimeKey) selected = p.amount;
+                    else break;
+                }
+                packagingBySale.set(t.sale_id, selected);
+            });
+
+            const saleRowIndex = new Map<string, number>();
+            const grossProfit = (lotSales || [])
+                .filter((t: any) => t.sale_id && t.lot)
+                .reduce((sum: number, t: any) => {
+                    const qty = Math.abs(Number(t.quantity_changed || 0));
+                    const costPrice = Number(t.lot?.cost_price || 0);
+                    const adId = t.sale?.ad_id;
+                    const budget = adId ? (adBudgetMap.get(adId) || 0) : 0;
+                    const count = adId ? (adSaleIds.get(adId)?.size || 1) : 1;
+                    const adsSpent = adId ? budget / count : 0;
+                    const rowIndex = saleRowIndex.get(t.sale_id) || 0;
+                    saleRowIndex.set(t.sale_id, rowIndex + 1);
+                    const isFirstRow = rowIndex === 0;
+                    const adsSpentRow = isFirstRow ? adsSpent : 0;
+                    const packagingSpent = isFirstRow ? (packagingBySale.get(t.sale_id) || 0) : 0;
+                    const status = t.sale?.parcel_status;
+                    const soldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
+                    const returnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const profitLoss = status === 'returned'
+                        ? -(returnCost + adsSpentRow + packagingSpent)
+                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+                    return sum + profitLoss;
+                }, 0);
+
+            const monthProfitMap = new Map<string, number>();
+            const saleRowIndexForMonthly = new Map<string, number>();
+            (lotSales || [])
+                .filter((t: any) => t.sale_id && t.lot)
+                .forEach((t: any) => {
+                    const qty = Math.abs(Number(t.quantity_changed || 0));
+                    const costPrice = Number(t.lot?.cost_price || 0);
+                    const adId = t.sale?.ad_id;
+                    const budget = adId ? (adBudgetMap.get(adId) || 0) : 0;
+                    const count = adId ? (adSaleIds.get(adId)?.size || 1) : 1;
+                    const adsSpent = adId ? budget / count : 0;
+                    const rowIndex = saleRowIndexForMonthly.get(t.sale_id) || 0;
+                    saleRowIndexForMonthly.set(t.sale_id, rowIndex + 1);
+                    const isFirstRow = rowIndex === 0;
+                    const adsSpentRow = isFirstRow ? adsSpent : 0;
+                    const packagingSpent = isFirstRow ? (packagingBySale.get(t.sale_id) || 0) : 0;
+                    const status = t.sale?.parcel_status;
+                    const soldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
+                    const returnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const profitLoss = status === 'returned'
+                        ? -(returnCost + adsSpentRow + packagingSpent)
+                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+
+                    const saleDate = new Date(t.sale?.created_at || t.sale?.order_date || new Date());
+                    const monthKey = format(saleDate, 'yyyy-MM');
+                    monthProfitMap.set(monthKey, (monthProfitMap.get(monthKey) || 0) + profitLoss);
+                });
 
             const totalExpenses = (expensesData || []).reduce((sum, e) => sum + Number(e.amount), 0);
             const totalInvestment = (incomeEntries || [])
@@ -184,15 +259,18 @@ export default function ReportsPage() {
                 })
                 .reduce((sum: number, v: number) => sum + v, 0);
 
+            const cashInHand = (totalRevenue + totalInvestment) - (totalCOGS + totalExpenses);
             const netProfit = totalRevenue - totalCOGS - totalExpenses;
             const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
             setStats({
                 totalRevenue,
                 totalCOGS,
+                grossProfit,
                 totalExpenses,
                 totalInvestment,
                 totalStockValue,
+                cashInHand,
                 margin
             });
 
@@ -207,67 +285,6 @@ export default function ReportsPage() {
                 const qty = Math.abs(Number(t.quantity_changed || 0));
                 saleTotals.set(t.sale_id, (saleTotals.get(t.sale_id) || 0) + qty);
             });
-
-            const lotAgg = new Map<string, LotProfitRow>();
-            (lotSales || []).forEach((t: any) => {
-                if (t.type !== 'sale') return;
-                if (!t.sale_id) return;
-                if (!deliveredSales.has(t.sale_id)) return;
-
-                const qty = Math.abs(Number(t.quantity_changed || 0));
-                const totalQtyInSale = saleTotals.get(t.sale_id) || 0;
-                if (totalQtyInSale <= 0) return;
-
-                const lotId = t.lot?.id || 'unknown';
-                const lotNumber = t.lot?.lot_number || 'N/A';
-                const sku = t.lot?.products?.sku || 'SKU';
-                const costPrice = Number(t.lot?.cost_price || 0);
-                const saleRevenue = deliveredSales.get(t.sale_id) || 0;
-                const revenueAllocated = (qty / totalQtyInSale) * saleRevenue;
-                const costTotal = qty * costPrice;
-
-                const existing = lotAgg.get(lotId);
-                if (existing) {
-                    existing.qty_sold += qty;
-                    existing.cost_total += costTotal;
-                    existing.revenue_allocated += revenueAllocated;
-                    existing.profit += (revenueAllocated - costTotal);
-                } else {
-                    lotAgg.set(lotId, {
-                        lot_id: lotId,
-                        lot_number: lotNumber,
-                        sku,
-                        qty_sold: qty,
-                        cost_total: costTotal,
-                        revenue_allocated: revenueAllocated,
-                        profit: revenueAllocated - costTotal
-                    });
-                }
-            });
-
-            setLotProfitRows(
-                Array.from(lotAgg.values()).sort((a, b) => b.profit - a.profit)
-            );
-
-            // Sale-wise rows (per lot deduction)
-            const saleRows: SaleProfitRow[] = (lotSales || [])
-                .filter((t: any) => t.sale_id && t.lot)
-                .map((t: any) => {
-                    const qty = Math.abs(Number(t.quantity_changed || 0));
-                    const costPrice = Number(t.lot?.cost_price || 0);
-                    return {
-                        sale_id: t.sale_id,
-                        lot_number: t.lot?.lot_number || 'N/A',
-                        sku: t.lot?.products?.sku || 'SKU',
-                        quantity: qty,
-                        cost_price: costPrice,
-                        cost_total: qty * costPrice,
-                        sold_amount: Number(t.sale?.sold_amount || 0),
-                        return_cost: Number(t.sale?.return_cost || 0)
-                    };
-                });
-
-            setSaleProfitRows(saleRows);
 
             // Calculate Monthly Trends (Last 6 months)
             const now = new Date();
@@ -323,6 +340,21 @@ export default function ReportsPage() {
 
             setMonthlyData(trendData);
 
+            const last12Months = eachMonthOfInterval({
+                start: subMonths(now, 11),
+                end: now
+            });
+
+            const gpTrendData = last12Months.map(month => {
+                const key = format(month, 'yyyy-MM');
+                return {
+                    name: format(month, 'MMM'),
+                    grossProfit: monthProfitMap.get(key) || 0
+                };
+            });
+
+            setGrossProfitMonthlyData(gpTrendData);
+
         } catch (error: any) {
             console.error('Error fetching finance data:', error.message);
         } finally {
@@ -351,18 +383,16 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                     <FinanceStatCard
                         title="Total Revenue"
                         value={stats.totalRevenue}
-                        icon={<DollarSign className="text-emerald-500" />}
                         trend="+12.5%"
                         color="emerald"
                     />
                     <FinanceStatCard
                         title="Cost of Goods"
                         value={stats.totalCOGS}
-                        icon={<PieChart className="text-amber-500" />}
                         trend="+5.2%"
                         color="amber"
                         sub="Stock Purchase Cost"
@@ -370,23 +400,33 @@ export default function ReportsPage() {
                     <FinanceStatCard
                         title="Total Expenses"
                         value={stats.totalExpenses}
-                        icon={<Briefcase className="text-rose-500" />}
                         trend="+2.1%"
                         color="rose"
                     />
                     <FinanceStatCard
+                        title="Gross Profit"
+                        value={stats.grossProfit}
+                        trend="Revenue - COGS"
+                        color="emerald"
+                    />
+                    <FinanceStatCard
                         title="Total Investment"
                         value={stats.totalInvestment}
-                        icon={<TrendingUp className="text-blue-600" />}
                         trend={`${stats.margin.toFixed(1)}% Margin`}
                         color="blue"
                     />
                     <FinanceStatCard
                         title="Remaining Stock Value"
                         value={stats.totalStockValue}
-                        icon={<PieChart className="text-indigo-600" />}
                         trend="Inventory"
                         color="indigo"
+                    />
+                    <FinanceStatCard
+                        title="Cash in Hand"
+                        value={stats.cashInHand}
+                        trend="Available"
+                        color="emerald"
+                        sub="Liquid Assets"
                     />
                 </div>
 
@@ -413,19 +453,19 @@ export default function ReportsPage() {
                         </div>
                     </div>
 
-                    {/* Investment Trend */}
+                    {/* Gross Profit Trend */}
                     <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
                         <div className="mb-8">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Investment Trend</h3>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Monthly investment</p>
+                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Gross Profit Trend</h3>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Last 12 months (monthly)</p>
                         </div>
                         <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={monthlyData}>
+                                <AreaChart data={grossProfitMonthlyData}>
                                     <defs>
                                         <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.12} />
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -434,7 +474,7 @@ export default function ReportsPage() {
                                     <Tooltip
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                                     />
-                                    <Area type="monotone" dataKey="investment" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Investment" />
+                                    <Area type="monotone" dataKey="grossProfit" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Gross Profit" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -446,37 +486,31 @@ export default function ReportsPage() {
     );
 }
 
-function FinanceStatCard({ title, value, icon, trend, color, sub }: any) {
-    const colors: any = {
-        emerald: "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-100 dark:border-emerald-800",
-        amber: "bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-100 dark:border-amber-800",
-        rose: "bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-100 dark:border-rose-800",
-        blue: "bg-blue-50 dark:bg-blue-900/10 text-blue-600 border-blue-100 dark:border-blue-800",
-        indigo: "bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 border-indigo-100 dark:border-indigo-800"
+function FinanceStatCard({ title, value, trend, color, sub }: any) {
+    const accents: any = {
+        emerald: "bg-emerald-500",
+        amber: "bg-amber-500",
+        rose: "bg-rose-500",
+        blue: "bg-blue-500",
+        indigo: "bg-indigo-500"
     };
 
     return (
-        <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-sm relative overflow-hidden group hover:shadow-xl transition-all">
-            <div className="flex items-center justify-between mb-6">
-                <div className={`p-4 rounded-2xl ${colors[color]} border transition-transform group-hover:scale-110 duration-500`}>
-                    {icon}
+        <div className="group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px]">
+            <div className="flex items-start justify-between">
+                <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">{title}</p>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+                        ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </h4>
+                    <p className="text-[10px] text-gray-400 font-medium mt-1.5">
+                        {sub || trend}
+                    </p>
                 </div>
-                <div className="flex flex-col items-end">
-                    <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-                        {trend}
-                    </div>
-                    {sub && <span className="text-[9px] font-bold text-gray-400 uppercase mt-1">{sub}</span>}
-                </div>
-            </div>
-
-            <div className="space-y-1">
-                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">{title}</h3>
-                <div className="text-3xl font-black text-gray-900 dark:text-gray-100 font-mono tracking-tighter">
-                    ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div className={`h-10 w-10 ${accents[color] || 'bg-primary'} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
+                    <DollarSign size={18} strokeWidth={1.5} />
                 </div>
             </div>
-
-            <div className="absolute -bottom-6 -right-6 h-24 w-24 bg-gray-50 dark:bg-gray-800/20 rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none opacity-50"></div>
         </div>
     );
 }

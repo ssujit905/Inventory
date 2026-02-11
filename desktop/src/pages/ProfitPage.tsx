@@ -228,8 +228,8 @@ export default function ProfitPage() {
                     const packagingSpent = isFirstRow ? packagingForSale : 0;
                     const status = t.sale?.parcel_status;
                     const saleDate = new Date(t.sale?.created_at || 0);
-                    const soldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
-                    const returnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
+                    const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
                     const profitLoss = status === 'returned'
                         ? -(returnCost + adsSpentRow + packagingSpent)
                         : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));

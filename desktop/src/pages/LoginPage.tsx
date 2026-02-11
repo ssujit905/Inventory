@@ -1,14 +1,14 @@
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { AlertTriangle } from 'lucide-react';
+import { LogIn, Mail, Lock, AlertCircle, Package } from 'lucide-react';
 
 export default function LoginPage() {
-    const { signIn } = useAuthStore();
-
-    const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { initialize } = useAuthStore();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -16,111 +16,103 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            await signIn(email, password);
-            // Navigation is handled by the useEffect in App.tsx watching auth state
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (signInError) throw signInError;
+            await initialize();
         } catch (err: any) {
-            setError(err?.message || 'Failed to sign in');
+            setError(err.message || 'Failed to sign in');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="flex min-h-screen w-full flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
-            <div className="w-full max-w-md space-y-8 px-4 sm:px-0">
-                <div className="text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-white shadow-xl">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15" /><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22v-9" /></svg>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                {/* Brand Logo */}
+                <div className="flex flex-col items-center mb-8">
+                    <div className="h-12 w-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 mb-4">
+                        <Package size={24} strokeWidth={2.5} />
                     </div>
-                    <h2 className="mt-6 text-3xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-                        Inventory Pro
-                    </h2>
-                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        Ecommerce Management System
-                    </p>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-jakarta tracking-tight">InvPro</h1>
+                    <p className="text-gray-400 text-sm font-medium mt-1">Enterprise Inventory Systems</p>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow-2xl shadow-gray-200/50 dark:shadow-none sm:rounded-xl sm:px-10 border border-gray-100 dark:border-gray-700">
+                {/* Login Card */}
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-8 shadow-sm">
+                    <div className="mb-8">
+                        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Welcome Back</h2>
+                        <p className="text-gray-400 text-xs font-medium mt-1">Securely login to your workstation.</p>
+                    </div>
 
-                    {error && (
-                        <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive dark:text-red-400 border border-destructive/20">
-                            <AlertTriangle className="h-4 w-4" />
-                            <span>{error}</span>
-                        </div>
-                    )}
+                    <form onSubmit={handleLogin} className="space-y-6">
+                        {error && (
+                            <div className="p-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 rounded-xl flex items-center gap-3 text-rose-600">
+                                <AlertCircle size={18} strokeWidth={1.5} />
+                                <p className="text-xs font-semibold">{error}</p>
+                            </div>
+                        )}
 
-                    <form className="space-y-6" onSubmit={handleLogin}>
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Email address
-                            </label>
-                            <div className="mt-1">
-                                <input
-                                    id="email"
-                                    name="email"
-                                    type="email"
-                                    autoComplete="email"
-                                    required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm bg-gray-50 dark:bg-gray-900 dark:border-gray-600"
-                                    placeholder="admin@company.com"
-                                />
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Work Email</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                        <Mail size={16} strokeWidth={1.5} />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        placeholder="name@company.com"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Security Key</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                        <Lock size={16} strokeWidth={1.5} />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Password
-                            </label>
-                            <div className="mt-1">
-                                <input
-                                    id="password"
-                                    name="password"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 shadow-sm focus:border-primary focus:outline-none focus:ring-primary sm:text-sm bg-gray-50 dark:bg-gray-900 dark:border-gray-600"
-                                    placeholder="••••••••"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                                <input
-                                    id="remember-me"
-                                    name="remember-me"
-                                    type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                />
-                                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                                    Remember me
-                                </label>
-                            </div>
-
-                            <div className="text-sm">
-                                <a href="#" className="font-medium text-primary hover:text-primary/80">
-                                    Forgot password?
-                                </a>
-                            </div>
-                        </div>
-
-                        <div>
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="flex w-full justify-center rounded-md border border-transparent bg-primary py-2.5 px-4 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                {loading ? 'Authenticating...' : 'Sign in'}
-                            </button>
-                        </div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-[0.98]"
+                        >
+                            {loading ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : (
+                                <>
+                                    <LogIn size={18} strokeWidth={1.5} />
+                                    Authenticate
+                                </>
+                            )}
+                        </button>
                     </form>
-
                 </div>
 
+                <p className="text-center mt-8 text-gray-400 text-[10px] font-medium uppercase tracking-widest">
+                    Authorized Access Only • System ID: {Math.random().toString(36).substring(7).toUpperCase()}
+                </p>
             </div>
         </div>
     );

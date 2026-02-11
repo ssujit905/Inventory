@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
@@ -126,34 +126,36 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         <div className="flex h-screen w-full bg-gray-50 dark:bg-gray-950">
             {/* Sidebar */}
             <aside className="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
-                <div className="h-16 flex items-center px-6 border-b border-gray-100 dark:border-gray-800">
-                    <div className="flex items-center gap-2 text-primary font-bold text-xl">
-                        <Package className="h-6 w-6" />
-                        <span>InvPro</span>
+                <div className="h-16 flex items-center px-6">
+                    <div className="flex items-center gap-2.5 text-gray-900 dark:text-white font-bold tracking-tight">
+                        <div className="p-1.5 bg-primary rounded-lg text-white">
+                            <Package size={16} strokeWidth={2.5} />
+                        </div>
+                        <span className="text-lg font-jakarta">InvPro</span>
                     </div>
                 </div>
 
                 <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-                    <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" path="/admin/dashboard" active={location.pathname === '/admin/dashboard'} />
-                    <NavItem icon={<Package size={20} />} label="Inventory" path="/admin/inventory" active={location.pathname === '/admin/inventory'} />
+                    <NavItem icon={<LayoutDashboard size={18} strokeWidth={1.5} />} label="Dashboard" path="/admin/dashboard" active={location.pathname === '/admin/dashboard'} />
+                    <NavItem icon={<Package size={18} strokeWidth={1.5} />} label="Inventory" path="/admin/inventory" active={location.pathname === '/admin/inventory'} />
                     <NavItem
-                        icon={<ArrowDownCircle size={20} />}
+                        icon={<ArrowDownCircle size={18} strokeWidth={1.5} />}
                         label="Stock In"
                         path="/admin/stock-in"
                         active={location.pathname === '/admin/stock-in'}
                         badge={role === 'admin' && pendingCostCount > 0 ? pendingCostCount : undefined}
                     />
-                    <NavItem icon={<DollarSign size={20} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
-                    <NavItem icon={<ShoppingCart size={20} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
+                    <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
+                    <NavItem icon={<ShoppingCart size={18} strokeWidth={1.5} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
                     {role === 'admin' && (
                         <>
-                            <div className="pt-4 pb-2">
-                                <p className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Admin</p>
+                            <div className="pt-6 pb-2">
+                                <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics</p>
                             </div>
-                            <NavItem icon={<TrendingUp size={20} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
-                            <NavItem icon={<FileText size={20} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
-                            <NavItem icon={<FileText size={20} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
-                            <NavItem icon={<Users size={20} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
+                            <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
+                            <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
+                            <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
+                            <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
                         </>
                     )}
                 </nav>
@@ -161,9 +163,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 <div className="p-4 border-t border-gray-100 dark:border-gray-800">
                     <button
                         onClick={handleLogout}
-                        className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10"
+                        className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                     >
-                        <LogOut size={20} />
+                        <LogOut size={18} strokeWidth={1.5} />
                         Logout
                     </button>
                 </div>
@@ -243,14 +245,14 @@ function NavItem({ icon, label, path, active = false, badge }: { icon: React.Rea
     return (
         <button
             onClick={() => navigate(path)}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active
-                ? 'bg-primary/10 text-primary'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${active
+                ? 'bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                 }`}>
             {icon}
             <span className="flex-1 text-left">{label}</span>
             {badge !== undefined && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-100 text-rose-600">
+                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-primary text-white">
                     {badge}
                 </span>
             )}
