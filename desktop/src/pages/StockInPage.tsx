@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, RotateCcw, Hash } from 'lucide-react';
+import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 
 type RecentTransaction = {
@@ -40,7 +40,6 @@ export default function StockInPage() {
     const [newCost, setNewCost] = useState<number>(0);
 
     // Derived State
-    const totalAmount = quantity * costPrice;
 
     useEffect(() => {
         fetchRecentTransactions();
@@ -92,12 +91,10 @@ export default function StockInPage() {
         setLoading(true);
 
         try {
-            const { data: updatedLot, error } = await supabase
+            const { error } = await supabase
                 .from('product_lots')
                 .update({ cost_price: newCost })
-                .eq('id', selectedLot.id)
-                .select('id, cost_price')
-                .maybeSingle();
+                .eq('id', selectedLot.id);
 
             if (error) throw error;
 

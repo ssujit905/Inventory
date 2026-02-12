@@ -18,7 +18,7 @@ type FinanceStats = {
 };
 
 export default function ReportsPage() {
-    const { user, profile } = useAuthStore();
+    const { profile } = useAuthStore();
     const [stats, setStats] = useState<FinanceStats>({
         totalRevenue: 0,
         totalCOGS: 0,
