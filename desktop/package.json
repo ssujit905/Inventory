@@ -8,7 +8,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:build": "vite build && npx cap sync",
+    "android:open": "npx cap open android",
+    "ios:open": "npx cap open ios"
   },
   "build": {
     "appId": "com.inventory.app",
@@ -21,13 +24,19 @@
       "dist-electron/**/*"
     ],
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "build/icon.png"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     }
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.2",
+    "@capacitor/cli": "^8.0.2",
+    "@capacitor/core": "^8.0.2",
+    "@capacitor/ios": "^8.0.2",
     "@supabase/supabase-js": "^2.93.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
