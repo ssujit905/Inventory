@@ -24,7 +24,16 @@ dist-ssr
 *.sw?
 
 # Build Artifacts
-release
-dist
-dist-electron
-node_modules
+release/
+dist/
+dist-electron/
+node_modules/
+android/app/build/
+android/.gradle/
+android/app/src/main/assets/public/
+ios/App/App/public/
+ios/App/Pods/
+*.dmg
+*.exe
+*.zip
+*.blockmap
