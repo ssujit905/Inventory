@@ -23,17 +23,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: desktop/package.json
+          cache-dependency-path: desktop/package-lock.json
       - name: Install Dependencies
         run: |
           cd desktop
-          npm install
+          npm ci
       - name: Build Application
         run: |
           cd desktop
-          npm run build
+          npm run build -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Artifacts
@@ -58,13 +58,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
-          cache-dependency-path: desktop/package.json
+          cache-dependency-path: desktop/package-lock.json
       - name: Install Dependencies
         run: |
           cd desktop
-          npm install
+          npm ci
       - name: Build Web
         run: |
           cd desktop

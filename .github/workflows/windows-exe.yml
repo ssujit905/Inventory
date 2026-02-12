@@ -32,7 +32,7 @@ jobs:
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --x64
+        run: npx electron-builder --win nsis --x64 --publish never
 
       - name: Upload EXE artifacts
         uses: actions/upload-artifact@v4
