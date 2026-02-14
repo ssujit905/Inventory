@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, DollarSign, AlertCircle, X, History, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -32,23 +33,16 @@ export default function ExpensesPage() {
 
     useEffect(() => {
         fetchExpenses();
-
-        // Setup real-time subscription for expenses
-        const channel = supabase
-            .channel('expenses-changes')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'expenses'
-            }, () => {
-                fetchExpenses();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchExpenses(),
+        {
+            channelName: 'expenses-changes-v2',
+            tables: ['expenses'],
+            pollMs: 10000
+        }
+    );
 
     const fetchExpenses = async () => {
         const { data } = await supabase

@@ -1,6 +1,7 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { writeFile } from 'node:fs/promises'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -51,3 +52,16 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(createWindow)
+
+ipcMain.handle('save-xlsx-download', async (_event, payload: { fileName: string; base64: string }) => {
+    try {
+        const safeName = (payload.fileName || 'export.xlsx').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+        const downloadsDir = app.getPath('downloads')
+        const filePath = path.join(downloadsDir, safeName)
+        const buffer = Buffer.from(payload.base64, 'base64')
+        await writeFile(filePath, buffer)
+        return { ok: true, filePath }
+    } catch (error: any) {
+        return { ok: false, error: error?.message || 'Failed to save file' }
+    }
+})

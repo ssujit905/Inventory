@@ -11,21 +11,33 @@ export default defineConfig({
     ...(process.env.VITE_ELECTRON === '0'
       ? []
       : [
-          electron([
-            {
-              // Main-Process
-              entry: 'electron/main.ts',
-            },
-            {
-              // Preload-Scripts
-              entry: 'electron/preload.ts',
-              onstart(options) {
-                options.reload()
+        electron([
+          {
+            // Main-Process
+            entry: 'electron/main.ts',
+            vite: {
+              build: {
+                lib: {
+                  entry: 'electron/main.ts',
+                  formats: ['cjs'],
+                  fileName: () => '[name].cjs',
+                },
+                rollupOptions: {
+                  external: ['electron'],
+                },
               },
             },
-          ]),
-          renderer(),
+          },
+          {
+            // Preload-Scripts
+            entry: 'electron/preload.ts',
+            onstart(options) {
+              options.reload()
+            },
+          },
         ]),
+        renderer(),
+      ]),
   ],
   resolve: {
     alias: {

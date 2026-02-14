@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 export default function DashboardLayout({ children, role }: { children: React.ReactNode, role: 'admin' | 'staff' }) {
     const navigate = useNavigate();
@@ -53,63 +54,33 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         return () => clearTimeout(timer);
     }, [query]);
 
-    useEffect(() => {
+    const fetchPendingCosts = async () => {
         if (role !== 'admin') {
             setPendingCostCount(0);
             return;
         }
 
-        let active = true;
+        const { count } = await supabase
+            .from('product_lots')
+            .select('id', { count: 'exact', head: true })
+            .eq('cost_price', 0);
 
-        const fetchPendingCosts = async () => {
-            const { count } = await supabase
-                .from('product_lots')
-                .select('id', { count: 'exact', head: true })
-                .eq('cost_price', 0);
+        setPendingCostCount(count || 0);
+    };
 
-            if (active) {
-                setPendingCostCount(count || 0);
-            }
-        };
-
+    useEffect(() => {
         fetchPendingCosts();
-
-        const refreshTimer = setInterval(fetchPendingCosts, 10000);
-
-        const channel = supabase
-            .channel('pending-cost-badge')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'product_lots' }, (payload) => {
-                const newRow: any = payload.new;
-                if (newRow?.cost_price === 0) {
-                    setPendingCostCount(prev => prev + 1);
-                }
-            })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'product_lots' }, (payload) => {
-                const oldRow: any = payload.old;
-                const newRow: any = payload.new;
-                const wasPending = (oldRow?.cost_price ?? 0) === 0;
-                const isPending = (newRow?.cost_price ?? 0) === 0;
-
-                if (wasPending && !isPending) {
-                    setPendingCostCount(prev => Math.max(0, prev - 1));
-                } else if (!wasPending && isPending) {
-                    setPendingCostCount(prev => prev + 1);
-                }
-            })
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'product_lots' }, (payload) => {
-                const oldRow: any = payload.old;
-                if ((oldRow?.cost_price ?? 0) === 0) {
-                    setPendingCostCount(prev => Math.max(0, prev - 1));
-                }
-            })
-            .subscribe();
-
-        return () => {
-            active = false;
-            clearInterval(refreshTimer);
-            supabase.removeChannel(channel);
-        };
     }, [role]);
+
+    useRealtimeRefresh(
+        fetchPendingCosts,
+        {
+            channelName: 'pending-cost-badge-v2',
+            tables: ['product_lots'],
+            pollMs: 10000,
+            enabled: role === 'admin'
+        }
+    );
 
     const handleLogout = () => {
         signOut();
@@ -122,17 +93,43 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         navigate('/admin/sales');
     };
 
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    useEffect(() => {
+        // Close mobile menu on route change
+        setIsMobileMenuOpen(false);
+    }, [location.pathname]);
+
     return (
-        <div className="flex h-screen w-full bg-gray-50 dark:bg-gray-950">
+        <div className="flex h-screen w-full bg-gray-50 dark:bg-gray-950 overflow-hidden">
+            {/* Mobile Sidebar Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
-                <div className="h-16 flex items-center px-6">
+            <aside className={`
+                fixed inset-y-0 left-0 z-50 w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col transition-transform duration-300 transform
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:relative lg:translate-x-0 lg:flex-shrink-0
+            `}>
+                <div className="h-16 flex items-center justify-between px-6 flex-shrink-0">
                     <div className="flex items-center gap-2.5 text-gray-900 dark:text-white font-bold tracking-tight">
                         <div className="p-1.5 bg-primary rounded-lg text-white">
                             <Package size={16} strokeWidth={2.5} />
                         </div>
                         <span className="text-lg font-jakarta">InvPro</span>
                     </div>
+                    {/* Close button for mobile */}
+                    <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="lg:hidden p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
 
                 <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
@@ -172,11 +169,19 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex flex-col overflow-hidden w-full">
                 {/* Header */}
-                <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-8">
-                    <div className="flex items-center gap-4 flex-1">
-                        <div className="relative w-96">
+                <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 lg:px-8">
+                    <div className="flex items-center gap-2 lg:gap-4 flex-1 pr-2">
+                        {/* Mobile Hamburger Menu Button */}
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                            <Menu size={20} />
+                        </button>
+
+                        <div className="relative w-full max-w-sm lg:w-96">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <input
                                 type="text"
@@ -193,13 +198,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                         navigate('/admin/sales');
                                     }
                                 }}
-                                placeholder="Search Name or Phone..."
-                                className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-gray-900 dark:text-gray-100"
+                                placeholder="Search..."
+                                className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-gray-900 dark:text-gray-100 truncate"
                             />
 
                             {/* Suggestions Dropdown */}
                             {showSuggestions && suggestions.length > 0 && (
-                                <div className="absolute top-12 left-0 w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-50 py-2">
+                                <div className="absolute top-12 left-0 w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-[60] py-2">
                                     <div className="px-4 py-2 border-b border-gray-50 dark:border-gray-800">
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Suggestions</p>
                                     </div>
@@ -220,8 +225,8 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <button className="relative p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
+                        <button className="hidden sm:block relative p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                             <Bell size={20} />
                             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900"></span>
                         </button>
@@ -232,7 +237,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-auto p-8">
+                <div className="flex-1 overflow-auto p-4 lg:p-8">
                     {children}
                 </div>
             </main>

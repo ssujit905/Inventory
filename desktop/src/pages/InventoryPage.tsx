@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { Package, AlertTriangle, RotateCcw, Barcode, Hash } from 'lucide-react';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { Package, AlertTriangle, RotateCcw, Barcode, Hash, FileDown } from 'lucide-react';
+import { exportToExcel } from '../utils/excelExport';
+import { format } from 'date-fns';
 
 type InventoryLot = {
     id: string;
@@ -24,18 +27,16 @@ export default function InventoryPage() {
 
     useEffect(() => {
         fetchInventory();
-
-        const channel = supabase
-            .channel('inventory-updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchInventory(false))
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => fetchInventory(false))
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchInventory(false))
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchInventory(false),
+        {
+            channelName: 'inventory-updates-v2',
+            tables: ['sales', 'product_lots', 'transactions'],
+            pollMs: 10000
+        }
+    );
 
     const fetchInventory = async (isInitial = true) => {
         if (isInitial) setLoading(true);
@@ -108,10 +109,25 @@ export default function InventoryPage() {
         }
     };
 
+    const handleExport = () => {
+        const exportData = inventory.map(item => ({
+            'Product Name': item.product_name,
+            'SKU': item.sku,
+            'Batch Number': item.lot_number,
+            'Stock In': item.stock_in,
+            'Sold': item.sold,
+            'Returned': item.returned,
+            'Remaining': item.remaining,
+            'Status': item.status
+        }));
+
+        exportToExcel(exportData, `Inventory_Ledger_${format(new Date(), 'yyyy-MM-dd')}`, 'Inventory');
+    };
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-7xl mx-auto space-y-6 pb-12">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
                         <p className="text-gray-400 font-medium text-xs">Real-time batch movement and stock status tracking.</p>
@@ -119,10 +135,18 @@ export default function InventoryPage() {
                     <button
                         onClick={() => fetchInventory()}
                         disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
                     >
                         <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
                         Refresh Data
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={loading || inventory.length === 0}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
+                    >
+                        <FileDown size={14} strokeWidth={2} />
+                        Export (.xlsx)
                     </button>
                 </div>
 
@@ -148,82 +172,94 @@ export default function InventoryPage() {
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Scanning Databases...</p>
                     </div>
                 ) : (
-                    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase tracking-widest font-bold text-gray-400">
-                                        <th className="px-6 py-4">Product Info</th>
-                                        <th className="px-6 py-4">Batch #</th>
-                                        <th className="px-6 py-4 text-center">In</th>
-                                        <th className="px-6 py-4 text-center">Sold</th>
-                                        <th className="px-6 py-4 text-center">Ret</th>
-                                        <th className="px-6 py-4 text-center">Remaining</th>
-                                        <th className="px-6 py-4">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                                    {inventory.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={7} className="px-6 py-20 text-center">
-                                                <div className="flex flex-col items-center gap-3 opacity-30">
-                                                    <Package size={40} strokeWidth={1.5} />
-                                                    <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
-                                                </div>
-                                            </td>
+                    <div className="space-y-4">
+                        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase tracking-widest font-bold text-gray-400">
+                                            <th className="px-6 py-4">Product Info</th>
+                                            <th className="px-6 py-4">Batch #</th>
+                                            <th className="px-6 py-4 text-center">In</th>
+                                            <th className="px-6 py-4 text-center">Sold</th>
+                                            <th className="px-6 py-4 text-center">Ret</th>
+                                            <th className="px-6 py-4 text-center">Remaining</th>
+                                            <th className="px-6 py-4">Status</th>
                                         </tr>
-                                    ) : (
-                                        inventory.map((item) => (
-                                            <tr key={item.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="h-8 w-8 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                                            <Barcode size={16} strokeWidth={1.5} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</p>
-                                                            <p className="text-[10px] text-gray-400 font-medium">{item.sku}</p>
-                                                        </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
+                                        {inventory.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={7} className="px-6 py-20 text-center">
+                                                    <div className="flex flex-col items-center gap-3 opacity-30">
+                                                        <Package size={40} strokeWidth={1.5} />
+                                                        <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
                                                     </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-2 text-gray-500 font-medium">
-                                                        <Hash size={12} strokeWidth={1.5} />
-                                                        <span>{item.lot_number}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-300">{item.stock_in}</td>
-                                                <td className="px-6 py-4 text-center font-bold text-emerald-500">{item.sold}</td>
-                                                <td className="px-6 py-4 text-center font-bold text-rose-400">{item.returned}</td>
-                                                <td className="px-6 py-4 text-center font-bold">
-                                                    <span className={`px-2 py-1 rounded-md ${item.remaining <= 5 ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600' : 'text-primary'}`}>
-                                                        {item.remaining}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {item.status === 'Healthy' ? (
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border border-emerald-100 dark:border-emerald-900/30">
-                                                            Healthy
-                                                        </span>
-                                                    ) : item.status === 'Low Stock' ? (
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-amber-50 dark:bg-amber-900/10 text-amber-600 border border-amber-100 dark:border-amber-900/30">
-                                                            Low Stock
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-rose-50 dark:bg-rose-900/10 text-rose-600 border border-rose-100 dark:border-rose-900/30">
-                                                            Out of Stock
-                                                        </span>
-                                                    )}
                                                 </td>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                        ) : (
+                                            inventory.map((item) => (
+                                                <tr key={item.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-8 w-8 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                                                <Barcode size={16} strokeWidth={1.5} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</p>
+                                                                <p className="text-[10px] text-gray-400 font-medium">{item.sku}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-2 text-gray-500 font-medium">
+                                                            <Hash size={12} strokeWidth={1.5} />
+                                                            <span>{item.lot_number}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-300">{item.stock_in}</td>
+                                                    <td className="px-6 py-4 text-center font-bold text-emerald-500">{item.sold}</td>
+                                                    <td className="px-6 py-4 text-center font-bold text-rose-400">{item.returned}</td>
+                                                    <td className="px-6 py-4 text-center font-bold">
+                                                        <span className={`px-2 py-1 rounded-md ${item.remaining <= 5 ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600' : 'text-primary'}`}>
+                                                            {item.remaining}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <StatusBadge status={item.status} />
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
         </DashboardLayout>
+    );
+}
+
+function StatusBadge({ status }: { status: InventoryLot['status'] }) {
+    if (status === 'Healthy') {
+        return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border border-emerald-100 dark:border-emerald-900/30">
+                Healthy
+            </span>
+        );
+    }
+    if (status === 'Low Stock') {
+        return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-amber-50 dark:bg-amber-900/10 text-amber-600 border border-amber-100 dark:border-amber-900/30">
+                Low Stock
+            </span>
+        );
+    }
+    return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-rose-50 dark:bg-rose-900/10 text-rose-600 border border-rose-100 dark:border-rose-900/30">
+            Out of Stock
+        </span>
     );
 }

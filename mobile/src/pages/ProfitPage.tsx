@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 type LotProfitRow = {
     lot_id: string;
@@ -39,19 +38,22 @@ export default function ProfitPage() {
 
     useEffect(() => {
         fetchProfitData();
+
+        const channel = supabase
+            .channel('profit-updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchProfitData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchProfitData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => fetchProfitData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => fetchProfitData())
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
-    useRealtimeRefresh(
-        () => fetchProfitData(false),
-        {
-            channelName: 'profit-updates-v2',
-            tables: ['transactions', 'sales', 'product_lots', 'expenses'],
-            pollMs: 12000
-        }
-    );
-
-    const fetchProfitData = async (showLoader = true) => {
-        if (showLoader) setLoading(true);
+    const fetchProfitData = async () => {
+        setLoading(true);
         try {
             const { data: lotSales, error: lotSalesError } = await supabase
                 .from('transactions')
@@ -256,17 +258,17 @@ export default function ProfitPage() {
         } catch (error) {
             console.error('Error fetching profit data:', error);
         } finally {
-            if (showLoader) setLoading(false);
+            setLoading(false);
         }
     };
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="space-y-8 pb-12">
+            <div className="space-y-6 sm:space-y-8 pb-12">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Profit</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Lot-wise and Sale-wise Profit</p>
+                        <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Profit</h1>
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Lot-wise and Sale-wise Profit</p>
                     </div>
                 </div>
 
@@ -277,7 +279,7 @@ export default function ProfitPage() {
                 ) : (
                     <>
                         {/* Lot-wise Profit */}
-                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <div className="bg-white dark:bg-gray-900 rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Lot-wise Profit</h3>
@@ -290,7 +292,31 @@ export default function ProfitPage() {
                                     No delivered sales with sold amount yet
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto">
+                                <>
+                                <div className="md:hidden space-y-3">
+                                    {lotProfitRows.map((row) => (
+                                        <div key={row.lot_id} className="rounded-2xl border border-gray-100 dark:border-gray-800 p-4 bg-gray-50/60 dark:bg-gray-800/20 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-black text-gray-900 dark:text-gray-100">{row.sku}</p>
+                                                    <p className="text-[11px] font-bold text-gray-500">Lot #{row.lot_number}</p>
+                                                </div>
+                                                <p className={`text-sm font-black ${row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    ${row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
+                                                <p className="text-gray-500">Qty: <span className="text-gray-800 dark:text-gray-100">{row.qty_sold}</span></p>
+                                                <p className="text-gray-500">Cost: <span className="text-gray-800 dark:text-gray-100">${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Revenue: <span className="text-gray-800 dark:text-gray-100">${row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Returned: <span className="text-gray-800 dark:text-gray-100">${row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Ads: <span className="text-gray-800 dark:text-gray-100">${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Packaging: <span className="text-gray-800 dark:text-gray-100">${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="hidden md:block overflow-x-auto">
                                     <table className="w-full text-left border-collapse min-w-[900px]">
                                         <thead>
                                             <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
@@ -334,11 +360,12 @@ export default function ProfitPage() {
                                         </tbody>
                                     </table>
                                 </div>
+                                </>
                             )}
                         </div>
 
                         {/* Sale-wise Rows */}
-                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <div className="bg-white dark:bg-gray-900 rounded-[2rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Sale-wise Cost Rows</h3>
@@ -351,7 +378,35 @@ export default function ProfitPage() {
                                     No sale transactions yet
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto">
+                                <>
+                                <div className="md:hidden space-y-3">
+                                    {saleProfitRows.map((row, idx) => (
+                                        <div key={`${row.sale_id}-${idx}`} className="rounded-2xl border border-gray-100 dark:border-gray-800 p-4 bg-gray-50/60 dark:bg-gray-800/20 space-y-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-[11px] font-bold text-gray-500">Sale {row.sale_id.slice(0, 8)}...</p>
+                                                <p className={`text-sm font-black ${row.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    ${row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-black text-gray-900 dark:text-gray-100">{row.sku}</p>
+                                                    <p className="text-[11px] font-bold text-gray-500">Lot #{row.lot_number}</p>
+                                                </div>
+                                                <p className="text-xs font-black text-gray-700 dark:text-gray-200">Qty {row.quantity}</p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
+                                                <p className="text-gray-500">Cost price: <span className="text-gray-800 dark:text-gray-100">${row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Cost total: <span className="text-gray-800 dark:text-gray-100">${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Sold: <span className="text-gray-800 dark:text-gray-100">${row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Returned: <span className="text-gray-800 dark:text-gray-100">${row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Ads: <span className="text-gray-800 dark:text-gray-100">${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                                <p className="text-gray-500">Packaging: <span className="text-gray-800 dark:text-gray-100">${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="hidden md:block overflow-x-auto">
                                     <table className="w-full text-left border-collapse min-w-[1100px]">
                                         <thead>
                                             <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
@@ -401,6 +456,7 @@ export default function ProfitPage() {
                                         </tbody>
                                     </table>
                                 </div>
+                                </>
                             )}
                         </div>
                     </>

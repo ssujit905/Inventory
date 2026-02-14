@@ -3,8 +3,10 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
-import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2 } from 'lucide-react';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
 
 type SaleItem = {
     id?: string;
@@ -66,6 +68,9 @@ export default function SalesPage() {
     const [returnCostInput, setReturnCostInput] = useState<number | ''>('');
     const [sales, setSales] = useState<Sale[]>([]);
     const [pendingStatus, setPendingStatus] = useState<'delivered' | 'returned' | null>(null);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [exportDate, setExportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [exportNotice, setExportNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const filteredSales = useMemo(() => {
         if (!query.trim()) return sales;
@@ -100,22 +105,16 @@ export default function SalesPage() {
 
     useEffect(() => {
         fetchSales();
-
-        const channel = supabase
-            .channel('sales-changes')
-            .on('postgres_changes', {
-                event: '*',
-                schema: 'public',
-                table: 'sales'
-            }, () => {
-                fetchSales();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchSales(),
+        {
+            channelName: 'sales-changes-v2',
+            tables: ['sales', 'sale_items', 'product_lots', 'transactions'],
+            pollMs: 8000
+        }
+    );
 
     const fetchSales = async () => {
         // Fetch sales and their associated transactions to identify products
@@ -486,6 +485,100 @@ export default function SalesPage() {
         }
     };
 
+    const handleExportSales = () => {
+        setExportDate(format(new Date(), 'yyyy-MM-dd'));
+        setIsExportModalOpen(true);
+    };
+
+    const handleConfirmExport = async () => {
+        setIsExportModalOpen(false);
+        const { data, error } = await supabase
+            .from('sales')
+            .select(`
+                id,
+                order_date,
+                destination_branch,
+                parcel_status,
+                customer_name,
+                customer_address,
+                phone1,
+                phone2,
+                cod_amount,
+                sold_amount,
+                return_cost,
+                ad_id,
+                created_at,
+                sale_items (
+                    quantity,
+                    product:products(sku)
+                )
+            `)
+            .eq('order_date', exportDate)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            setExportNotice({ type: 'error', text: `Export failed: ${error.message}` });
+            return;
+        }
+
+        const rows = (data || []).map((sale: any) => {
+            const items = (sale.sale_items || []).map((it: any) => `${it.product?.sku || 'SKU'} x${it.quantity}`);
+            return [
+                sale.order_date,
+                sale.destination_branch,
+                sale.customer_name,
+                sale.customer_address,
+                sale.phone1,
+                sale.phone2 || '',
+                sale.cod_amount,
+                items.join(' | ')
+            ];
+        });
+
+        if (rows.length === 0) {
+            setExportNotice({ type: 'error', text: 'No sales found for selected date.' });
+            return;
+        }
+
+        const sheetRows = [
+            [
+                'order_date',
+                'destination_branch',
+                'customer_name',
+                'customer_address',
+                'phone1',
+                'phone2',
+                'cod_amount',
+                'items_detail'
+            ],
+            ...rows
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+        worksheet['!cols'] = [
+            { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 14 },
+            { wch: 14 }, { wch: 12 }, { wch: 40 }
+        ];
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+        const fileName = `sales_export_${exportDate}.xlsx`;
+        const ipc = (window as any).ipcRenderer;
+
+        if (ipc?.invoke) {
+            const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+            const result = await ipc.invoke('save-xlsx-download', { fileName, base64 });
+            if (!result?.ok) {
+                setExportNotice({ type: 'error', text: `Export failed: ${result?.error || 'Unable to save file'}` });
+                return;
+            }
+            setExportNotice({ type: 'success', text: `File saved to Downloads: ${fileName}` });
+        } else {
+            XLSX.writeFile(workbook, fileName);
+            setExportNotice({ type: 'success', text: `File exported: ${fileName}` });
+        }
+        setTimeout(() => setExportNotice(null), 4000);
+    };
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
@@ -497,18 +590,35 @@ export default function SalesPage() {
                         <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Outbound Product Ledger</p>
                     </div>
 
-                    <button
-                        onClick={openEntryForm}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <Plus size={24} className="relative z-10" />
-                        <span className="relative z-10">New Order Entry</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleExportSales}
+                            className="flex items-center gap-2 px-5 py-3 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                            <FileDown size={16} />
+                            Export
+                        </button>
+                        <button
+                            onClick={openEntryForm}
+                            className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        >
+                            <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            <Plus size={24} className="relative z-10" />
+                            <span className="relative z-10">New Order Entry</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* History Grid */}
                 <div className="space-y-6">
+                    {exportNotice && (
+                        <div className={`px-4 py-3 rounded-xl text-sm font-bold border ${exportNotice.type === 'success'
+                            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-300 dark:border-green-900/30'
+                            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/30'
+                            }`}>
+                            {exportNotice.text}
+                        </div>
+                    )}
                     <div className="flex items-center gap-2">
                         <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
                             <History size={20} className="text-gray-500" />
@@ -585,6 +695,47 @@ export default function SalesPage() {
                     </div>
                 </div>
 
+                {isExportModalOpen && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
+                            <div className="p-6 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent">
+                                <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 uppercase">Export Sales</h3>
+                                <button onClick={() => setIsExportModalOpen(false)} className="h-10 w-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 text-gray-500 hover:text-red-500 transition-all">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-5">
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Select Date</label>
+                                    <input
+                                        type="date"
+                                        value={exportDate}
+                                        onChange={(e) => setExportDate(e.target.value)}
+                                        className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black"
+                                    />
+                                </div>
+                                <p className="text-xs text-gray-500">Exports all sales for the selected date in a row-wise CSV file (Excel/Numbers compatible).</p>
+                                <div className="flex gap-3 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsExportModalOpen(false)}
+                                        className="h-11 px-5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-black rounded-xl text-xs uppercase tracking-widest"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleConfirmExport}
+                                        className="flex-1 h-11 bg-primary text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg shadow-primary/20"
+                                    >
+                                        Export File
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Form Modal */}
                 {isFormOpen && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
@@ -615,7 +766,7 @@ export default function SalesPage() {
                                     {/* Order Core Info */}
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Order Date *</label>
-                                        <input required type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold" />
+                                        <input required type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Destination Branch *</label>
@@ -623,7 +774,7 @@ export default function SalesPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Parcel Status *</label>
-                                        <select required value={parcelStatus} onChange={e => setParcelStatus(e.target.value as any)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black">
+                                        <select required value={parcelStatus} onChange={e => setParcelStatus(e.target.value as any)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100">
                                             <option value="processing">Parcel Processing</option>
                                             <option value="sent">Parcel Sent</option>
                                             <option value="delivered">Delivered</option>

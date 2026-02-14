@@ -4,6 +4,7 @@ import DashboardLayout from "../layouts/DashboardLayout"
 import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar
@@ -15,8 +16,9 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState({
         totalDelivered: 0,
         totalReturns: 0,
-        thisMonthDelivered: 0,
-        thisMonthReturns: 0,
+        processingCount: 0,
+        sentCount: 0,
+        pendingTotal: 0,
         lowStock: 0,
         outOfStock: 0,
         returnRate: 0,
@@ -32,21 +34,16 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         fetchDashboardData();
-
-        const channel = supabase
-            .channel('dashboard-updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
-                fetchDashboardData(false);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => {
-                fetchDashboardData(false);
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchDashboardData(false),
+        {
+            channelName: 'dashboard-updates-v2',
+            tables: ['sales', 'product_lots', 'transactions'],
+            pollMs: 10000
+        }
+    );
 
     const fetchDashboardData = async (isInitial = true) => {
         if (isInitial) setLoading(true);
@@ -113,6 +110,9 @@ export default function AdminDashboard() {
 
             const thisMonthDelivered = monthSales.filter(s => s.parcel_status === 'delivered').length || 0;
             const thisMonthReturns = monthSales.filter(s => s.parcel_status === 'returned').length || 0;
+            const processingCount = globalSales?.filter(s => s.parcel_status === 'processing').length || 0;
+            const sentCount = globalSales?.filter(s => s.parcel_status === 'sent').length || 0;
+            const pendingTotal = processingCount + sentCount;
             const returnRate = totalDelivered > 0 ? (totalReturns / totalDelivered) * 100 : 0;
             const monthHandled = thisMonthDelivered + thisMonthReturns;
             const deliverySuccessRate = monthHandled > 0 ? (thisMonthDelivered / monthHandled) * 100 : 0;
@@ -194,8 +194,9 @@ export default function AdminDashboard() {
             setStats({
                 totalDelivered,
                 totalReturns,
-                thisMonthDelivered,
-                thisMonthReturns,
+                processingCount,
+                sentCount,
+                pendingTotal,
                 lowStock: lowStockCount,
                 outOfStock: outOfStockCount,
                 returnRate,
@@ -279,18 +280,11 @@ export default function AdminDashboard() {
                                 accent="bg-rose-500"
                                 isWarning={stats.totalReturns > 0}
                             />
-                            <StatCard
-                                title="This Month Delivered"
-                                value={stats.thisMonthDelivered.toString()}
-                                desc="Delivered this month"
-                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
-                                accent="bg-blue-500"
-                            />
-                            <StatCard
-                                title="This Month Returns"
-                                value={stats.thisMonthReturns.toString()}
-                                desc="Returns this month"
-                                icon={<Activity size={20} strokeWidth={1.5} />}
+                            <PendingCard
+                                title="Pending Parcels"
+                                total={stats.pendingTotal}
+                                processing={stats.processingCount}
+                                sent={stats.sentCount}
                                 accent="bg-amber-500"
                             />
                             <StatCard
@@ -507,14 +501,41 @@ function StatCard({ title, value, desc, icon, accent, isWarning = false }: any) 
         <div className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''}`}>
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">{title}</p>
-                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight">{value}</h4>
-                    <p className="text-[10px] text-gray-400 font-medium mt-1.5 flex items-center gap-1">
+                    <p className="text-[10px] font-bold text-gray-500 dark:text-gray-300 uppercase tracking-widest mb-1">{title}</p>
+                    <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{value}</h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 font-medium mt-1.5 flex items-center gap-1">
                         {desc}
                     </p>
                 </div>
                 <div className={`h-10 w-10 ${accent} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
                     {icon}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PendingCard({ title, total, processing, sent, accent }: any) {
+    return (
+        <div className="group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px]">
+            <div className="flex items-start justify-between">
+                <div>
+                    <p className="text-[10px] font-bold text-gray-500 dark:text-gray-300 uppercase tracking-widest mb-1">{title}</p>
+                    <h4 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{total}</h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 font-medium mt-1.5">Processing + Sent</p>
+                </div>
+                <div className={`h-10 w-10 ${accent} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
+                    <Package size={18} strokeWidth={1.5} />
+                </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Processing</p>
+                    <p className="text-base font-black text-gray-900 dark:text-gray-100">{processing}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Sent</p>
+                    <p className="text-base font-black text-gray-900 dark:text-gray-100">{sent}</p>
                 </div>
             </div>
         </div>

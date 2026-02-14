@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -43,17 +44,16 @@ export default function StockInPage() {
 
     useEffect(() => {
         fetchRecentTransactions();
-
-        const channel = supabase
-            .channel('transactions-in-changes-v2')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => fetchRecentTransactions())
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: "type=eq.in" }, () => fetchRecentTransactions())
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchRecentTransactions(),
+        {
+            channelName: 'transactions-in-changes-v3',
+            tables: ['product_lots', 'transactions'],
+            pollMs: 8000
+        }
+    );
 
     const fetchRecentTransactions = async () => {
         const { data, error } = await supabase

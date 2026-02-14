@@ -3,14 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "mobile:build": "vite build && npx cap sync",
-    "android:open": "npx cap open android"
+    "preview": "vite preview"
   },
   "build": {
     "appId": "com.inventory.app",
@@ -32,9 +30,6 @@
     }
   },
   "dependencies": {
-    "@capacitor/android": "^8.1.0",
-    "@capacitor/cli": "^8.1.0",
-    "@capacitor/core": "^8.1.0",
     "@supabase/supabase-js": "^2.93.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -44,6 +39,7 @@
     "react-router-dom": "^7.13.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
