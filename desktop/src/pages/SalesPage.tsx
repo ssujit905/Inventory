@@ -55,6 +55,7 @@ type AdOption = {
 
 export default function SalesPage() {
     const { user, profile } = useAuthStore();
+    const isAdmin = profile?.role === 'admin';
     const { query } = useSearchStore();
 
     // UI State
@@ -234,6 +235,13 @@ export default function SalesPage() {
         setLoading(true);
 
         try {
+            if (!isAdmin && newStatus === 'delivered' && Number(selectedSale.sold_amount || 0) > 0) {
+                throw new Error('Delivered amount can only be entered once by staff. Ask admin to edit.');
+            }
+            if (!isAdmin && newStatus === 'returned' && Number(selectedSale.return_cost || 0) > 0) {
+                throw new Error('Return cost can only be entered once by staff. Ask admin to edit.');
+            }
+
             if (newStatus === 'delivered') {
                 if (!soldAmountInput || Number(soldAmountInput) <= 0) {
                     throw new Error('Enter sold amount before marking as delivered.');
@@ -926,6 +934,11 @@ export default function SalesPage() {
                             </div>
 
                             <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+                                {(() => {
+                                    const staffDeliveredLocked = !isAdmin && Number(selectedSale.sold_amount || 0) > 0;
+                                    const staffReturnedLocked = !isAdmin && Number(selectedSale.return_cost || 0) > 0;
+                                    return (
+                                        <>
                                 {message && (
                                     <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                         <CheckCircle2 size={16} /> {message.text}
@@ -959,6 +972,11 @@ export default function SalesPage() {
                                     {pendingStatus === 'delivered' && (
                                         <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
                                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
+                                            {staffDeliveredLocked && (
+                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                    Staff can enter sold amount only once. Admin can edit it later.
+                                                </div>
+                                            )}
                                             <div className="relative">
                                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                 <input
@@ -967,13 +985,14 @@ export default function SalesPage() {
                                                     step="1"
                                                     value={soldAmountInput}
                                                     onChange={(e) => setSoldAmountInput(Number(e.target.value))}
+                                                    disabled={staffDeliveredLocked}
                                                     className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
                                                     placeholder="Total sold amount"
                                                 />
                                             </div>
                                             <button
                                                 onClick={() => handleStatusUpdate('delivered')}
-                                                disabled={loading}
+                                                disabled={loading || staffDeliveredLocked}
                                                 className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
                                             >
                                                 Confirm Delivered
@@ -984,6 +1003,11 @@ export default function SalesPage() {
                                     {pendingStatus === 'returned' && (
                                         <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
                                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
+                                            {staffReturnedLocked && (
+                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                    Staff can enter return cost only once. Admin can edit it later.
+                                                </div>
+                                            )}
                                             <div className="relative">
                                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                 <input
@@ -992,13 +1016,14 @@ export default function SalesPage() {
                                                     step="1"
                                                     value={returnCostInput}
                                                     onChange={(e) => setReturnCostInput(Number(e.target.value))}
+                                                    disabled={staffReturnedLocked}
                                                     className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
                                                     placeholder="Return cost"
                                                 />
                                             </div>
                                             <button
                                                 onClick={() => handleStatusUpdate('returned')}
-                                                disabled={loading}
+                                                disabled={loading || staffReturnedLocked}
                                                 className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
                                             >
                                                 Confirm Returned
@@ -1006,6 +1031,9 @@ export default function SalesPage() {
                                         </div>
                                     )}
                                 </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { UserPlus, Shield, Mail, Edit2, Check, X, AlertCircle, Key, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -38,8 +39,18 @@ export default function StaffManagementPage() {
         fetchProfiles();
     }, []);
 
-    const fetchProfiles = async () => {
-        setLoading(true);
+    useRealtimeRefresh(
+        () => fetchProfiles(false),
+        {
+            channelName: 'profiles-updates-v2',
+            tables: ['profiles'],
+            pollMs: 10000,
+            enabled: currentUserProfile?.role === 'admin'
+        }
+    );
+
+    const fetchProfiles = async (showLoader = true) => {
+        if (showLoader) setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -73,7 +84,7 @@ export default function StaffManagementPage() {
                 text: 'Failed to load personnel list. Database configuration needed.'
             });
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
     };
 
@@ -111,13 +122,17 @@ export default function StaffManagementPage() {
         try {
             // Logic to create a user without signing out the current admin:
             // We use a temporary client that doesn't persist the session.
-            const url = (import.meta as any).env.VITE_SUPABASE_URL;
-            const key = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
-
             const tempClient = (await import('@supabase/supabase-js')).createClient(
-                url,
-                key,
-                { auth: { persistSession: false } }
+                import.meta.env.VITE_SUPABASE_URL,
+                import.meta.env.VITE_SUPABASE_ANON_KEY,
+                {
+                    auth: {
+                        persistSession: false,
+                        autoRefreshToken: false,
+                        detectSessionInUrl: false,
+                        storageKey: 'sb-temp-create-user'
+                    }
+                }
             );
 
             // 1. Create User in Auth
@@ -179,20 +194,20 @@ export default function StaffManagementPage() {
 
     return (
         <DashboardLayout role={currentUserProfile?.role === 'admin' ? 'admin' : 'staff'}>
-                <div className="max-w-7xl mx-auto space-y-6 pb-20">
+            <div className="max-w-7xl mx-auto space-y-8 pb-20">
 
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b dark:border-gray-800 pb-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b dark:border-gray-800 pb-8">
                     <div>
-                        <h1 className="text-2xl sm:text-4xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Staff Management</h1>
-                        <p className="text-xs sm:text-sm text-gray-500 font-medium mt-2 uppercase tracking-[0.15em] sm:tracking-[0.2em] flex items-center gap-2">
+                        <h1 className="text-4xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Staff Management</h1>
+                        <p className="text-sm text-gray-500 font-medium mt-2 uppercase tracking-[0.2em] flex items-center gap-2">
                             <Shield size={16} className="text-primary" /> Authority & Access Control
                         </p>
                     </div>
 
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="group relative flex items-center justify-center gap-3 px-5 sm:px-8 py-3 sm:py-4 bg-primary text-white font-black rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden w-full sm:w-auto"
+                        className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
                     >
                         <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                         <UserPlus size={22} className="relative z-10" />
@@ -218,88 +233,9 @@ export default function StaffManagementPage() {
                 )}
 
                 {/* Personnel List */}
-                <div className="md:hidden space-y-3">
-                    {loading ? (
-                        <div className="py-12 text-center">
-                            <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hydrating Personnel Registry...</span>
-                        </div>
-                    ) : profiles.length === 0 ? (
-                        <div className="py-12 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
-                            No personnel accounts detected
-                        </div>
-                    ) : profiles.map((p) => (
-                        <div key={p.id} className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 p-4 space-y-4 shadow-sm">
-                            <div className="flex items-center gap-3">
-                                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-black text-lg">
-                                    {p.full_name?.[0] || 'U'}
-                                </div>
-                                <div className="min-w-0">
-                                    {editingId === p.id ? (
-                                        <input
-                                            value={editName}
-                                            onChange={e => setEditName(e.target.value)}
-                                            className="w-full bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-3 py-2 font-bold text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary transition-all"
-                                        />
-                                    ) : (
-                                        <p className="font-black text-gray-900 dark:text-gray-100 text-base truncate">{p.full_name || 'Anonymous User'}</p>
-                                    )}
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{p.id.slice(0, 8)}...</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                                {editingId === p.id ? (
-                                    <select
-                                        value={editRole}
-                                        onChange={e => setEditRole(e.target.value as any)}
-                                        className="flex-1 bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-3 py-2 font-black text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary"
-                                    >
-                                        <option value="staff">Staff Member</option>
-                                        <option value="admin">Administrator</option>
-                                    </select>
-                                ) : (
-                                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
-                                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                        : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                        }`}>
-                                        <Shield size={12} /> {p.role}
-                                    </div>
-                                )}
-                                <p className="text-[11px] font-bold text-gray-500">{format(new Date(p.created_at), 'dd MMM yyyy')}</p>
-                            </div>
-                            <div className="flex justify-end gap-2">
-                                {editingId === p.id ? (
-                                    <>
-                                        <button
-                                            onClick={() => handleSaveEdit(p.id)}
-                                            disabled={actionLoading}
-                                            className="h-10 w-10 flex items-center justify-center bg-green-500 text-white rounded-xl"
-                                        >
-                                            <Check size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => setEditingId(null)}
-                                            className="h-10 w-10 flex items-center justify-center bg-gray-100 text-gray-500 rounded-xl"
-                                        >
-                                            <X size={18} />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button
-                                        onClick={() => handleStartEdit(p)}
-                                        className="h-10 w-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl"
-                                        title="Edit Permissions"
-                                    >
-                                        <Edit2 size={18} />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="hidden md:block bg-white dark:bg-gray-900 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-none overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                <div className="bg-white dark:bg-gray-900 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-none overflow-hidden">
+                    <div className="overflow-x-auto mobile-fit-table-wrap">
+                        <table className="w-full text-left border-collapse mobile-fit-table">
                             <thead>
                                 <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b dark:border-gray-800">
                                     <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Personnel</th>
@@ -412,22 +348,22 @@ export default function StaffManagementPage() {
 
                 {/* Add Staff Modal */}
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 max-h-[92vh] flex flex-col">
-                            <div className="p-5 sm:p-12 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+                            <div className="p-12 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent">
                                 <div>
-                                    <h2 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
+                                    <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Initialize new secure account</p>
                                 </div>
                                 <button
                                     onClick={() => setIsAddModalOpen(false)}
-                                    className="h-11 w-11 sm:h-14 sm:w-14 flex items-center justify-center rounded-[1.2rem] sm:rounded-[1.5rem] bg-gray-100 dark:bg-gray-800 hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all"
+                                    className="h-14 w-14 flex items-center justify-center rounded-[1.5rem] bg-gray-100 dark:bg-gray-800 hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all"
                                 >
                                     <X size={28} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-5 sm:p-12 space-y-6 sm:space-y-8 overflow-y-auto">
+                            <form onSubmit={handleAddStaff} className="p-12 space-y-8">
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
                                     New accounts can log in immediately only if Supabase email confirmation is disabled.
                                 </div>
@@ -505,7 +441,7 @@ export default function StaffManagementPage() {
                                 <button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="w-full h-14 sm:h-20 bg-primary text-white font-black text-sm sm:text-lg rounded-[1.4rem] sm:rounded-[2rem] shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                                    className="w-full h-20 bg-primary text-white font-black text-lg rounded-[2rem] shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
                                     {actionLoading ? (
                                         <>

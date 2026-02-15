@@ -60,39 +60,11 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             </header>
 
             {/* MAIN CONTENT AREA */}
-            <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 pb-24">
+            <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 pb-6">
                 <div className="p-5 max-w-md mx-auto">
                     {children}
                 </div>
             </main>
-
-            {/* BOTTOM NAVIGATION (For Core Actions) */}
-            <nav className="h-20 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-gray-800 grid grid-cols-4 fixed bottom-0 left-0 right-0 z-40 px-2 safe-area-bottom">
-                <BottomNavItem
-                    icon={<LayoutDashboard size={22} />}
-                    label="Home"
-                    path="/admin/dashboard"
-                    active={location.pathname === '/admin/dashboard'}
-                />
-                <BottomNavItem
-                    icon={<Package size={22} />}
-                    label="Stock"
-                    path="/admin/inventory"
-                    active={location.pathname === '/admin/inventory'}
-                />
-                <BottomNavItem
-                    icon={<ShoppingCart size={22} />}
-                    label="Sales"
-                    path="/admin/sales"
-                    active={location.pathname === '/admin/sales'}
-                />
-                <BottomNavItem
-                    icon={<DollarSign size={22} />}
-                    label="Cash"
-                    path="/admin/expenses"
-                    active={location.pathname === '/admin/expenses'}
-                />
-            </nav>
 
             {/* MOBILE FULL-SCREEN MENU DRAWER */}
             {isMenuOpen && (
@@ -108,8 +80,14 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Main Operations</label>
                             <div className="space-y-1">
+                                <MenuLink icon={<LayoutDashboard className="text-cyan-500" />} label="Dashboard" path="/admin/dashboard" />
+                                <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" />
                                 <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" badge={pendingCostCount} />
-                                <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" />
+                                <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" />
+                                <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" />
+                                {role === 'admin' && (
+                                    <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" />
+                                )}
                             </div>
                         </section>
 
@@ -144,21 +122,6 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </div>
             )}
         </div>
-    );
-}
-
-function BottomNavItem({ icon, label, path, active }: { icon: React.ReactNode, label: string, path: string, active: boolean }) {
-    const navigate = useNavigate();
-    return (
-        <button
-            onClick={() => navigate(path)}
-            className={`flex flex-col items-center justify-center gap-1 transition-all active:scale-90 ${active ? 'text-primary' : 'text-gray-400 dark:text-gray-600'}`}
-        >
-            <div className={`p-1.5 rounded-xl transition-all ${active ? 'bg-primary/10' : ''}`}>
-                {icon}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
-        </button>
     );
 }
 

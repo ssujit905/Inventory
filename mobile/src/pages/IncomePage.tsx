@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, TrendingUp, AlertCircle, X, ArrowRight, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -28,18 +29,16 @@ export default function IncomePage() {
 
     useEffect(() => {
         fetchIncomeEntries();
-
-        const channel = supabase
-            .channel('income-changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'income_entries' }, () => {
-                fetchIncomeEntries();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
+
+    useRealtimeRefresh(
+        () => fetchIncomeEntries(),
+        {
+            channelName: 'income-changes-v2',
+            tables: ['income_entries'],
+            pollMs: 10000
+        }
+    );
 
     const fetchIncomeEntries = async () => {
         const { data } = await supabase

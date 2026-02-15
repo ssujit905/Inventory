@@ -92,7 +92,7 @@ export default function ProfitPage() {
 
             const { data: packagingData } = await supabase
                 .from('expenses')
-                .select('amount, created_at')
+                .select('amount, description, created_at')
                 .eq('category', 'packaging')
                 .order('created_at', { ascending: true });
 
@@ -108,10 +108,22 @@ export default function ProfitPage() {
                 return '';
             };
 
+            const extractPackagingQty = (description: string | null | undefined): number => {
+                if (!description) return 0;
+                const match = description.match(/qty\s*:\s*(\d+)/i);
+                return match ? Number(match[1] || 0) : 0;
+            };
+
             const packagingHistory = (packagingData || [])
                 .map((p: any) => ({
                     timeKey: toTimeKey(p.created_at),
-                    amount: Number(p.amount || 0)
+                    amount: Number(p.amount || 0),
+                    unitCost: (() => {
+                        const qty = extractPackagingQty(p.description);
+                        if (qty > 0) return Number(p.amount || 0) / qty;
+                        // Backward compatibility for older packaging rows without quantity.
+                        return Number(p.amount || 0);
+                    })()
                 }))
                 .filter((p: any) => p.timeKey)
                 .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
@@ -145,7 +157,7 @@ export default function ProfitPage() {
                 let selected = 0;
                 for (const p of packagingHistory) {
                     if (p.timeKey <= saleTimeKey) {
-                        selected = p.amount;
+                        selected = p.unitCost;
                     } else {
                         break;
                     }

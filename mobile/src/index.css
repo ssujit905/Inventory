@@ -81,30 +81,47 @@
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
 
-  input,
-  select,
-  textarea,
-  button {
-    font-size: 16px;
-  }
-
+  /* Global dark-mode form readability */
   .dark input,
   .dark textarea,
   .dark select {
-    color: rgb(243 244 246);
+    color: rgb(243 244 246); /* text-gray-100 */
   }
 
   .dark input::placeholder,
   .dark textarea::placeholder {
-    color: rgb(156 163 175);
+    color: rgb(156 163 175); /* text-gray-400 */
     opacity: 1;
   }
 
+  .dark input:disabled,
+  .dark textarea:disabled,
+  .dark select:disabled {
+    color: rgb(107 114 128); /* text-gray-500 */
+  }
+
+  /* Keep date inputs readable in dark mode */
   .dark input[type="date"]::-webkit-datetime-edit,
   .dark input[type="datetime-local"]::-webkit-datetime-edit,
   .dark input[type="month"]::-webkit-datetime-edit,
   .dark input[type="time"]::-webkit-datetime-edit {
     color: rgb(243 244 246);
+  }
+
+  /* Improve autofill contrast in dark mode */
+  .dark input:-webkit-autofill,
+  .dark textarea:-webkit-autofill,
+  .dark select:-webkit-autofill {
+    -webkit-text-fill-color: rgb(243 244 246);
+    box-shadow: 0 0 0px 1000px rgb(31 41 55) inset;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px;
   }
 }
 
@@ -128,4 +145,24 @@
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/20;
+}
+
+@media (max-width: 768px) {
+  .mobile-fit-table-wrap {
+    overflow-x: hidden !important;
+  }
+
+  .mobile-fit-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .mobile-fit-table th,
+  .mobile-fit-table td {
+    padding: 0.45rem 0.35rem !important;
+    font-size: 10px !important;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.25;
+  }
 }

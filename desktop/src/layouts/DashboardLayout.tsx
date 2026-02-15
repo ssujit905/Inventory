@@ -93,6 +93,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         navigate('/admin/sales');
     };
 
+    const handleManualRefresh = () => {
+        window.location.reload();
+    };
+
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -117,12 +121,17 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 lg:relative lg:translate-x-0 lg:flex-shrink-0
             `}>
                 <div className="h-16 flex items-center justify-between px-6 flex-shrink-0">
-                    <div className="flex items-center gap-2.5 text-gray-900 dark:text-white font-bold tracking-tight">
+                    <button
+                        type="button"
+                        onClick={handleManualRefresh}
+                        title="Refresh app"
+                        className="flex items-center gap-2.5 text-gray-900 dark:text-white font-bold tracking-tight hover:opacity-80 transition-opacity"
+                    >
                         <div className="p-1.5 bg-primary rounded-lg text-white">
                             <Package size={16} strokeWidth={2.5} />
                         </div>
                         <span className="text-lg font-jakarta">InvPro</span>
-                    </div>
+                    </button>
                     {/* Close button for mobile */}
                     <button
                         onClick={() => setIsMobileMenuOpen(false)}

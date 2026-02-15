@@ -14,6 +14,8 @@ interface AuthState { // Corrected 'interfactype' to 'interface'
     signOut: () => Promise<void>;
 }
 
+let authSubscription: { unsubscribe: () => void } | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     user: null,
     profile: null,
@@ -97,9 +99,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
                 set({ user: null, profile: null, loading: false })
             }
 
-            // Listen for changes (only set up once)
-            // Note: We don't update state here to prevent loops
-            supabase.auth.onAuthStateChange(async (event, session) => {
+            // Keep exactly one auth listener to avoid duplicate refresh loops in dev/HMR.
+            if (authSubscription) {
+                authSubscription.unsubscribe();
+                authSubscription = null;
+            }
+
+            const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
                 console.log('Auth state changed:', event);
 
                 // Only handle SIGNED_IN and SIGNED_OUT events
@@ -112,6 +118,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
                 }
                 // Ignore INITIAL_SESSION and other events to prevent loops
             })
+            authSubscription = listener.subscription;
         } catch (error) {
             console.error('Auth initialization error:', error)
             set({ user: null, profile: null, loading: false })

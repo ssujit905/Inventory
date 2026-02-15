@@ -27,6 +27,7 @@ export default function ExpensesPage() {
     const [amount, setAmount] = useState<number>(0);
     const [expenseDate, setExpenseDate] = useState('');
     const [category, setCategory] = useState<'ads' | 'packaging' | 'other'>('other');
+    const [packagingQuantity, setPackagingQuantity] = useState<number>(0);
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -59,6 +60,7 @@ export default function ExpensesPage() {
         setAmount(0);
         setExpenseDate(format(new Date(), 'yyyy-MM-dd'));
         setCategory('other');
+        setPackagingQuantity(0);
         setIsFormOpen(true);
         setMessage(null);
     };
@@ -69,8 +71,18 @@ export default function ExpensesPage() {
         setLoading(true);
 
         try {
+            if (category === 'packaging' && packagingQuantity < 1) {
+                setMessage({ type: 'error', text: 'Please enter packaging quantity.' });
+                setLoading(false);
+                return;
+            }
+
+            const finalDescription = category === 'packaging'
+                ? `Qty: ${packagingQuantity} | ${description}`
+                : description;
+
             const { error } = await supabase.from('expenses').insert([{
-                description,
+                description: finalDescription,
                 amount,
                 expense_date: expenseDate,
                 category,
@@ -239,7 +251,11 @@ export default function ExpensesPage() {
                                         <select
                                             required
                                             value={category}
-                                            onChange={e => setCategory(e.target.value as 'ads' | 'packaging' | 'other')}
+                                            onChange={e => {
+                                                const next = e.target.value as 'ads' | 'packaging' | 'other';
+                                                setCategory(next);
+                                                if (next !== 'packaging') setPackagingQuantity(0);
+                                            }}
                                             className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
                                         >
                                             <option value="other">Other</option>
@@ -247,6 +263,22 @@ export default function ExpensesPage() {
                                             <option value="packaging">Packaging</option>
                                         </select>
                                     </div>
+
+                                    {category === 'packaging' && (
+                                        <div className="space-y-3">
+                                            <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Packaging Quantity <span className="text-red-500">*</span></label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={packagingQuantity || ''}
+                                                onChange={e => setPackagingQuantity(Number(e.target.value))}
+                                                className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                                placeholder="Enter quantity"
+                                            />
+                                        </div>
+                                    )}
 
                                     <div className="space-y-3">
                                         <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>

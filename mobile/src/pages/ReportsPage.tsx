@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, FileDown } from 'lucide-react';
+import { exportToExcel } from '../utils/excelExport';
 
 type FinanceStats = {
     totalRevenue: number;
@@ -35,23 +37,19 @@ export default function ReportsPage() {
 
     useEffect(() => {
         fetchFinanceData();
-
-        // Real-time updates for finance data
-        const channel = supabase
-            .channel('finance-updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchFinanceData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => fetchFinanceData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_lots' }, () => fetchFinanceData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'income_entries' }, () => fetchFinanceData())
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
     }, []);
 
-    const fetchFinanceData = async () => {
-        setLoading(true);
+    useRealtimeRefresh(
+        () => fetchFinanceData(false),
+        {
+            channelName: 'finance-updates-v2',
+            tables: ['sales', 'expenses', 'product_lots', 'income_entries', 'transactions'],
+            pollMs: 12000
+        }
+    );
+
+    const fetchFinanceData = async (showLoader = true) => {
+        if (showLoader) setLoading(true);
         try {
             // 1. Fetch income entries for Revenue
             const { data: incomeEntries, error: incomeError } = await supabase
@@ -358,8 +356,24 @@ export default function ReportsPage() {
         } catch (error: any) {
             console.error('Error fetching finance data:', error.message);
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
+    };
+
+    const handleExport = () => {
+        const exportData = [
+            { Metric: 'Total Revenue', Value: stats.totalRevenue },
+            { Metric: 'Cost of Goods', Value: stats.totalCOGS },
+            { Metric: 'Gross Profit', Value: stats.grossProfit },
+            { Metric: 'Total Expenses', Value: stats.totalExpenses },
+            { Metric: 'Total Investment', Value: stats.totalInvestment },
+            { Metric: 'Total Stock Value', Value: stats.totalStockValue },
+            { Metric: 'Cash in Hand', Value: stats.cashInHand },
+            { Metric: 'Margin (%)', Value: stats.margin.toFixed(2) }
+        ];
+
+        // Also include monthly trend data in a separate export or combined
+        exportToExcel(exportData, `Financial_Report_${format(new Date(), 'yyyy-MM-dd')}`, 'Finance Summary');
     };
 
     if (loading) {
@@ -380,6 +394,13 @@ export default function ReportsPage() {
                         <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Dashboard</h1>
                         <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Revenue, Investment & Expenditure Analytics</p>
                     </div>
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl text-xs font-black uppercase tracking-widest hover:border-primary transition-all active:scale-95 shadow-sm"
+                    >
+                        <FileDown size={18} className="text-primary" />
+                        Export Report (.xlsx)
+                    </button>
                 </div>
 
                 {/* Metrics Grid */}
