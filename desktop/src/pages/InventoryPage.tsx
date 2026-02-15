@@ -3,9 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Package, AlertTriangle, RotateCcw, Barcode, Hash, FileDown } from 'lucide-react';
-import { exportToExcel } from '../utils/excelExport';
-import { format } from 'date-fns';
+import { Package, AlertTriangle, RotateCcw, Barcode, Hash } from 'lucide-react';
 
 type InventoryLot = {
     id: string;
@@ -109,21 +107,6 @@ export default function InventoryPage() {
         }
     };
 
-    const handleExport = () => {
-        const exportData = inventory.map(item => ({
-            'Product Name': item.product_name,
-            'SKU': item.sku,
-            'Batch Number': item.lot_number,
-            'Stock In': item.stock_in,
-            'Sold': item.sold,
-            'Returned': item.returned,
-            'Remaining': item.remaining,
-            'Status': item.status
-        }));
-
-        exportToExcel(exportData, `Inventory_Ledger_${format(new Date(), 'yyyy-MM-dd')}`, 'Inventory');
-    };
-
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
@@ -139,14 +122,6 @@ export default function InventoryPage() {
                     >
                         <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
                         Refresh Data
-                    </button>
-                    <button
-                        onClick={handleExport}
-                        disabled={loading || inventory.length === 0}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
-                    >
-                        <FileDown size={14} strokeWidth={2} />
-                        Export (.xlsx)
                     </button>
                 </div>
 
