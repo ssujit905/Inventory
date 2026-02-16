@@ -69,6 +69,7 @@ jobs:
       - name: Sync Capacitor
         run: |
           cd mobile
+          npx cap add android --skip-dependency-update || true
           npx cap sync android
       - name: Build Android APK
         run: |
