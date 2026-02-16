@@ -57,26 +57,26 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: desktop/package.json
+          cache-dependency-path: mobile/package-lock.json
       - name: Install Dependencies
         run: |
-          cd desktop
-          npm install
+          cd mobile
+          npm ci
       - name: Build Web
         run: |
-          cd desktop
-          npx tsc -b && npx vite build
+          cd mobile
+          npm run build
       - name: Sync Capacitor
         run: |
-          cd desktop
+          cd mobile
           npx cap sync android
       - name: Build Android APK
         run: |
-          cd desktop/android
+          cd mobile/android
           chmod +x gradlew
           ./gradlew assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: desktop/android/app/build/outputs/apk/debug/app-debug.apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
