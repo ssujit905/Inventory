@@ -4,7 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, FileDown } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, Eye, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -55,6 +55,7 @@ type AdOption = {
 
 export default function SalesPage() {
     const { user, profile } = useAuthStore();
+    const isAdmin = profile?.role === 'admin';
     const { query } = useSearchStore();
 
     // UI State
@@ -81,6 +82,7 @@ export default function SalesPage() {
             (sale.phone2 && sale.phone2.includes(lowQuery))
         );
     }, [sales, query]);
+    const isSearchMode = query.trim().length > 0;
 
     // Form Fields
     const [orderDate, setOrderDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -234,6 +236,13 @@ export default function SalesPage() {
         setLoading(true);
 
         try {
+            if (!isAdmin && newStatus === 'delivered' && Number(selectedSale.sold_amount || 0) > 0) {
+                throw new Error('Delivered amount can only be entered once by staff. Ask admin to edit.');
+            }
+            if (!isAdmin && newStatus === 'returned' && Number(selectedSale.return_cost || 0) > 0) {
+                throw new Error('Return cost can only be entered once by staff. Ask admin to edit.');
+            }
+
             if (newStatus === 'delivered') {
                 if (!soldAmountInput || Number(soldAmountInput) <= 0) {
                     throw new Error('Enter sold amount before marking as delivered.');
@@ -583,31 +592,31 @@ export default function SalesPage() {
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
 
-                {/* Header */}
-                <div className="flex items-center justify-between border-b dark:border-gray-800 pb-6">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Sales & Orders</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Outbound Product Ledger</p>
-                    </div>
+                {!isSearchMode && (
+                    <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
+                        <div>
+                            <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Sales & Orders</h1>
+                            <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Outbound Product Ledger</p>
+                        </div>
 
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleExportSales}
-                            className="flex items-center gap-2 px-5 py-3 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                        >
-                            <FileDown size={16} />
-                            Export
-                        </button>
-                        <button
-                            onClick={openEntryForm}
-                            className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
-                        >
-                            <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                            <Plus size={24} className="relative z-10" />
-                            <span className="relative z-10">New Order Entry</span>
-                        </button>
+                        <div className="flex flex-col sm:flex-row items-stretch gap-2 w-full sm:w-auto">
+                            <button
+                                onClick={handleExportSales}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg font-bold text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors w-full sm:w-auto"
+                            >
+                                <FileDown size={16} />
+                                Export
+                            </button>
+                            <button
+                                onClick={openEntryForm}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
+                            >
+                                <Plus size={16} strokeWidth={2.5} />
+                                New Order Entry
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* History Grid */}
                 <div className="space-y-6">
@@ -619,12 +628,14 @@ export default function SalesPage() {
                             {exportNotice.text}
                         </div>
                     )}
-                    <div className="flex items-center gap-2">
-                        <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                            <History size={20} className="text-gray-500" />
+                    {!isSearchMode && (
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                                <History size={20} className="text-gray-500" />
+                            </div>
+                            <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 font-outfit">Recent Shipments</h3>
                         </div>
-                        <h3 className="text-lg font-black text-gray-900 dark:text-gray-100 font-outfit">Recent Shipments</h3>
-                    </div>
+                    )}
 
                     <div className="space-y-3">
                         {filteredSales.length === 0 ? (
@@ -645,46 +656,43 @@ export default function SalesPage() {
                                 {filteredSales.map((sale, index) => {
                                     const displayIndex = filteredSales.length - index;
                                     return (
-                                        <div key={sale.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
-                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 px-6 py-4 items-center">
-                                                <div className="md:col-span-2 flex items-center gap-3">
-                                                    <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
-                                                        {displayIndex}
-                                                    </div>
+                                        <div key={sale.id} className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
+                                                {displayIndex}
+                                            </div>
+                                            <div className="flex flex-col gap-3 pl-12 pr-4 py-4">
+                                                <div className="flex items-start justify-between gap-3">
                                                     <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
                                                         {format(new Date(sale.order_date), 'MMM dd, yyyy')}
                                                     </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
+                                                            {sale.parcel_status}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => openStatusModal(sale)}
+                                                            className="h-8 w-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-500 hover:text-primary transition-all"
+                                                        >
+                                                            <Edit2 size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => openViewModal(sale)}
+                                                            className="h-8 w-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                                                        >
+                                                            <Eye size={14} />
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div className="md:col-span-2 min-w-0 pr-2">
+
+                                                <div className="min-w-0">
                                                     <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
                                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
                                                         {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
                                                     </div>
                                                 </div>
-                                                <div className="md:col-span-2 text-xs text-gray-600 dark:text-gray-300 truncate pr-2">
-                                                    {sale.destination_branch}
-                                                </div>
-                                                <div className="md:col-span-2 text-right text-sm font-black text-primary font-mono tracking-tight">
+
+                                                <div className="text-left text-sm font-black text-primary font-mono tracking-tight">
                                                     ${Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                </div>
-                                                <div className="md:col-span-2 flex items-center justify-end">
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
-                                                        {sale.parcel_status}
-                                                    </span>
-                                                </div>
-                                                <div className="md:col-span-2 flex items-center justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openStatusModal(sale)}
-                                                        className="h-9 w-9 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-400 hover:text-primary transition-all"
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openViewModal(sale)}
-                                                        className="px-4 py-2 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-colors"
-                                                    >
-                                                        View
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -899,11 +907,11 @@ export default function SalesPage() {
                                 </div>
 
                                 <div className="pt-10 flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto w-full">
-                                    <button type="button" onClick={() => setIsFormOpen(false)} className="h-14 px-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200">
-                                        Discard Order
-                                    </button>
                                     <button type="submit" disabled={loading} className="flex-1 h-14 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/30 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50">
                                         {loading ? 'Processing Order...' : 'Confirm Shipment'}
+                                    </button>
+                                    <button type="button" onClick={() => setIsFormOpen(false)} className="flex-1 h-14 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl shadow-xl shadow-gray-200/40 dark:shadow-black/20 transition-all hover:scale-[1.01] active:scale-95 hover:bg-gray-200 dark:hover:bg-gray-700">
+                                        Discard Order
                                     </button>
                                 </div>
                             </form>
@@ -926,6 +934,11 @@ export default function SalesPage() {
                             </div>
 
                             <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+                                {(() => {
+                                    const staffDeliveredLocked = !isAdmin && Number(selectedSale.sold_amount || 0) > 0;
+                                    const staffReturnedLocked = !isAdmin && Number(selectedSale.return_cost || 0) > 0;
+                                    return (
+                                        <>
                                 {message && (
                                     <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                         <CheckCircle2 size={16} /> {message.text}
@@ -959,6 +972,11 @@ export default function SalesPage() {
                                     {pendingStatus === 'delivered' && (
                                         <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
                                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
+                                            {staffDeliveredLocked && (
+                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                    Staff can enter sold amount only once. Admin can edit it later.
+                                                </div>
+                                            )}
                                             <div className="relative">
                                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                 <input
@@ -967,13 +985,14 @@ export default function SalesPage() {
                                                     step="1"
                                                     value={soldAmountInput}
                                                     onChange={(e) => setSoldAmountInput(Number(e.target.value))}
+                                                    disabled={staffDeliveredLocked}
                                                     className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
                                                     placeholder="Total sold amount"
                                                 />
                                             </div>
                                             <button
                                                 onClick={() => handleStatusUpdate('delivered')}
-                                                disabled={loading}
+                                                disabled={loading || staffDeliveredLocked}
                                                 className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
                                             >
                                                 Confirm Delivered
@@ -984,6 +1003,11 @@ export default function SalesPage() {
                                     {pendingStatus === 'returned' && (
                                         <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
                                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
+                                            {staffReturnedLocked && (
+                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                    Staff can enter return cost only once. Admin can edit it later.
+                                                </div>
+                                            )}
                                             <div className="relative">
                                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                 <input
@@ -992,13 +1016,14 @@ export default function SalesPage() {
                                                     step="1"
                                                     value={returnCostInput}
                                                     onChange={(e) => setReturnCostInput(Number(e.target.value))}
+                                                    disabled={staffReturnedLocked}
                                                     className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
                                                     placeholder="Return cost"
                                                 />
                                             </div>
                                             <button
                                                 onClick={() => handleStatusUpdate('returned')}
-                                                disabled={loading}
+                                                disabled={loading || staffReturnedLocked}
                                                 className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
                                             >
                                                 Confirm Returned
@@ -1006,6 +1031,9 @@ export default function SalesPage() {
                                         </div>
                                     )}
                                 </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

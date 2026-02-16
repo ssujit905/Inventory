@@ -197,9 +197,9 @@ export default function StaffManagementPage() {
             <div className="max-w-7xl mx-auto space-y-8 pb-20">
 
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b dark:border-gray-800 pb-8">
+                <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
                     <div>
-                        <h1 className="text-4xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Staff Management</h1>
+                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Staff Management</h1>
                         <p className="text-sm text-gray-500 font-medium mt-2 uppercase tracking-[0.2em] flex items-center gap-2">
                             <Shield size={16} className="text-primary" /> Authority & Access Control
                         </p>
@@ -207,11 +207,10 @@ export default function StaffManagementPage() {
 
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <UserPlus size={22} className="relative z-10" />
-                        <span className="relative z-10">Add New Personnel</span>
+                        <UserPlus size={16} strokeWidth={2.5} />
+                        Add New Personnel
                     </button>
                 </div>
 
@@ -233,124 +232,56 @@ export default function StaffManagementPage() {
                 )}
 
                 {/* Personnel List */}
-                <div className="bg-white dark:bg-gray-900 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-none overflow-hidden">
-                    <div className="overflow-x-auto mobile-fit-table-wrap">
-                        <table className="w-full text-left border-collapse mobile-fit-table">
-                            <thead>
-                                <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b dark:border-gray-800">
-                                    <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Personnel</th>
-                                    <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Responsibility</th>
-                                    <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Joined On</th>
-                                    <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y dark:divide-gray-800">
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={4} className="px-10 py-24 text-center">
-                                            <div className="flex flex-col items-center gap-4">
-                                                <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
-                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hydrating Personnel Registry...</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : profiles.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={4} className="px-10 py-24 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
-                                            No personnel accounts detected
-                                        </td>
-                                    </tr>
-                                ) : profiles.map(p => (
-                                    <tr key={p.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-all duration-300">
-                                        <td className="px-10 py-8">
-                                            <div className="flex items-center gap-5">
-                                                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary font-black text-xl shadow-inner">
-                                                    {p.full_name?.[0] || 'U'}
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    {editingId === p.id ? (
-                                                        <input
-                                                            value={editName}
-                                                            onChange={e => setEditName(e.target.value)}
-                                                            className="bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-4 py-2 font-bold text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary transition-all"
-                                                        />
-                                                    ) : (
-                                                        <span className="font-black text-gray-900 dark:text-gray-100 text-lg">{p.full_name || 'Anonymous User'}</span>
-                                                    )}
-                                                    <span className="text-xs text-gray-400 font-bold tracking-tight uppercase flex items-center gap-1.5 mt-0.5">
-                                                        <UserCheck size={12} className="text-primary/40" /> {p.id.slice(0, 8)}...
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            {editingId === p.id ? (
-                                                <select
-                                                    value={editRole}
-                                                    onChange={e => setEditRole(e.target.value as any)}
-                                                    className="bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-4 py-2 font-black text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary"
-                                                >
-                                                    <option value="staff">Staff Member</option>
-                                                    <option value="admin">Administrator</option>
-                                                </select>
-                                            ) : (
-                                                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
-                                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                <div className="space-y-3">
+                    {loading ? (
+                        <div className="py-24 text-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hydrating Personnel Registry...</span>
+                            </div>
+                        </div>
+                    ) : profiles.length === 0 ? (
+                        <div className="py-24 text-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 text-gray-400 font-bold uppercase tracking-widest text-sm">
+                            No personnel accounts detected
+                        </div>
+                    ) : profiles.map((p, index) => {
+                        const displayIndex = profiles.length - index;
+                        return (
+                            <div key={p.id} className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
+                                    {displayIndex}
+                                </div>
+                                <div className="flex flex-col gap-3 pl-12 pr-4 py-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
+                                                {format(new Date(p.created_at), 'MMM dd, yyyy')}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${p.role === 'admin'
+                                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                    : 'bg-gray-100 text-gray-600 border-gray-200'
                                                     }`}>
-                                                    <Shield size={12} /> {p.role}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-black text-gray-700 dark:text-gray-300 font-mono">
-                                                    {format(new Date(p.created_at), 'dd MMM yyyy')}
+                                                    {p.role}
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Registered Account</span>
                                             </div>
-                                        </td>
-                                        <td className="px-10 py-8 text-right">
-                                            {editingId === p.id ? (
-                                                <div className="flex items-center justify-end gap-3">
-                                                    <button
-                                                        onClick={() => handleSaveEdit(p.id)}
-                                                        disabled={actionLoading}
-                                                        className="h-12 w-12 flex items-center justify-center bg-green-500 text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-lg shadow-green-500/30"
-                                                    >
-                                                        <Check size={24} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingId(null)}
-                                                        className="h-12 w-12 flex items-center justify-center bg-gray-100 text-gray-500 rounded-2xl hover:bg-rose-50 hover:text-rose-500 transition-all"
-                                                    >
-                                                        <X size={24} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button
-                                                        onClick={() => handleStartEdit(p)}
-                                                        className="h-12 w-12 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 hover:scale-110 active:scale-95 transition-all"
-                                                        title="Edit Permissions"
-                                                    >
-                                                        <Edit2 size={20} />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</div>
+                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
+                                                <UserCheck size={12} className="text-primary/40" /> {p.id.slice(0, 8)}...
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                        );
+                    })}
                 </div>
 
                 {/* Add Staff Modal */}
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
-                            <div className="p-12 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 flex flex-col max-h-[90vh]">
+                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Initialize new secure account</p>
@@ -363,7 +294,7 @@ export default function StaffManagementPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-12 space-y-8">
+                            <form onSubmit={handleAddStaff} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
                                     New accounts can log in immediately only if Supabase email confirmation is disabled.
                                 </div>

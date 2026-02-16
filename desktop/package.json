@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.cjs",
+  "main": "electron/entry.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
@@ -13,16 +13,23 @@
   "build": {
     "appId": "com.inventory.app",
     "productName": "Inventory App",
+    "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "electron/entry.cjs"
     ],
     "mac": {
-      "target": "dmg",
-      "icon": "build/icon.png"
+      "target": "zip",
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
       "target": "nsis",
@@ -43,6 +50,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.0",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",

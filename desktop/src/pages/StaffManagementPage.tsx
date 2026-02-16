@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { UserPlus, Shield, Mail, Edit2, Check, X, AlertCircle, Key, UserCheck } from 'lucide-react';
+import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Profile = {
@@ -18,11 +18,6 @@ export default function StaffManagementPage() {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
-
-    // Edit States
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editName, setEditName] = useState('');
-    const [editRole, setEditRole] = useState<'admin' | 'staff'>('staff');
 
     // Message State
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -85,32 +80,6 @@ export default function StaffManagementPage() {
             });
         } finally {
             if (showLoader) setLoading(false);
-        }
-    };
-
-    const handleStartEdit = (p: Profile) => {
-        setEditingId(p.id);
-        setEditName(p.full_name || '');
-        setEditRole(p.role);
-    };
-
-    const handleSaveEdit = async (id: string) => {
-        setActionLoading(true);
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ full_name: editName, role: editRole })
-                .eq('id', id);
-
-            if (error) throw error;
-
-            setProfiles(prev => prev.map(p => p.id === id ? { ...p, full_name: editName, role: editRole } : p));
-            setEditingId(null);
-            setMessage({ type: 'success', text: 'Personnel updated successfully!' });
-        } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
-        } finally {
-            setActionLoading(false);
         }
     };
 
@@ -241,13 +210,12 @@ export default function StaffManagementPage() {
                                     <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Personnel</th>
                                     <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Responsibility</th>
                                     <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Joined On</th>
-                                    <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y dark:divide-gray-800">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={4} className="px-10 py-24 text-center">
+                                        <td colSpan={3} className="px-10 py-24 text-center">
                                             <div className="flex flex-col items-center gap-4">
                                                 <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
                                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hydrating Personnel Registry...</span>
@@ -256,7 +224,7 @@ export default function StaffManagementPage() {
                                     </tr>
                                 ) : profiles.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-10 py-24 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
+                                        <td colSpan={3} className="px-10 py-24 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
                                             No personnel accounts detected
                                         </td>
                                     </tr>
@@ -268,15 +236,7 @@ export default function StaffManagementPage() {
                                                     {p.full_name?.[0] || 'U'}
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    {editingId === p.id ? (
-                                                        <input
-                                                            value={editName}
-                                                            onChange={e => setEditName(e.target.value)}
-                                                            className="bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-4 py-2 font-bold text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary transition-all"
-                                                        />
-                                                    ) : (
-                                                        <span className="font-black text-gray-900 dark:text-gray-100 text-lg">{p.full_name || 'Anonymous User'}</span>
-                                                    )}
+                                                    <span className="font-black text-gray-900 dark:text-gray-100 text-lg">{p.full_name || 'Anonymous User'}</span>
                                                     <span className="text-xs text-gray-400 font-bold tracking-tight uppercase flex items-center gap-1.5 mt-0.5">
                                                         <UserCheck size={12} className="text-primary/40" /> {p.id.slice(0, 8)}...
                                                     </span>
@@ -284,23 +244,12 @@ export default function StaffManagementPage() {
                                             </div>
                                         </td>
                                         <td className="px-10 py-8">
-                                            {editingId === p.id ? (
-                                                <select
-                                                    value={editRole}
-                                                    onChange={e => setEditRole(e.target.value as any)}
-                                                    className="bg-gray-100 dark:bg-gray-800 border-2 border-primary/20 rounded-xl px-4 py-2 font-black text-gray-900 dark:text-gray-100 focus:outline-none focus:border-primary"
-                                                >
-                                                    <option value="staff">Staff Member</option>
-                                                    <option value="admin">Administrator</option>
-                                                </select>
-                                            ) : (
-                                                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
-                                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                                    }`}>
-                                                    <Shield size={12} /> {p.role}
-                                                </div>
-                                            )}
+                                            <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
+                                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                                }`}>
+                                                <Shield size={12} /> {p.role}
+                                            </div>
                                         </td>
                                         <td className="px-10 py-8">
                                             <div className="flex flex-col">
@@ -309,35 +258,6 @@ export default function StaffManagementPage() {
                                                 </span>
                                                 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Registered Account</span>
                                             </div>
-                                        </td>
-                                        <td className="px-10 py-8 text-right">
-                                            {editingId === p.id ? (
-                                                <div className="flex items-center justify-end gap-3">
-                                                    <button
-                                                        onClick={() => handleSaveEdit(p.id)}
-                                                        disabled={actionLoading}
-                                                        className="h-12 w-12 flex items-center justify-center bg-green-500 text-white rounded-2xl hover:scale-110 active:scale-95 transition-all shadow-lg shadow-green-500/30"
-                                                    >
-                                                        <Check size={24} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingId(null)}
-                                                        className="h-12 w-12 flex items-center justify-center bg-gray-100 text-gray-500 rounded-2xl hover:bg-rose-50 hover:text-rose-500 transition-all"
-                                                    >
-                                                        <X size={24} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button
-                                                        onClick={() => handleStartEdit(p)}
-                                                        className="h-12 w-12 flex items-center justify-center bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 hover:scale-110 active:scale-95 transition-all"
-                                                        title="Edit Permissions"
-                                                    >
-                                                        <Edit2 size={20} />
-                                                    </button>
-                                                </div>
-                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -349,7 +269,7 @@ export default function StaffManagementPage() {
                 {/* Add Staff Modal */}
                 {isAddModalOpen && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 max-h-[85vh] flex flex-col">
                             <div className="p-12 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent">
                                 <div>
                                     <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
@@ -363,7 +283,7 @@ export default function StaffManagementPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-12 space-y-8">
+                            <form onSubmit={handleAddStaff} className="p-12 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
                                     New accounts can log in immediately only if Supabase email confirmation is disabled.
                                 </div>

@@ -15,6 +15,7 @@ import { AlertTriangle } from 'lucide-react';
 
 function App() {
   const { user, profile, initialize, loading } = useAuthStore();
+  const persistedPath = sessionStorage.getItem('mobile_last_path') || '/';
 
   useEffect(() => {
     initialize();
@@ -56,7 +57,7 @@ function App() {
   }
 
   return (
-    <Router>
+    <Router initialEntries={[persistedPath]}>
       <Routes>
         <Route path="/" element={
           !user ? <LoginPage /> : <Navigate to="/admin/dashboard" replace />

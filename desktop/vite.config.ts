@@ -17,13 +17,15 @@ export default defineConfig({
             entry: 'electron/main.ts',
             vite: {
               build: {
-                lib: {
-                  entry: 'electron/main.ts',
-                  formats: ['cjs'],
-                  fileName: () => '[name].cjs',
-                },
+                outDir: 'dist-electron',
+                minify: false,
                 rollupOptions: {
                   external: ['electron'],
+                  output: {
+                    format: 'es',
+                    entryFileNames: '[name].js',
+                    chunkFileNames: 'chunks/[name]-[hash].js',
+                  },
                 },
               },
             },

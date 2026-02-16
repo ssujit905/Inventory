@@ -14,6 +14,25 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
-    // Trigger browser download
-    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    // Check if running in Electron
+    if (window.ipcRenderer) {
+        try {
+            // Generate base64 string
+            const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+            window.ipcRenderer.invoke('save-xlsx-download', { fileName: `${fileName}.xlsx`, base64: wbout })
+                .then((res: any) => {
+                    if (res?.ok) {
+                        alert(`File saved to Downloads:\n${res.filePath}`);
+                    } else {
+                        console.error('Electron save error:', res?.error);
+                        alert('Failed to save file');
+                    }
+                });
+        } catch (e) {
+            console.error('Electron export failed', e);
+        }
+    } else {
+        // Browser fallback
+        XLSX.writeFile(workbook, `${fileName}.xlsx`);
+    }
 };

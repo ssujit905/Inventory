@@ -152,6 +152,17 @@
     overflow-x: hidden !important;
   }
 
+  .mobile-scroll-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-scroll-table {
+    width: max-content !important;
+    min-width: 100% !important;
+    table-layout: auto !important;
+  }
+
   .mobile-fit-table {
     width: 100%;
     table-layout: fixed;

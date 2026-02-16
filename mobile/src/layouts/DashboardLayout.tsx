@@ -1,18 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, DollarSign, TrendingUp, Activity, Menu, X, ChevronRight } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, DollarSign, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useSearchStore } from '../hooks/useSearchStore';
 import { supabase } from '../lib/supabase';
 
 export default function DashboardLayout({ children, role }: { children: React.ReactNode, role: 'admin' | 'staff' }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { query, setQuery } = useSearchStore();
     const { signOut } = useAuthStore();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [suggestions, setSuggestions] = useState<{ text: string; type: 'name' | 'phone' }[]>([]);
     const [pendingCostCount, setPendingCostCount] = useState(0);
+    const [pullDistance, setPullDistance] = useState(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [startY, setStartY] = useState<number | null>(null);
+    const [canPull, setCanPull] = useState(false);
 
     useEffect(() => {
         setIsMenuOpen(false);
+        sessionStorage.setItem('mobile_last_path', location.pathname);
     }, [location.pathname]);
 
     useEffect(() => {
@@ -29,9 +39,98 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         fetchPendingCosts();
     }, [role]);
 
+    useEffect(() => {
+        const fetchSuggestions = async () => {
+            if (!isSearchOpen || query.trim().length < 1) {
+                setSuggestions([]);
+                return;
+            }
+
+            const { data } = await supabase
+                .from('sales')
+                .select('customer_name, phone1')
+                .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%`)
+                .limit(10);
+
+            if (!data) {
+                setSuggestions([]);
+                return;
+            }
+
+            const unique = new Set<string>();
+            const results: { text: string; type: 'name' | 'phone' }[] = [];
+
+            data.forEach((item: any) => {
+                const name = item.customer_name || '';
+                const phone = item.phone1 || '';
+
+                if (name.toLowerCase().includes(query.toLowerCase()) && !unique.has(`n:${name}`)) {
+                    unique.add(`n:${name}`);
+                    results.push({ text: name, type: 'name' });
+                }
+                if (phone.includes(query) && !unique.has(`p:${phone}`)) {
+                    unique.add(`p:${phone}`);
+                    results.push({ text: phone, type: 'phone' });
+                }
+            });
+
+            setSuggestions(results.slice(0, 6));
+        };
+
+        const timer = setTimeout(fetchSuggestions, 150);
+        return () => clearTimeout(timer);
+    }, [query, isSearchOpen]);
+
     const handleLogout = () => {
         signOut();
         navigate('/', { replace: true });
+    };
+
+    const handleSelectSuggestion = (text: string) => {
+        setQuery(text);
+        setShowSuggestions(false);
+        setIsSearchOpen(false);
+        navigate('/admin/sales');
+    };
+
+    const triggerRefresh = () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        setPullDistance(64);
+        sessionStorage.setItem('mobile_last_path', location.pathname);
+        setTimeout(() => {
+            window.location.reload();
+        }, 300);
+    };
+
+    const handleTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+        if (isMenuOpen || isRefreshing) return;
+        const target = e.currentTarget;
+        const atTop = target.scrollTop <= 0;
+        setCanPull(atTop);
+        setStartY(atTop ? e.touches[0].clientY : null);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent<HTMLElement>) => {
+        if (!canPull || startY === null || isRefreshing) return;
+        const delta = e.touches[0].clientY - startY;
+        if (delta <= 0) {
+            setPullDistance(0);
+            return;
+        }
+        const damped = Math.min(90, delta * 0.45);
+        setPullDistance(damped);
+    };
+
+    const handleTouchEnd = () => {
+        if (isRefreshing) return;
+        if (pullDistance >= 60) {
+            triggerRefresh();
+        } else {
+            setPullDistance(0);
+        }
+        setStartY(null);
+        setCanPull(false);
     };
 
     return (
@@ -46,6 +145,12 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsSearchOpen((v) => !v)}
+                        className="p-2.5 text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl"
+                    >
+                        <Search size={20} />
+                    </button>
                     <button className="p-2.5 text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl relative">
                         <Bell size={20} />
                         <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white dark:border-gray-900"></span>
@@ -59,8 +164,61 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </div>
             </header>
 
+            {isSearchOpen && (
+                <div className="px-5 pt-3 pb-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                    <div className="relative max-w-md mx-auto">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            value={query}
+                            onFocus={() => setShowSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowSuggestions(false), 180)}
+                            onChange={(e) => {
+                                setQuery(e.target.value);
+                                setShowSuggestions(true);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    navigate('/admin/sales');
+                                    setIsSearchOpen(false);
+                                    setShowSuggestions(false);
+                                }
+                            }}
+                            placeholder="Search customer name or phone"
+                            className="w-full h-10 pl-9 pr-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+
+                        {showSuggestions && suggestions.length > 0 && (
+                            <div className="absolute top-12 left-0 w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-[60] py-2">
+                                <div className="px-4 py-2 border-b border-gray-50 dark:border-gray-800">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Suggestions</p>
+                                </div>
+                                {suggestions.map((s, i) => (
+                                    <button
+                                        key={`${s.type}-${s.text}-${i}`}
+                                        onClick={() => handleSelectSuggestion(s.text)}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    >
+                                        <div className={`p-1.5 rounded-lg ${s.type === 'name' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}>
+                                            {s.type === 'name' ? <User size={14} /> : <Phone size={14} />}
+                                        </div>
+                                        <span className="font-bold text-gray-700 dark:text-gray-300">{s.text}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* MAIN CONTENT AREA */}
-            <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 pb-6">
+            <main
+                className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 pb-6"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+            >
                 <div className="p-5 max-w-md mx-auto">
                     {children}
                 </div>

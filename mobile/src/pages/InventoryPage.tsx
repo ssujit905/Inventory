@@ -3,9 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Package, AlertTriangle, RotateCcw, Barcode, Hash, FileDown } from 'lucide-react';
-import { exportToExcel } from '../utils/excelExport';
-import { format } from 'date-fns';
+import { Package, AlertTriangle, RotateCcw } from 'lucide-react';
 
 type InventoryLot = {
     id: string;
@@ -109,21 +107,6 @@ export default function InventoryPage() {
         }
     };
 
-    const handleExport = () => {
-        const exportData = inventory.map(item => ({
-            'Product Name': item.product_name,
-            'SKU': item.sku,
-            'Batch Number': item.lot_number,
-            'Stock In': item.stock_in,
-            'Sold': item.sold,
-            'Returned': item.returned,
-            'Remaining': item.remaining,
-            'Status': item.status
-        }));
-
-        exportToExcel(exportData, `Inventory_Ledger_${format(new Date(), 'yyyy-MM-dd')}`, 'Inventory');
-    };
-
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
@@ -139,14 +122,6 @@ export default function InventoryPage() {
                     >
                         <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
                         Refresh Data
-                    </button>
-                    <button
-                        onClick={handleExport}
-                        disabled={loading || inventory.length === 0}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
-                    >
-                        <FileDown size={14} strokeWidth={2} />
-                        Export (.xlsx)
                     </button>
                 </div>
 
@@ -172,69 +147,88 @@ export default function InventoryPage() {
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Scanning Databases...</p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto mobile-fit-table-wrap">
-                                <table className="w-full text-left mobile-fit-table">
-                                    <thead>
-                                        <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase tracking-widest font-bold text-gray-400">
-                                            <th className="px-6 py-4">Product Info</th>
-                                            <th className="px-6 py-4">Batch #</th>
-                                            <th className="px-6 py-4 text-center">In</th>
-                                            <th className="px-6 py-4 text-center">Sold</th>
-                                            <th className="px-6 py-4 text-center">Ret</th>
-                                            <th className="px-6 py-4 text-center">Remaining</th>
-                                            <th className="px-6 py-4">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                                        {inventory.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={7} className="px-6 py-20 text-center">
-                                                    <div className="flex flex-col items-center gap-3 opacity-30">
-                                                        <Package size={40} strokeWidth={1.5} />
-                                                        <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
-                                                    </div>
-                                                </td>
+                    <div className="space-y-3">
+                        {inventory.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <div className="flex flex-col items-center gap-3 opacity-30">
+                                    <Package size={40} strokeWidth={1.5} />
+                                    <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl overflow-hidden border-2 border-gray-300 dark:border-gray-600 shadow-md bg-white dark:bg-gray-900">
+                                {/* Excel-style table */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse" style={{ minWidth: '360px' }}>
+                                        <thead>
+                                            <tr className="bg-[#217346] text-white text-[10px] font-bold uppercase tracking-wide">
+                                                <th className="border border-[#1a5c37] px-2 py-2.5 text-left" style={{ width: '22%' }}>Product</th>
+                                                <th className="border border-[#1a5c37] px-2 py-2.5 text-left" style={{ width: '18%' }}>Batch</th>
+                                                <th className="border border-[#1a5c37] px-1.5 py-2.5 text-center" style={{ width: '12%' }}>In</th>
+                                                <th className="border border-[#1a5c37] px-1.5 py-2.5 text-center" style={{ width: '12%' }}>Sold</th>
+                                                <th className="border border-[#1a5c37] px-1.5 py-2.5 text-center" style={{ width: '10%' }}>Ret</th>
+                                                <th className="border border-[#1a5c37] px-1.5 py-2.5 text-center" style={{ width: '12%' }}>Bal</th>
+                                                <th className="border border-[#1a5c37] px-1.5 py-2.5 text-center" style={{ width: '14%' }}>Status</th>
                                             </tr>
-                                        ) : (
-                                            inventory.map((item) => (
-                                                <tr key={item.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-8 w-8 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                                                <Barcode size={16} strokeWidth={1.5} />
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</p>
-                                                                <p className="text-[10px] text-gray-400 font-medium">{item.sku}</p>
-                                                            </div>
+                                        </thead>
+                                        <tbody>
+                                            {inventory.map((item, index) => (
+                                                <tr
+                                                    key={item.id}
+                                                    className={`text-[11px] ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-[#e8f5e9] dark:bg-gray-800/50'} hover:bg-[#c8e6c9] dark:hover:bg-gray-700 transition-colors`}
+                                                >
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2">
+                                                        <div className="leading-tight">
+                                                            <p className="font-bold text-gray-900 dark:text-gray-100 truncate">{item.sku}</p>
+                                                            <p className="text-[9px] text-gray-500 truncate">{item.product_name}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2 text-gray-500 font-medium">
-                                                            <Hash size={12} strokeWidth={1.5} />
-                                                            <span>{item.lot_number}</span>
-                                                        </div>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2 font-medium text-gray-700 dark:text-gray-300 text-[10px]">
+                                                        {item.lot_number}
                                                     </td>
-                                                    <td className="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-300">{item.stock_in}</td>
-                                                    <td className="px-6 py-4 text-center font-bold text-emerald-500">{item.sold}</td>
-                                                    <td className="px-6 py-4 text-center font-bold text-rose-400">{item.returned}</td>
-                                                    <td className="px-6 py-4 text-center font-bold">
-                                                        <span className={`px-2 py-1 rounded-md ${item.remaining <= 5 ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600' : 'text-primary'}`}>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center font-bold text-gray-800 dark:text-gray-200">
+                                                        {item.stock_in}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center font-bold text-[#217346]">
+                                                        {item.sold}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center font-bold text-rose-500">
+                                                        {item.returned}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2 text-center font-black">
+                                                        <span className={item.remaining <= 5 ? 'text-amber-600' : 'text-blue-600 dark:text-blue-400'}>
                                                             {item.remaining}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <StatusBadge status={item.status} />
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1 py-2 text-center">
+                                                        <ExcelStatusCell status={item.status} />
                                                     </td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
+                                            ))}
+                                            {/* Excel-style summary row */}
+                                            <tr className="bg-[#d5e8d4] dark:bg-gray-800 font-black text-[11px] border-t-2 border-[#217346]">
+                                                <td className="border border-gray-300 dark:border-gray-600 px-2 py-2.5 text-gray-700 dark:text-gray-200" colSpan={2}>
+                                                    TOTAL ({inventory.length} items)
+                                                </td>
+                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-gray-800 dark:text-gray-200">
+                                                    {inventory.reduce((sum, i) => sum + i.stock_in, 0)}
+                                                </td>
+                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-[#217346]">
+                                                    {inventory.reduce((sum, i) => sum + i.sold, 0)}
+                                                </td>
+                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-rose-500">
+                                                    {inventory.reduce((sum, i) => sum + i.returned, 0)}
+                                                </td>
+                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-blue-600 dark:text-blue-400">
+                                                    {inventory.reduce((sum, i) => sum + i.remaining, 0)}
+                                                </td>
+                                                <td className="border border-gray-300 dark:border-gray-600 px-1 py-2.5 text-center text-[10px] text-gray-500">—</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -242,24 +236,24 @@ export default function InventoryPage() {
     );
 }
 
-function StatusBadge({ status }: { status: InventoryLot['status'] }) {
+function ExcelStatusCell({ status }: { status: InventoryLot['status'] }) {
     if (status === 'Healthy') {
         return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border border-emerald-100 dark:border-emerald-900/30">
-                Healthy
+            <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#c6efce] text-[#006100] rounded-sm border border-[#a9d18e]">
+                OK
             </span>
         );
     }
     if (status === 'Low Stock') {
         return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-amber-50 dark:bg-amber-900/10 text-amber-600 border border-amber-100 dark:border-amber-900/30">
-                Low Stock
+            <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#ffeb9c] text-[#9c6500] rounded-sm border border-[#dfc27d]">
+                LOW
             </span>
         );
     }
     return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight bg-rose-50 dark:bg-rose-900/10 text-rose-600 border border-rose-100 dark:border-rose-900/30">
-            Out of Stock
+        <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#ffc7ce] text-[#9c0006] rounded-sm border border-[#e6a0a8]">
+            OUT
         </span>
     );
 }

@@ -92,7 +92,7 @@ export default function ProfitPage() {
 
             const { data: packagingData } = await supabase
                 .from('expenses')
-                .select('amount, created_at')
+                .select('amount, description, created_at')
                 .eq('category', 'packaging')
                 .order('created_at', { ascending: true });
 
@@ -108,10 +108,22 @@ export default function ProfitPage() {
                 return '';
             };
 
+            const extractPackagingQty = (description: string | null | undefined): number => {
+                if (!description) return 0;
+                const match = description.match(/qty\s*:\s*(\d+)/i);
+                return match ? Number(match[1] || 0) : 0;
+            };
+
             const packagingHistory = (packagingData || [])
                 .map((p: any) => ({
                     timeKey: toTimeKey(p.created_at),
-                    amount: Number(p.amount || 0)
+                    amount: Number(p.amount || 0),
+                    unitCost: (() => {
+                        const qty = extractPackagingQty(p.description);
+                        if (qty > 0) return Number(p.amount || 0) / qty;
+                        // Backward compatibility for older packaging rows without quantity.
+                        return Number(p.amount || 0);
+                    })()
                 }))
                 .filter((p: any) => p.timeKey)
                 .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
@@ -145,7 +157,7 @@ export default function ProfitPage() {
                 let selected = 0;
                 for (const p of packagingHistory) {
                     if (p.timeKey <= saleTimeKey) {
-                        selected = p.amount;
+                        selected = p.unitCost;
                     } else {
                         break;
                     }
@@ -290,19 +302,19 @@ export default function ProfitPage() {
                                     No delivered sales with sold amount yet
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto mobile-fit-table-wrap">
-                                    <table className="w-full text-left border-collapse min-w-[900px] mobile-fit-table">
+                                <div className="overflow-auto max-h-[65vh] mobile-fit-table-wrap mobile-scroll-table-wrap rounded-2xl border border-gray-100 dark:border-gray-800">
+                                    <table className="w-full text-left border-collapse min-w-[900px] mobile-fit-table mobile-scroll-table">
                                         <thead>
                                             <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">SKU</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Lot</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Qty Sold</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Cost</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Revenue</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Returned</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Ads</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Packaging</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Profit / Loss</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">SKU</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Lot</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Qty Sold</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Revenue</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Returned</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Ads</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Packaging</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Profit / Loss</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -351,21 +363,21 @@ export default function ProfitPage() {
                                     No sale transactions yet
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto mobile-fit-table-wrap">
-                                    <table className="w-full text-left border-collapse min-w-[1100px] mobile-fit-table">
+                                <div className="overflow-auto max-h-[65vh] mobile-fit-table-wrap mobile-scroll-table-wrap rounded-2xl border border-gray-100 dark:border-gray-800">
+                                    <table className="w-full text-left border-collapse min-w-[1100px] mobile-fit-table mobile-scroll-table">
                                         <thead>
                                             <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Sale ID</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">SKU</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em]">Lot</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Qty</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Cost Price</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Cost Total</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Sold Amount</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Return Cost</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Ads Spent</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Packaging</th>
-                                                <th className="p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right">Profit / Loss</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Sale ID</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">SKU</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Lot</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Qty</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost Price</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost Total</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Sold Amount</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Return Cost</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Ads Spent</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Packaging</th>
+                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Profit / Loss</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">

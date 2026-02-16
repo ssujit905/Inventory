@@ -178,7 +178,7 @@ export default function IncomePage() {
                 {/* Form Modal */}
                 {isFormOpen && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
                             <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
@@ -194,7 +194,7 @@ export default function IncomePage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-10 space-y-8">
+                            <form onSubmit={handleAddIncome} className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                                         <AlertCircle size={20} /> {message.text}

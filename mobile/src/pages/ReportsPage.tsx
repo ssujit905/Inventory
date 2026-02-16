@@ -5,14 +5,14 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { DollarSign, FileDown } from 'lucide-react';
-import { exportToExcel } from '../utils/excelExport';
+import { DollarSign } from 'lucide-react';
 
 type FinanceStats = {
     totalRevenue: number;
     totalCOGS: number;
     grossProfit: number;
     totalExpenses: number;
+    totalReturn: number;
     totalInvestment: number;
     totalStockValue: number;
     cashInHand: number;
@@ -26,6 +26,7 @@ export default function ReportsPage() {
         totalCOGS: 0,
         grossProfit: 0,
         totalExpenses: 0,
+        totalReturn: 0,
         totalInvestment: 0,
         totalStockValue: 0,
         cashInHand: 0,
@@ -73,7 +74,7 @@ export default function ReportsPage() {
             // 3. Fetch all expenses
             const { data: expensesData, error: expError } = await supabase
                 .from('expenses')
-                .select('id, amount, expense_date, category, created_at');
+                .select('id, amount, description, expense_date, category, created_at');
 
             if (expError) throw expError;
 
@@ -148,11 +149,22 @@ export default function ReportsPage() {
                 .filter((e: any) => e.category === 'ads')
                 .forEach((e: any) => adBudgetMap.set(e.id, Number(e.amount || 0)));
 
+            const extractPackagingQty = (description: string | null | undefined): number => {
+                if (!description) return 0;
+                const match = description.match(/qty\s*:\s*(\d+)/i);
+                return match ? Number(match[1] || 0) : 0;
+            };
+
             const packagingHistory = (expensesData || [])
                 .filter((e: any) => e.category === 'packaging')
                 .map((e: any) => ({
                     timeKey: toTimeKey(e.created_at),
-                    amount: Number(e.amount || 0)
+                    amount: Number(e.amount || 0),
+                    unitCost: (() => {
+                        const qty = extractPackagingQty(e.description);
+                        if (qty > 0) return Number(e.amount || 0) / qty;
+                        return Number(e.amount || 0);
+                    })()
                 }))
                 .filter((p: any) => p.timeKey)
                 .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
@@ -172,14 +184,14 @@ export default function ReportsPage() {
                 if (!saleTimeKey) return;
                 let selected = 0;
                 for (const p of packagingHistory) {
-                    if (p.timeKey <= saleTimeKey) selected = p.amount;
+                    if (p.timeKey <= saleTimeKey) selected = p.unitCost;
                     else break;
                 }
                 packagingBySale.set(t.sale_id, selected);
             });
 
             const saleRowIndex = new Map<string, number>();
-            const grossProfit = (lotSales || [])
+            const grossProfitFromSales = (lotSales || [])
                 .filter((t: any) => t.sale_id && t.lot)
                 .reduce((sum: number, t: any) => {
                     const qty = Math.abs(Number(t.quantity_changed || 0));
@@ -194,13 +206,19 @@ export default function ReportsPage() {
                     const adsSpentRow = isFirstRow ? adsSpent : 0;
                     const packagingSpent = isFirstRow ? (packagingBySale.get(t.sale_id) || 0) : 0;
                     const status = t.sale?.parcel_status;
-                    const soldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
-                    const returnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
+                    const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
                     const profitLoss = status === 'returned'
                         ? -(returnCost + adsSpentRow + packagingSpent)
                         : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
                     return sum + profitLoss;
                 }, 0);
+
+            const otherExpensesTotal = (expensesData || [])
+                .filter((e: any) => e.category === 'other')
+                .reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+
+            const grossProfit = grossProfitFromSales - otherExpensesTotal;
 
             const monthProfitMap = new Map<string, number>();
             const saleRowIndexForMonthly = new Map<string, number>();
@@ -219,8 +237,8 @@ export default function ReportsPage() {
                     const adsSpentRow = isFirstRow ? adsSpent : 0;
                     const packagingSpent = isFirstRow ? (packagingBySale.get(t.sale_id) || 0) : 0;
                     const status = t.sale?.parcel_status;
-                    const soldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
-                    const returnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
+                    const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
                     const profitLoss = status === 'returned'
                         ? -(returnCost + adsSpentRow + packagingSpent)
                         : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
@@ -229,6 +247,18 @@ export default function ReportsPage() {
                     const monthKey = format(saleDate, 'yyyy-MM');
                     monthProfitMap.set(monthKey, (monthProfitMap.get(monthKey) || 0) + profitLoss);
                 });
+
+            const saleRowIndexForReturns = new Map<string, number>();
+            const totalReturn = (lotSales || [])
+                .filter((t: any) => t.sale_id && t.lot)
+                .reduce((sum: number, t: any) => {
+                    const rowIndex = saleRowIndexForReturns.get(t.sale_id) || 0;
+                    saleRowIndexForReturns.set(t.sale_id, rowIndex + 1);
+                    const isFirstRow = rowIndex === 0;
+                    const isReturned = t.sale?.parcel_status === 'returned';
+                    const returnCost = (isFirstRow && isReturned) ? Number(t.sale?.return_cost || 0) : 0;
+                    return sum + returnCost;
+                }, 0);
 
             const totalExpenses = (expensesData || []).reduce((sum, e) => sum + Number(e.amount), 0);
             const totalInvestment = (incomeEntries || [])
@@ -257,7 +287,7 @@ export default function ReportsPage() {
                 })
                 .reduce((sum: number, v: number) => sum + v, 0);
 
-            const cashInHand = (totalRevenue + totalInvestment) - (totalCOGS + totalExpenses);
+            const cashInHand = (totalRevenue + totalInvestment) - (totalCOGS + totalExpenses + totalReturn);
             const netProfit = totalRevenue - totalCOGS - totalExpenses;
             const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -266,6 +296,7 @@ export default function ReportsPage() {
                 totalCOGS,
                 grossProfit,
                 totalExpenses,
+                totalReturn,
                 totalInvestment,
                 totalStockValue,
                 cashInHand,
@@ -360,22 +391,6 @@ export default function ReportsPage() {
         }
     };
 
-    const handleExport = () => {
-        const exportData = [
-            { Metric: 'Total Revenue', Value: stats.totalRevenue },
-            { Metric: 'Cost of Goods', Value: stats.totalCOGS },
-            { Metric: 'Gross Profit', Value: stats.grossProfit },
-            { Metric: 'Total Expenses', Value: stats.totalExpenses },
-            { Metric: 'Total Investment', Value: stats.totalInvestment },
-            { Metric: 'Total Stock Value', Value: stats.totalStockValue },
-            { Metric: 'Cash in Hand', Value: stats.cashInHand },
-            { Metric: 'Margin (%)', Value: stats.margin.toFixed(2) }
-        ];
-
-        // Also include monthly trend data in a separate export or combined
-        exportToExcel(exportData, `Financial_Report_${format(new Date(), 'yyyy-MM-dd')}`, 'Finance Summary');
-    };
-
     if (loading) {
         return (
             <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
@@ -394,13 +409,6 @@ export default function ReportsPage() {
                         <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Dashboard</h1>
                         <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Revenue, Investment & Expenditure Analytics</p>
                     </div>
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl text-xs font-black uppercase tracking-widest hover:border-primary transition-all active:scale-95 shadow-sm"
-                    >
-                        <FileDown size={18} className="text-primary" />
-                        Export Report (.xlsx)
-                    </button>
                 </div>
 
                 {/* Metrics Grid */}
@@ -422,6 +430,12 @@ export default function ReportsPage() {
                         title="Total Expenses"
                         value={stats.totalExpenses}
                         trend="+2.1%"
+                        color="rose"
+                    />
+                    <FinanceStatCard
+                        title="Total Return"
+                        value={stats.totalReturn}
+                        trend="Courier Return Cost"
                         color="rose"
                     />
                     <FinanceStatCard

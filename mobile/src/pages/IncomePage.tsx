@@ -93,7 +93,7 @@ export default function IncomePage() {
             <div className="max-w-6xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
 
                 {/* Header Section */}
-                <div className="flex items-center justify-between border-b dark:border-gray-800 pb-6">
+                <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Income & Investments</h1>
                         <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Inbound Cashflow Ledger</p>
@@ -101,11 +101,10 @@ export default function IncomePage() {
 
                     <button
                         onClick={openEntryForm}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-green-600 text-white font-black rounded-2xl shadow-xl shadow-green-600/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <Plus size={24} className="relative z-10" />
-                        <span className="relative z-10">Add Income Entry</span>
+                        <Plus size={16} strokeWidth={2.5} />
+                        Add Income Entry
                     </button>
                 </div>
 
@@ -131,40 +130,30 @@ export default function IncomePage() {
                             </div>
                         ) : (
                             <>
-                                <div className="hidden md:grid grid-cols-12 gap-5 px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <div className="col-span-3">Date</div>
-                                    <div className="col-span-5">Description</div>
-                                    <div className="col-span-2 text-right">Amount</div>
-                                    <div className="col-span-2 text-right">Type</div>
-                                </div>
                                 {incomeEntries.map((entry, index) => {
                                     const displayIndex = incomeEntries.length - index;
                                     return (
-                                        <div key={entry.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
-                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 px-6 py-4 items-center">
-                                                <div className="md:col-span-3 flex items-center gap-3">
-                                                    <div className="h-8 w-8 rounded-full bg-green-50 dark:bg-green-900/10 text-green-600 flex items-center justify-center text-xs font-black">
-                                                        {displayIndex}
-                                                    </div>
+                                        <div key={entry.id} className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-green-50 dark:bg-green-900/10 text-green-600 flex items-center justify-center text-xs font-black">
+                                                {displayIndex}
+                                            </div>
+                                            <div className="flex flex-col gap-2 pl-12 pr-4 py-4">
+                                                <div className="flex items-center justify-between gap-2">
                                                     <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
                                                         {format(new Date(entry.income_date), 'MMM dd, yyyy')}
                                                     </span>
-                                                </div>
-                                                <div className="md:col-span-5 min-w-0 pr-2">
-                                                    <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
-                                                        {entry.description}
-                                                    </div>
-                                                </div>
-                                                <div className="md:col-span-2 text-right text-sm font-black text-green-600 font-mono tracking-tight">
-                                                    ${Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                </div>
-                                                <div className="md:col-span-2 text-right">
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${entry.category === 'investment'
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
                                                         : 'bg-green-50 text-green-700 border-green-200'
                                                         }`}>
                                                         {entry.category}
                                                     </span>
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
+                                                    {entry.description}
+                                                </div>
+                                                <div className="text-left text-sm font-black text-green-600 font-mono tracking-tight">
+                                                    ${Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
                                         </div>
@@ -178,8 +167,8 @@ export default function IncomePage() {
                 {/* Form Modal */}
                 {isFormOpen && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
-                            <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[90vh]">
+                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
                                         <div className="p-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-600/30">
@@ -194,7 +183,7 @@ export default function IncomePage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-10 space-y-8">
+                            <form onSubmit={handleAddIncome} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                                         <AlertCircle size={20} /> {message.text}
@@ -256,20 +245,20 @@ export default function IncomePage() {
                                     </div>
                                 </div>
 
-                                <div className="pt-6 flex gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsFormOpen(false)}
-                                        className="h-16 px-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
-                                    >
-                                        Cancel
-                                    </button>
+                                <div className="pt-6 flex flex-col gap-4">
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-1 h-16 bg-green-600 text-white font-black rounded-2xl shadow-xl shadow-green-600/30 transition-all hover:scale-[1.01] hover:bg-green-700 active:scale-95 disabled:opacity-50"
+                                        className="h-14 bg-green-600 text-white font-black rounded-2xl shadow-xl shadow-green-600/30 transition-all hover:scale-[1.01] hover:bg-green-700 active:scale-95 disabled:opacity-50"
                                     >
                                         {loading ? 'Recording...' : 'Confirm Income'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFormOpen(false)}
+                                        className="h-14 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+                                    >
+                                        Cancel
                                     </button>
                                 </div>
                             </form>

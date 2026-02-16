@@ -210,105 +210,122 @@ export default function StockInPage() {
                     </div>
                     <button
                         onClick={openEntryForm}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
                     >
                         <Plus size={16} strokeWidth={2.5} />
                         Receive Shipment
                     </button>
                 </div>
 
-                {/* Main Content Area */}
-                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 border-b border-gray-50 dark:border-gray-800 flex items-center gap-2">
-                        <History size={16} strokeWidth={1.5} className="text-gray-400" />
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Reception History</h3>
-                    </div>
+                {/* Reception History - Card Layout */}
+                <div className="flex items-center gap-2 px-1">
+                    <History size={14} strokeWidth={1.5} className="text-gray-400" />
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Reception History</h3>
+                    <span className="ml-auto text-[10px] font-bold text-gray-300">{recentTransactions.length} records</span>
+                </div>
 
-                    <div className="overflow-x-auto mobile-fit-table-wrap">
-                        <table className="w-full text-left mobile-fit-table">
-                            <thead className="bg-gray-50/50 dark:bg-gray-800/30 text-[10px] uppercase tracking-widest font-bold text-gray-400 border-b border-gray-50 dark:border-gray-800">
-                                <tr>
-                                    <th className="px-6 py-3">Date</th>
-                                    <th className="px-6 py-3">Product / SKU</th>
-                                    <th className="px-6 py-3 text-right">Qty</th>
-                                    <th className="px-6 py-3">Lot #</th>
-                                    {isAdmin && <th className="px-6 py-3 text-right">Cost (Unit)</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-right">Total Cost</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-center">Status</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-right">Actions</th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                                {recentTransactions.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={isAdmin ? 8 : 4} className="px-6 py-20 text-center">
-                                            <div className="flex flex-col items-center gap-3 opacity-30">
-                                                <Package size={40} strokeWidth={1.5} />
-                                                <p className="text-xs font-bold uppercase tracking-widest">No intake records</p>
+                <div className="space-y-2.5">
+                    {recentTransactions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                            <div className="flex flex-col items-center gap-3 opacity-30">
+                                <Package size={40} strokeWidth={1.5} />
+                                <p className="text-xs font-bold uppercase tracking-widest">No intake records</p>
+                            </div>
+                        </div>
+                    ) : (
+                        recentTransactions.map((tx, index) => {
+                            const totalValue = tx.quantity_changed * (tx.lot?.cost_price || 0);
+                            const isPending = (tx.lot?.cost_price || 0) <= 0;
+                            const displayIndex = recentTransactions.length - index;
+
+                            return (
+                                <div key={tx.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden active:scale-[0.99] transition-all">
+                                    {/* Top section: Index + Date + Qty badge */}
+                                    <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                {displayIndex}
+                                            </span>
+                                            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                                                {format(new Date(tx.lot?.received_date || tx.created_at), 'MMM dd, yyyy')}
+                                            </span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-[11px] font-black">
+                                            +{tx.quantity_changed} <span className="text-[9px] font-bold opacity-60">units</span>
+                                        </span>
+                                    </div>
+
+                                    {/* Product info row */}
+                                    <div className="px-3.5 pb-2.5">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="h-9 w-9 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400 flex-shrink-0">
+                                                <Barcode size={16} strokeWidth={1.5} />
                                             </div>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    recentTransactions.map((tx) => (
-                                        <tr key={tx.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                                                    {format(new Date(tx.lot?.received_date || tx.created_at), 'MMM dd, yyyy')}
-                                                </p>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-8 w-8 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-400">
-                                                        <Barcode size={14} strokeWidth={1.5} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-semibold text-gray-900 dark:text-gray-100">{tx.product?.sku}</p>
-                                                        <p className="text-[10px] text-gray-400 line-clamp-1">{tx.product?.name}</p>
-                                                    </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{tx.product?.sku}</p>
+                                                <p className="text-[10px] text-gray-400 truncate leading-relaxed">{tx.product?.name}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Details strip */}
+                                    <div className={`flex items-center gap-0 border-t border-gray-50 dark:border-gray-800 ${isAdmin ? '' : 'rounded-b-xl'}`}>
+                                        {/* Lot */}
+                                        <div className="flex-1 px-3.5 py-2 border-r border-gray-50 dark:border-gray-800">
+                                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Batch</p>
+                                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 truncate">{tx.lot?.lot_number || '—'}</p>
+                                        </div>
+
+                                        {isAdmin && (
+                                            <>
+                                                {/* Unit Cost */}
+                                                <div className="flex-1 px-3 py-2 border-r border-gray-50 dark:border-gray-800 text-center">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Unit Cost</p>
+                                                    <p className={`text-[11px] font-black ${isPending ? 'text-amber-500' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                        ${(tx.lot?.cost_price || 0).toLocaleString()}
+                                                    </p>
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-bold text-primary">+{tx.quantity_changed}</td>
-                                            <td className="px-6 py-4">
-                                                <div className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded">
-                                                    <Hash size={10} />
-                                                    {tx.lot?.lot_number}
+                                                {/* Total Value */}
+                                                <div className="flex-1 px-3 py-2 text-right">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
+                                                    <p className="text-[11px] font-black text-primary">
+                                                        ${totalValue.toLocaleString()}
+                                                    </p>
                                                 </div>
-                                            </td>
-                                            {isAdmin && (
-                                                <td className="px-6 py-4 text-right font-semibold text-gray-700 dark:text-gray-300">
-                                                    ${(tx.lot?.cost_price || 0).toLocaleString()}
-                                                </td>
-                                            )}
-                                            {isAdmin && (
-                                                <td className="px-6 py-4 text-right font-bold text-gray-900 dark:text-gray-100">
-                                                    ${(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString()}
-                                                </td>
-                                            )}
-                                            {isAdmin && (
-                                                <td className="px-6 py-4 text-center">
-                                                    {tx.lot?.cost_price > 0 ? (
-                                                        <span className="inline-flex px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 rounded text-[9px] font-bold uppercase border border-emerald-100 dark:border-emerald-900/30">Verified</span>
-                                                    ) : (
-                                                        <span className="inline-flex px-2 py-0.5 bg-rose-50 dark:bg-rose-900/10 text-rose-600 rounded text-[9px] font-bold uppercase border border-rose-100 dark:border-rose-900/30 animation-pulse">Pending</span>
-                                                    )}
-                                                </td>
-                                            )}
-                                            {isAdmin && (
-                                                <td className="px-6 py-4 text-right">
-                                                    <button
-                                                        onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
-                                                        className="text-xs font-bold text-gray-400 hover:text-primary transition-colors bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-md border border-gray-100 dark:border-gray-700"
-                                                    >
-                                                        Update Cost
-                                                    </button>
-                                                </td>
-                                            )}
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                            </>
+                                        )}
+
+                                        {!isAdmin && (
+                                            <div className="flex-1 px-3.5 py-2 text-right">
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
+                                                <p className="text-[10px] font-black text-emerald-500 uppercase">Received</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Admin footer: Status + Update button */}
+                                    {isAdmin && (
+                                        <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-50/60 dark:bg-gray-800/30 border-t border-gray-50 dark:border-gray-800">
+                                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${isPending
+                                                    ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 dark:border-amber-800'
+                                                    : 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 dark:border-emerald-800'
+                                                }`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                                                {isPending ? 'Cost Pending' : 'Verified'}
+                                            </span>
+                                            <button
+                                                onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:text-primary transition-all active:scale-95 shadow-sm"
+                                            >
+                                                <DollarSign size={12} strokeWidth={2} />
+                                                Update Cost
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
 
                 {/* Entry Modal (Centered Card Style) */}

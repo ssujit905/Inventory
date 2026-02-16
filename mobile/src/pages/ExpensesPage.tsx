@@ -27,6 +27,7 @@ export default function ExpensesPage() {
     const [amount, setAmount] = useState<number>(0);
     const [expenseDate, setExpenseDate] = useState('');
     const [category, setCategory] = useState<'ads' | 'packaging' | 'other'>('other');
+    const [packagingQuantity, setPackagingQuantity] = useState<number>(0);
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -59,6 +60,7 @@ export default function ExpensesPage() {
         setAmount(0);
         setExpenseDate(format(new Date(), 'yyyy-MM-dd'));
         setCategory('other');
+        setPackagingQuantity(0);
         setIsFormOpen(true);
         setMessage(null);
     };
@@ -69,8 +71,18 @@ export default function ExpensesPage() {
         setLoading(true);
 
         try {
+            if (category === 'packaging' && packagingQuantity < 1) {
+                setMessage({ type: 'error', text: 'Please enter packaging quantity.' });
+                setLoading(false);
+                return;
+            }
+
+            const finalDescription = category === 'packaging'
+                ? `Qty: ${packagingQuantity} | ${description}`
+                : description;
+
             const { error } = await supabase.from('expenses').insert([{
-                description,
+                description: finalDescription,
                 amount,
                 expense_date: expenseDate,
                 category,
@@ -100,7 +112,7 @@ export default function ExpensesPage() {
             <div className="max-w-6xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
 
                 {/* Header Section */}
-                <div className="flex items-center justify-between border-b dark:border-gray-800 pb-6">
+                <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
                     <div>
                         <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Business Expenses</h1>
                         <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Operational Expenditure Ledger</p>
@@ -108,11 +120,10 @@ export default function ExpensesPage() {
 
                     <button
                         onClick={openEntryForm}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <Plus size={24} className="relative z-10" />
-                        <span className="relative z-10">Add New Expense</span>
+                        <Plus size={16} strokeWidth={2.5} />
+                        Add New Expense
                     </button>
                 </div>
 
@@ -138,34 +149,18 @@ export default function ExpensesPage() {
                             </div>
                         ) : (
                             <>
-                                <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <div className="col-span-3">Date</div>
-                                    <div className="col-span-6">Description</div>
-                                    <div className="col-span-2 text-right">Amount</div>
-                                    <div className="col-span-1 text-right">Type</div>
-                                </div>
                                 {expenses.map((exp, index) => {
                                     const displayIndex = expenses.length - index;
                                     return (
-                                        <div key={exp.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
-                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 items-center">
-                                                <div className="md:col-span-3 flex items-center gap-3">
-                                                    <div className="h-8 w-8 rounded-full bg-red-50 dark:bg-red-900/10 text-red-600 flex items-center justify-center text-xs font-black">
-                                                        {displayIndex}
-                                                    </div>
+                                        <div key={exp.id} className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-red-50 dark:bg-red-900/10 text-red-600 flex items-center justify-center text-xs font-black">
+                                                {displayIndex}
+                                            </div>
+                                            <div className="flex flex-col gap-2 pl-12 pr-4 py-4">
+                                                <div className="flex items-center justify-between gap-2">
                                                     <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
                                                         {format(new Date(exp.expense_date), 'MMM dd, yyyy')}
                                                     </span>
-                                                </div>
-                                                <div className="md:col-span-6 min-w-0">
-                                                    <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
-                                                        {exp.description}
-                                                    </div>
-                                                </div>
-                                                <div className="md:col-span-2 text-right text-sm font-black text-red-600 font-mono tracking-tight">
-                                                    ${Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                </div>
-                                                <div className="md:col-span-1 text-right">
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${exp.category === 'ads'
                                                         ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                                                         : exp.category === 'packaging'
@@ -174,6 +169,12 @@ export default function ExpensesPage() {
                                                         }`}>
                                                         {exp.category}
                                                     </span>
+                                                </div>
+                                                <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 leading-relaxed">
+                                                    {exp.description}
+                                                </div>
+                                                <div className="text-left text-sm font-black text-red-600 font-mono tracking-tight">
+                                                    ${Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
                                         </div>
@@ -239,7 +240,11 @@ export default function ExpensesPage() {
                                         <select
                                             required
                                             value={category}
-                                            onChange={e => setCategory(e.target.value as 'ads' | 'packaging' | 'other')}
+                                            onChange={e => {
+                                                const next = e.target.value as 'ads' | 'packaging' | 'other';
+                                                setCategory(next);
+                                                if (next !== 'packaging') setPackagingQuantity(0);
+                                            }}
                                             className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
                                         >
                                             <option value="other">Other</option>
@@ -247,6 +252,22 @@ export default function ExpensesPage() {
                                             <option value="packaging">Packaging</option>
                                         </select>
                                     </div>
+
+                                    {category === 'packaging' && (
+                                        <div className="space-y-3">
+                                            <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Packaging Quantity <span className="text-red-500">*</span></label>
+                                            <input
+                                                required
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={packagingQuantity || ''}
+                                                onChange={e => setPackagingQuantity(Number(e.target.value))}
+                                                className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                                placeholder="Enter quantity"
+                                            />
+                                        </div>
+                                    )}
 
                                     <div className="space-y-3">
                                         <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>
@@ -266,20 +287,20 @@ export default function ExpensesPage() {
                                     </div>
                                 </div>
 
-                                <div className="pt-6 flex gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsFormOpen(false)}
-                                        className="h-16 px-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
-                                    >
-                                        Cancel
-                                    </button>
+                                <div className="pt-6 flex flex-col gap-4">
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-1 h-16 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/30 transition-all hover:scale-[1.01] hover:bg-red-700 active:scale-95 disabled:opacity-50"
+                                        className="h-14 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/30 transition-all hover:scale-[1.01] hover:bg-red-700 active:scale-95 disabled:opacity-50"
                                     >
                                         {loading ? 'Recording...' : 'Confirm Expense'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFormOpen(false)}
+                                        className="h-14 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+                                    >
+                                        Cancel
                                     </button>
                                 </div>
                             </form>
