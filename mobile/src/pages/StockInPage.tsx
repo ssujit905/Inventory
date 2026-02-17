@@ -263,7 +263,10 @@ export default function StockInPage() {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{tx.product?.sku}</p>
-                                                <p className="text-[10px] text-gray-400 truncate leading-relaxed">{tx.product?.name}</p>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate leading-relaxed">{tx.product?.name}</p>
+                                                <p className="text-[10px] text-gray-700 dark:text-gray-300 leading-snug line-clamp-2 break-words mt-0.5">
+                                                    Desc: {tx.product?.description?.trim() ? tx.product.description : 'No description'}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

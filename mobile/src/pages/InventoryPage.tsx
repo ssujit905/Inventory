@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Package, AlertTriangle, RotateCcw } from 'lucide-react';
 
@@ -19,6 +20,7 @@ type InventoryLot = {
 
 export default function InventoryPage() {
     const { profile } = useAuthStore();
+    const { query } = useSearchStore();
     const [inventory, setInventory] = useState<InventoryLot[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -107,23 +109,36 @@ export default function InventoryPage() {
         }
     };
 
+    const filteredInventory = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return inventory;
+        return inventory.filter((item) =>
+            item.sku.toLowerCase().includes(q) ||
+            item.product_name.toLowerCase().includes(q) ||
+            item.lot_number.toLowerCase().includes(q)
+        );
+    }, [inventory, query]);
+    const isSearchMode = query.trim().length > 0;
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
-                        <p className="text-gray-400 font-medium text-xs">Real-time batch movement and stock status tracking.</p>
+                {!isSearchMode && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
+                            <p className="text-gray-400 font-medium text-xs">Real-time batch movement and stock status tracking.</p>
+                        </div>
+                        <button
+                            onClick={() => fetchInventory()}
+                            disabled={loading}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
+                        >
+                            <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
+                            Refresh Data
+                        </button>
                     </div>
-                    <button
-                        onClick={() => fetchInventory()}
-                        disabled={loading}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
-                    >
-                        <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
-                        Refresh Data
-                    </button>
-                </div>
+                )}
 
                 {error ? (
                     <div className="p-10 bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col items-center gap-4 text-center">
@@ -148,7 +163,7 @@ export default function InventoryPage() {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {inventory.length === 0 ? (
+                        {filteredInventory.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex flex-col items-center gap-3 opacity-30">
                                     <Package size={40} strokeWidth={1.5} />
@@ -172,7 +187,7 @@ export default function InventoryPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {inventory.map((item, index) => (
+                                            {filteredInventory.map((item, index) => (
                                                 <tr
                                                     key={item.id}
                                                     className={`text-[11px] ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-[#e8f5e9] dark:bg-gray-800/50'} hover:bg-[#c8e6c9] dark:hover:bg-gray-700 transition-colors`}
@@ -205,25 +220,26 @@ export default function InventoryPage() {
                                                     </td>
                                                 </tr>
                                             ))}
-                                            {/* Excel-style summary row */}
-                                            <tr className="bg-[#d5e8d4] dark:bg-gray-800 font-black text-[11px] border-t-2 border-[#217346]">
-                                                <td className="border border-gray-300 dark:border-gray-600 px-2 py-2.5 text-gray-700 dark:text-gray-200" colSpan={2}>
-                                                    TOTAL ({inventory.length} items)
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-gray-800 dark:text-gray-200">
-                                                    {inventory.reduce((sum, i) => sum + i.stock_in, 0)}
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-[#217346]">
-                                                    {inventory.reduce((sum, i) => sum + i.sold, 0)}
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-rose-500">
-                                                    {inventory.reduce((sum, i) => sum + i.returned, 0)}
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-blue-600 dark:text-blue-400">
-                                                    {inventory.reduce((sum, i) => sum + i.remaining, 0)}
-                                                </td>
-                                                <td className="border border-gray-300 dark:border-gray-600 px-1 py-2.5 text-center text-[10px] text-gray-500">—</td>
-                                            </tr>
+                                            {!isSearchMode && (
+                                                <tr className="bg-[#d5e8d4] dark:bg-gray-800 font-black text-[11px] border-t-2 border-[#217346]">
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-2 py-2.5 text-gray-700 dark:text-gray-200" colSpan={2}>
+                                                        TOTAL ({filteredInventory.length} items)
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-gray-800 dark:text-gray-200">
+                                                        {filteredInventory.reduce((sum, i) => sum + i.stock_in, 0)}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-[#217346]">
+                                                        {filteredInventory.reduce((sum, i) => sum + i.sold, 0)}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-rose-500">
+                                                        {filteredInventory.reduce((sum, i) => sum + i.returned, 0)}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1.5 py-2.5 text-center text-blue-600 dark:text-blue-400">
+                                                        {filteredInventory.reduce((sum, i) => sum + i.remaining, 0)}
+                                                    </td>
+                                                    <td className="border border-gray-300 dark:border-gray-600 px-1 py-2.5 text-center text-[10px] text-gray-500">—</td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>

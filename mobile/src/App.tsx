@@ -15,7 +15,8 @@ import { AlertTriangle } from 'lucide-react';
 
 function App() {
   const { user, profile, initialize, loading } = useAuthStore();
-  const persistedPath = sessionStorage.getItem('mobile_last_path') || '/';
+  const rawPersistedPath = sessionStorage.getItem('mobile_last_path') || '/';
+  const persistedPath = rawPersistedPath === '/admin/search' ? '/admin/dashboard' : rawPersistedPath;
 
   useEffect(() => {
     initialize();
@@ -91,6 +92,7 @@ function App() {
           user ? <SalesPage /> : <Navigate to="/" replace />
         } />
 
+
         <Route path="/admin/reports" element={
           user && profile?.role === 'admin' ? <ReportsPage /> : <Navigate to="/" replace />
         } />
@@ -101,6 +103,7 @@ function App() {
 
 
         <Route path="/staff/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="*" element={<Navigate to={user ? "/admin/dashboard" : "/"} replace />} />
       </Routes>
     </Router>
   )
