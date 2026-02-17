@@ -182,14 +182,28 @@ export default function AdminDashboard() {
                 };
             });
 
-            const statuses = ['processing', 'sent', 'delivered', 'returned'];
-            const colors = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444'];
-
-            const statusBreakdown = statuses.map((status, i) => ({
+            const statusColorMap: Record<string, string> = {
+                processing: '#f59e0b',
+                sent: '#3b82f6',
+                delivered: '#10b981',
+                returned: '#ef4444',
+                cancelled: '#6b7280'
+            };
+            const preferredOrder = ['processing', 'sent', 'delivered', 'returned', 'cancelled'];
+            const statusCounts = (globalSales || []).reduce<Record<string, number>>((acc, s: any) => {
+                const key = String(s.parcel_status || 'unknown').toLowerCase();
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+            const orderedStatuses = [
+                ...preferredOrder.filter((s) => statusCounts[s] > 0),
+                ...Object.keys(statusCounts).filter((s) => !preferredOrder.includes(s))
+            ];
+            const statusBreakdown = orderedStatuses.map((status) => ({
                 name: status.charAt(0).toUpperCase() + status.slice(1),
-                value: globalSales?.filter(s => s.parcel_status === status).length || 0,
-                color: colors[i]
-            })).filter(s => s.value > 0);
+                value: statusCounts[status] || 0,
+                color: statusColorMap[status] || '#9ca3af'
+            }));
 
             setStats({
                 totalDelivered,

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Package, AlertTriangle, RotateCcw, Barcode, Hash } from 'lucide-react';
 
@@ -19,6 +20,7 @@ type InventoryLot = {
 
 export default function InventoryPage() {
     const { profile } = useAuthStore();
+    const { query } = useSearchStore();
     const [inventory, setInventory] = useState<InventoryLot[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -107,6 +109,16 @@ export default function InventoryPage() {
         }
     };
 
+    const filteredInventory = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return inventory;
+        return inventory.filter((item) =>
+            item.sku.toLowerCase().includes(q) ||
+            item.product_name.toLowerCase().includes(q) ||
+            item.lot_number.toLowerCase().includes(q)
+        );
+    }, [inventory, query]);
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
@@ -163,7 +175,7 @@ export default function InventoryPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                                        {inventory.length === 0 ? (
+                                        {filteredInventory.length === 0 ? (
                                             <tr>
                                                 <td colSpan={7} className="px-6 py-20 text-center">
                                                     <div className="flex flex-col items-center gap-3 opacity-30">
@@ -173,7 +185,7 @@ export default function InventoryPage() {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            inventory.map((item) => (
+                                            filteredInventory.map((item) => (
                                                 <tr key={item.id} className="text-sm hover:bg-gray-50/50 dark:hover:bg-gray-800 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">

@@ -27,9 +27,10 @@ type Sale = {
     id: string;
     order_date: string;
     destination_branch: string;
-    parcel_status: 'processing' | 'sent' | 'delivered' | 'returned';
+    parcel_status: 'processing' | 'sent' | 'delivered' | 'returned' | 'cancelled';
     customer_name: string;
     customer_address: string;
+    package?: string | null;
     phone1: string;
     phone2: string;
     cod_amount: number;
@@ -78,7 +79,8 @@ export default function SalesPage() {
         const lowQuery = query.toLowerCase();
         return sales.filter(sale =>
             sale.customer_name.toLowerCase().includes(lowQuery) ||
-            sale.phone1.includes(lowQuery) ||
+            sale.phone1.toLowerCase().includes(lowQuery) ||
+            sale.parcel_status.toLowerCase().includes(lowQuery) ||
             (sale.phone2 && sale.phone2.includes(lowQuery))
         );
     }, [sales, query]);
@@ -86,11 +88,12 @@ export default function SalesPage() {
     // Form Fields
     const [orderDate, setOrderDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [destinationBranch, setDestinationBranch] = useState('');
-    const [parcelStatus, setParcelStatus] = useState<'processing' | 'sent' | 'delivered' | 'returned'>('processing');
+    const [parcelStatus, setParcelStatus] = useState<'processing' | 'sent' | 'delivered' | 'returned' | 'cancelled'>('processing');
     const [customerName, setCustomerName] = useState('');
     const [customerAddress, setCustomerAddress] = useState('');
     const [phone1, setPhone1] = useState('');
     const [phone2, setPhone2] = useState('');
+    const [packageDetails, setPackageDetails] = useState('');
     const [codAmount, setCodAmount] = useState<number>(0);
     const [adId, setAdId] = useState('');
 
@@ -213,6 +216,7 @@ export default function SalesPage() {
         setCustomerAddress('');
         setPhone1('');
         setPhone2('');
+        setPackageDetails('');
         setCodAmount(0);
         setAdId('');
         setOrderItems([{ productId: '', quantity: 1 }]);
@@ -388,25 +392,39 @@ export default function SalesPage() {
             }
 
             // 2. Insert Sale Record (Header)
-            const { data: newSale, error: saleError } = await supabase
+            const salePayloadBase = {
+                order_date: orderDate,
+                destination_branch: destinationBranch,
+                parcel_status: parcelStatus,
+                customer_name: customerName,
+                customer_address: customerAddress,
+                phone1,
+                phone2: phone2 || null,
+                cod_amount: codAmount,
+                ad_id: adId || null,
+                // Legacy column support (optional: use first item)
+                product_id: deductionsToMake[0]?.productId,
+                quantity: orderItems.reduce((s, i) => s + i.quantity, 0),
+                recorded_by: user.id
+            };
+
+            let newSale: any = null;
+            let saleError: any = null;
+
+            ({ data: newSale, error: saleError } = await supabase
                 .from('sales')
-                .insert([{
-                    order_date: orderDate,
-                    destination_branch: destinationBranch,
-                    parcel_status: parcelStatus,
-                    customer_name: customerName,
-                    customer_address: customerAddress,
-                    phone1,
-                    phone2: phone2 || null,
-                    cod_amount: codAmount,
-                    ad_id: adId || null,
-                    // Legacy column support (optional: use first item)
-                    product_id: deductionsToMake[0]?.productId,
-                    quantity: orderItems.reduce((s, i) => s + i.quantity, 0),
-                    recorded_by: user.id
-                }])
+                .insert([{ ...salePayloadBase, package: packageDetails.trim() || null }])
                 .select('id')
-                .single();
+                .single());
+
+            // Backward compatibility: if DB doesn't have `package` column yet, retry without it.
+            if (saleError && /column.*package|schema cache|invalid input syntax/i.test(String(saleError.message || ''))) {
+                ({ data: newSale, error: saleError } = await supabase
+                    .from('sales')
+                    .insert([salePayloadBase])
+                    .select('id')
+                    .single());
+            }
 
             if (saleError) throw saleError;
 
@@ -489,6 +507,7 @@ export default function SalesPage() {
             case 'sent': return 'bg-blue-100 text-blue-700 border-blue-200';
             case 'delivered': return 'bg-green-100 text-green-700 border-green-200';
             case 'returned': return 'bg-red-100 text-red-700 border-red-200';
+            case 'cancelled': return 'bg-gray-200 text-gray-700 border-gray-300';
             default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
     };
@@ -500,7 +519,11 @@ export default function SalesPage() {
 
     const handleConfirmExport = async () => {
         setIsExportModalOpen(false);
-        const { data, error } = await supabase
+        let includePackageInExport = true;
+        let data: any[] | null = null;
+        let error: any = null;
+
+        ({ data, error } = await supabase
             .from('sales')
             .select(`
                 id,
@@ -509,6 +532,7 @@ export default function SalesPage() {
                 parcel_status,
                 customer_name,
                 customer_address,
+                package,
                 phone1,
                 phone2,
                 cod_amount,
@@ -519,10 +543,37 @@ export default function SalesPage() {
                 sale_items (
                     quantity,
                     product:products(sku)
-                )
-            `)
+                    )
+                `)
             .eq('order_date', exportDate)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false }));
+
+        if (error && /column.*package|schema cache/i.test(String(error.message || ''))) {
+            includePackageInExport = false;
+            ({ data, error } = await supabase
+                .from('sales')
+                .select(`
+                    id,
+                    order_date,
+                    destination_branch,
+                    parcel_status,
+                    customer_name,
+                    customer_address,
+                    phone1,
+                    phone2,
+                    cod_amount,
+                    sold_amount,
+                    return_cost,
+                    ad_id,
+                    created_at,
+                    sale_items (
+                        quantity,
+                        product:products(sku)
+                    )
+                `)
+                .eq('order_date', exportDate)
+                .order('created_at', { ascending: false }));
+        }
 
         if (error) {
             setExportNotice({ type: 'error', text: `Export failed: ${error.message}` });
@@ -536,6 +587,7 @@ export default function SalesPage() {
                 sale.destination_branch,
                 sale.customer_name,
                 sale.customer_address,
+                includePackageInExport ? (sale.package || '') : '',
                 sale.phone1,
                 sale.phone2 || '',
                 sale.cod_amount,
@@ -554,6 +606,7 @@ export default function SalesPage() {
                 'destination_branch',
                 'customer_name',
                 'customer_address',
+                'package',
                 'phone1',
                 'phone2',
                 'cod_amount',
@@ -565,8 +618,8 @@ export default function SalesPage() {
         const workbook = XLSX.utils.book_new();
         const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
         worksheet['!cols'] = [
-            { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 14 },
-            { wch: 14 }, { wch: 12 }, { wch: 40 }
+            { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 20 },
+            { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 40 }
         ];
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
         const fileName = `sales_export_${exportDate}.xlsx`;
@@ -787,6 +840,7 @@ export default function SalesPage() {
                                             <option value="sent">Parcel Sent</option>
                                             <option value="delivered">Delivered</option>
                                             <option value="returned">Returned</option>
+                                            <option value="cancelled">Cancelled</option>
                                         </select>
                                     </div>
 
@@ -816,6 +870,17 @@ export default function SalesPage() {
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                             <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest text-gray-900 dark:text-gray-100" placeholder="1234567890" />
                                         </div>
+                                    </div>
+
+                                    <div className="space-y-2 col-span-full">
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Package</label>
+                                        <input
+                                            type="text"
+                                            value={packageDetails}
+                                            onChange={e => setPackageDetails(e.target.value)}
+                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100"
+                                            placeholder="Package details"
+                                        />
                                     </div>
 
                                     {/* Products Selection Section - Multi Product */}
@@ -946,90 +1011,90 @@ export default function SalesPage() {
                                 )}
 
                                 <div className="grid grid-cols-1 gap-3">
-                                    {(['processing', 'sent', 'delivered', 'returned'] as const).map((status) => (
-                                        <button
-                                            key={status}
-                                            onClick={() => {
-                                                if (status === 'delivered' || status === 'returned') {
-                                                    setPendingStatus(status);
-                                                    return;
-                                                }
-                                                handleStatusUpdate(status);
-                                            }}
-                                            disabled={loading}
-                                            className={`h-14 px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
-                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
-                                                : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
-                                                }`}
-                                        >
-                                            {status}
-                                            {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
-                                        </button>
+                                    {(['processing', 'sent', 'delivered', 'returned', 'cancelled'] as const).map((status) => (
+                                        <div key={status} className="space-y-2">
+                                            <button
+                                                onClick={() => {
+                                                    if (status === 'delivered' || status === 'returned') {
+                                                        setPendingStatus(prev => prev === status ? null : status);
+                                                        return;
+                                                    }
+                                                    setPendingStatus(null);
+                                                    handleStatusUpdate(status);
+                                                }}
+                                                disabled={loading}
+                                                className={`h-14 w-full px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
+                                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
+                                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
+                                                    }`}
+                                            >
+                                                {status}
+                                                {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
+                                            </button>
+
+                                            {status === 'delivered' && pendingStatus === 'delivered' && (
+                                                <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
+                                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
+                                                    {staffDeliveredLocked && (
+                                                        <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                            Staff can enter sold amount only once. Admin can edit it later.
+                                                        </div>
+                                                    )}
+                                                    <div className="relative">
+                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            value={soldAmountInput}
+                                                            onChange={(e) => setSoldAmountInput(Number(e.target.value))}
+                                                            disabled={staffDeliveredLocked}
+                                                            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                            placeholder="Total sold amount"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleStatusUpdate('delivered')}
+                                                        disabled={loading || staffDeliveredLocked}
+                                                        className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
+                                                    >
+                                                        Confirm Delivered
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {status === 'returned' && pendingStatus === 'returned' && (
+                                                <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
+                                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
+                                                    {staffReturnedLocked && (
+                                                        <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                            Staff can enter return cost only once. Admin can edit it later.
+                                                        </div>
+                                                    )}
+                                                    <div className="relative">
+                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="1"
+                                                            value={returnCostInput}
+                                                            onChange={(e) => setReturnCostInput(Number(e.target.value))}
+                                                            disabled={staffReturnedLocked}
+                                                            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                            placeholder="Return cost"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleStatusUpdate('returned')}
+                                                        disabled={loading || staffReturnedLocked}
+                                                        className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
+                                                    >
+                                                        Confirm Returned
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     ))}
-                                </div>
-
-                                <div className={`transition-all duration-300 ease-out overflow-hidden ${pendingStatus ? 'max-h-60 opacity-100 mt-4' : 'max-h-0 opacity-0 mt-0'}`}>
-                                    {pendingStatus === 'delivered' && (
-                                        <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
-                                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
-                                            {staffDeliveredLocked && (
-                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                                    Staff can enter sold amount only once. Admin can edit it later.
-                                                </div>
-                                            )}
-                                            <div className="relative">
-                                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="1"
-                                                    value={soldAmountInput}
-                                                    onChange={(e) => setSoldAmountInput(Number(e.target.value))}
-                                                    disabled={staffDeliveredLocked}
-                                                    className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
-                                                    placeholder="Total sold amount"
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={() => handleStatusUpdate('delivered')}
-                                                disabled={loading || staffDeliveredLocked}
-                                                className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
-                                            >
-                                                Confirm Delivered
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {pendingStatus === 'returned' && (
-                                        <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
-                                            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
-                                            {staffReturnedLocked && (
-                                                <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                                    Staff can enter return cost only once. Admin can edit it later.
-                                                </div>
-                                            )}
-                                            <div className="relative">
-                                                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="1"
-                                                    value={returnCostInput}
-                                                    onChange={(e) => setReturnCostInput(Number(e.target.value))}
-                                                    disabled={staffReturnedLocked}
-                                                    className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
-                                                    placeholder="Return cost"
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={() => handleStatusUpdate('returned')}
-                                                disabled={loading || staffReturnedLocked}
-                                                className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
-                                            >
-                                                Confirm Returned
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
                                         </>
                                     );
@@ -1102,6 +1167,13 @@ export default function SalesPage() {
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Address</p>
                                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                                         {viewSale.customer_address}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Package</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                        {viewSale.package || '-'}
                                     </p>
                                 </div>
 

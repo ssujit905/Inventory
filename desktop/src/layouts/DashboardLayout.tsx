@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
@@ -11,7 +11,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
     const { signOut } = useAuthStore();
-    const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' }[]>([]);
+    const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' | 'status' | 'sku' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [pendingCostCount, setPendingCostCount] = useState(0);
 
@@ -22,19 +22,25 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 return;
             }
 
-            const { data } = await supabase
+            const { data: salesData } = await supabase
                 .from('sales')
-                .select('customer_name, phone1')
-                .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%`)
+                .select('customer_name, phone1, parcel_status')
+                .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%,parcel_status.ilike.%${query}%`)
                 .limit(10);
 
-            if (data) {
-                const unique = new Set<string>();
-                const results: { text: string, type: 'name' | 'phone' }[] = [];
+            const { data: productData } = await supabase
+                .from('products')
+                .select('sku')
+                .ilike('sku', `%${query}%`)
+                .limit(10);
 
-                data.forEach(item => {
+            const unique = new Set<string>();
+            const results: { text: string, type: 'name' | 'phone' | 'status' | 'sku' }[] = [];
+
+            (salesData || []).forEach(item => {
                     const name = item.customer_name;
                     const phone = item.phone1;
+                    const status = item.parcel_status;
 
                     if (name.toLowerCase().includes(query.toLowerCase()) && !unique.has('n:' + name)) {
                         unique.add('n:' + name);
@@ -44,10 +50,21 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         unique.add('p:' + phone);
                         results.push({ text: phone, type: 'phone' });
                     }
+                    if (status?.toLowerCase().includes(query.toLowerCase()) && !unique.has('s:' + status)) {
+                        unique.add('s:' + status);
+                        results.push({ text: status, type: 'status' });
+                    }
                 });
 
-                setSuggestions(results.slice(0, 6));
-            }
+            (productData || []).forEach((item: any) => {
+                const sku = item.sku;
+                if (sku?.toLowerCase().includes(query.toLowerCase()) && !unique.has('k:' + sku)) {
+                    unique.add('k:' + sku);
+                    results.push({ text: sku, type: 'sku' });
+                }
+            });
+
+            setSuggestions(results.slice(0, 8));
         };
 
         const timer = setTimeout(fetchSuggestions, 150);
@@ -87,22 +104,34 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         navigate('/', { replace: true });
     };
 
-    const handleSelectSuggestion = (text: string) => {
+    const resolveSearchRoute = (type: 'name' | 'phone' | 'status' | 'sku') => {
+        return type === 'sku' ? '/admin/inventory' : '/admin/sales';
+    };
+
+    const handleSelectSuggestion = (text: string, type: 'name' | 'phone' | 'status' | 'sku') => {
         setQuery(text);
         setShowSuggestions(false);
-        navigate('/admin/sales');
+        navigate(resolveSearchRoute(type));
     };
 
     const handleManualRefresh = () => {
+        sessionStorage.setItem('desktop_last_path', location.pathname);
         window.location.reload();
     };
 
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
-        // Close mobile menu on route change
         setIsMobileMenuOpen(false);
+        sessionStorage.setItem('desktop_last_path', location.pathname);
     }, [location.pathname]);
+
+    useEffect(() => {
+        return () => {
+            setQuery('');
+            setShowSuggestions(false);
+        };
+    }, [setQuery]);
 
     return (
         <div className="flex h-screen w-full bg-gray-50 dark:bg-gray-950 overflow-hidden">
@@ -204,10 +233,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         setShowSuggestions(false);
-                                        navigate('/admin/sales');
+                                        const route = location.pathname === '/admin/inventory' || location.pathname === '/admin/sales'
+                                            ? location.pathname
+                                            : '/admin/sales';
+                                        navigate(route);
                                     }
                                 }}
-                                placeholder="Search..."
+                                placeholder="Search name, phone, status, or product ID"
                                 className="w-full h-10 pl-10 pr-4 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-gray-900 dark:text-gray-100 truncate"
                             />
 
@@ -220,11 +252,18 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     {suggestions.map((s, i) => (
                                         <button
                                             key={i}
-                                            onClick={() => handleSelectSuggestion(s.text)}
-                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                        >
-                                            <div className={`p-1.5 rounded-lg ${s.type === 'name' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}>
-                                                {s.type === 'name' ? <User size={14} /> : <Phone size={14} />}
+                                        onClick={() => handleSelectSuggestion(s.text, s.type)}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    >
+                                        <div className={`p-1.5 rounded-lg ${s.type === 'name'
+                                            ? 'bg-blue-50 text-blue-600'
+                                            : s.type === 'phone'
+                                                ? 'bg-green-50 text-green-600'
+                                                : s.type === 'status'
+                                                    ? 'bg-violet-50 text-violet-600'
+                                                    : 'bg-amber-50 text-amber-600'
+                                            }`}>
+                                                {s.type === 'name' ? <User size={14} /> : s.type === 'phone' ? <Phone size={14} /> : s.type === 'status' ? <CircleDot size={14} /> : <Barcode size={14} />}
                                             </div>
                                             <span className="font-bold text-gray-700 dark:text-gray-300">{s.text}</span>
                                         </button>

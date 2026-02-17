@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, DollarSign, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, DollarSign, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { supabase } from '../lib/supabase';
@@ -159,6 +159,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         setCanPull(false);
     };
 
+    const pullThreshold = 60;
+    const pullProgress = Math.min(1, pullDistance / pullThreshold);
+    const indicatorVisible = pullDistance > 2 || isRefreshing;
+
     return (
         <div className="flex flex-col h-screen w-full bg-gray-50 dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
             {/* MOBILE TOP BAR */}
@@ -255,7 +259,29 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
             >
-                <div className="p-5 max-w-md mx-auto">
+                <div
+                    className={`sticky top-0 z-20 flex justify-center pointer-events-none transition-all duration-200 ${indicatorVisible ? 'opacity-100' : 'opacity-0'}`}
+                    style={{ height: `${Math.min(72, pullDistance)}px` }}
+                >
+                    <div className="mt-2 px-4 py-2 rounded-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-200 dark:border-gray-800 shadow-lg">
+                        <div className="flex items-center gap-2">
+                            <div
+                                className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center"
+                                style={{ transform: `rotate(${isRefreshing ? 360 : Math.round(pullProgress * 220)}deg)` }}
+                            >
+                                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">
+                                {isRefreshing ? 'Refreshing...' : pullDistance >= pullThreshold ? 'Release to refresh' : 'Pull to refresh'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    className="p-5 max-w-md mx-auto transition-transform duration-150"
+                    style={{ transform: `translateY(${Math.round(Math.min(18, pullDistance * 0.2))}px)` }}
+                >
                     {children}
                 </div>
             </main>

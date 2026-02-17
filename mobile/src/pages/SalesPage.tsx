@@ -27,9 +27,10 @@ type Sale = {
     id: string;
     order_date: string;
     destination_branch: string;
-    parcel_status: 'processing' | 'sent' | 'delivered' | 'returned' | 'exchange' | 'cancelled';
+    parcel_status: 'processing' | 'sent' | 'delivered' | 'returned' | 'cancelled';
     customer_name: string;
     customer_address: string;
+    package?: string | null;
     phone1: string;
     phone2: string;
     cod_amount: number;
@@ -88,11 +89,12 @@ export default function SalesPage() {
     // Form Fields
     const [orderDate, setOrderDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [destinationBranch, setDestinationBranch] = useState('');
-    const [parcelStatus, setParcelStatus] = useState<'processing' | 'sent' | 'delivered' | 'returned' | 'exchange' | 'cancelled'>('processing');
+    const [parcelStatus, setParcelStatus] = useState<'processing' | 'sent' | 'delivered' | 'returned' | 'cancelled'>('processing');
     const [customerName, setCustomerName] = useState('');
     const [customerAddress, setCustomerAddress] = useState('');
     const [phone1, setPhone1] = useState('');
     const [phone2, setPhone2] = useState('');
+    const [packageDetails, setPackageDetails] = useState('');
     const [codAmount, setCodAmount] = useState<number>(0);
     const [adId, setAdId] = useState('');
 
@@ -181,7 +183,7 @@ export default function SalesPage() {
                     const sold = txs
                         .filter((t: any) => {
                             if (t.type !== 'sale') return false;
-                            if (t.sales) return ['processing', 'sent', 'delivered', 'exchange'].includes(t.sales.parcel_status);
+                            if (t.sales) return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
                             return true; // Legacy
                         })
                         .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
@@ -215,6 +217,7 @@ export default function SalesPage() {
         setCustomerAddress('');
         setPhone1('');
         setPhone2('');
+        setPackageDetails('');
         setCodAmount(0);
         setAdId('');
         setOrderItems([{ productId: '', quantity: 1 }]);
@@ -354,7 +357,7 @@ export default function SalesPage() {
                     const sold = txs
                         .filter((t: any) => {
                             if (t.type !== 'sale') return false;
-                            if (t.sales) return ['processing', 'sent', 'delivered', 'exchange'].includes(t.sales.parcel_status);
+                            if (t.sales) return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
                             return true;
                         })
                         .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
@@ -390,25 +393,39 @@ export default function SalesPage() {
             }
 
             // 2. Insert Sale Record (Header)
-            const { data: newSale, error: saleError } = await supabase
+            const salePayloadBase = {
+                order_date: orderDate,
+                destination_branch: destinationBranch,
+                parcel_status: parcelStatus,
+                customer_name: customerName,
+                customer_address: customerAddress,
+                phone1,
+                phone2: phone2 || null,
+                cod_amount: codAmount,
+                ad_id: adId || null,
+                // Legacy column support (optional: use first item)
+                product_id: deductionsToMake[0]?.productId,
+                quantity: orderItems.reduce((s, i) => s + i.quantity, 0),
+                recorded_by: user.id
+            };
+
+            let newSale: any = null;
+            let saleError: any = null;
+
+            ({ data: newSale, error: saleError } = await supabase
                 .from('sales')
-                .insert([{
-                    order_date: orderDate,
-                    destination_branch: destinationBranch,
-                    parcel_status: parcelStatus,
-                    customer_name: customerName,
-                    customer_address: customerAddress,
-                    phone1,
-                    phone2: phone2 || null,
-                    cod_amount: codAmount,
-                    ad_id: adId || null,
-                    // Legacy column support (optional: use first item)
-                    product_id: deductionsToMake[0]?.productId,
-                    quantity: orderItems.reduce((s, i) => s + i.quantity, 0),
-                    recorded_by: user.id
-                }])
+                .insert([{ ...salePayloadBase, package: packageDetails.trim() || null }])
                 .select('id')
-                .single();
+                .single());
+
+            // Backward compatibility: if DB doesn't have `package` column yet, retry without it.
+            if (saleError && /column.*package|schema cache|invalid input syntax/i.test(String(saleError.message || ''))) {
+                ({ data: newSale, error: saleError } = await supabase
+                    .from('sales')
+                    .insert([salePayloadBase])
+                    .select('id')
+                    .single());
+            }
 
             if (saleError) throw saleError;
 
@@ -491,7 +508,6 @@ export default function SalesPage() {
             case 'sent': return 'bg-blue-100 text-blue-700 border-blue-200';
             case 'delivered': return 'bg-green-100 text-green-700 border-green-200';
             case 'returned': return 'bg-red-100 text-red-700 border-red-200';
-            case 'exchange': return 'bg-violet-100 text-violet-700 border-violet-200';
             case 'cancelled': return 'bg-gray-200 text-gray-700 border-gray-300';
             default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
@@ -504,7 +520,11 @@ export default function SalesPage() {
 
     const handleConfirmExport = async () => {
         setIsExportModalOpen(false);
-        const { data, error } = await supabase
+        let includePackageInExport = true;
+        let data: any[] | null = null;
+        let error: any = null;
+
+        ({ data, error } = await supabase
             .from('sales')
             .select(`
                 id,
@@ -513,6 +533,7 @@ export default function SalesPage() {
                 parcel_status,
                 customer_name,
                 customer_address,
+                package,
                 phone1,
                 phone2,
                 cod_amount,
@@ -523,10 +544,37 @@ export default function SalesPage() {
                 sale_items (
                     quantity,
                     product:products(sku)
-                )
-            `)
+                    )
+                `)
             .eq('order_date', exportDate)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false }));
+
+        if (error && /column.*package|schema cache/i.test(String(error.message || ''))) {
+            includePackageInExport = false;
+            ({ data, error } = await supabase
+                .from('sales')
+                .select(`
+                    id,
+                    order_date,
+                    destination_branch,
+                    parcel_status,
+                    customer_name,
+                    customer_address,
+                    phone1,
+                    phone2,
+                    cod_amount,
+                    sold_amount,
+                    return_cost,
+                    ad_id,
+                    created_at,
+                    sale_items (
+                        quantity,
+                        product:products(sku)
+                    )
+                `)
+                .eq('order_date', exportDate)
+                .order('created_at', { ascending: false }));
+        }
 
         if (error) {
             setExportNotice({ type: 'error', text: `Export failed: ${error.message}` });
@@ -540,6 +588,7 @@ export default function SalesPage() {
                 sale.destination_branch,
                 sale.customer_name,
                 sale.customer_address,
+                includePackageInExport ? (sale.package || '') : '',
                 sale.phone1,
                 sale.phone2 || '',
                 sale.cod_amount,
@@ -558,6 +607,7 @@ export default function SalesPage() {
                 'destination_branch',
                 'customer_name',
                 'customer_address',
+                'package',
                 'phone1',
                 'phone2',
                 'cod_amount',
@@ -569,8 +619,8 @@ export default function SalesPage() {
         const workbook = XLSX.utils.book_new();
         const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
         worksheet['!cols'] = [
-            { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 14 },
-            { wch: 14 }, { wch: 12 }, { wch: 40 }
+            { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 30 }, { wch: 20 },
+            { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 40 }
         ];
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
         const fileName = `sales_export_${exportDate}.xlsx`;
@@ -585,8 +635,36 @@ export default function SalesPage() {
             }
             setExportNotice({ type: 'success', text: `File saved to Downloads: ${fileName}` });
         } else {
-            XLSX.writeFile(workbook, fileName);
-            setExportNotice({ type: 'success', text: `File exported: ${fileName}` });
+            // Mobile/Web fallback: prefer native share so user can save to Files/Downloads apps.
+            const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+            const blob = new Blob([arrayBuffer], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const file = new File([blob], fileName, { type: blob.type });
+            const nav = navigator as any;
+
+            if (nav?.canShare?.({ files: [file] }) && nav?.share) {
+                try {
+                    await nav.share({
+                        title: 'Sales Export',
+                        text: `Sales export for ${exportDate}`,
+                        files: [file],
+                    });
+                    setExportNotice({ type: 'success', text: 'Export ready. Choose Files/Drive in share sheet to save.' });
+                } catch {
+                    setExportNotice({ type: 'error', text: 'Export cancelled from share sheet.' });
+                }
+            } else {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+                setExportNotice({ type: 'success', text: `Export started: ${fileName}` });
+            }
         }
         setTimeout(() => setExportNotice(null), 4000);
     };
@@ -790,7 +868,6 @@ export default function SalesPage() {
                                             <option value="sent">Parcel Sent</option>
                                             <option value="delivered">Delivered</option>
                                             <option value="returned">Returned</option>
-                                            <option value="exchange">Exchange</option>
                                             <option value="cancelled">Cancelled</option>
                                         </select>
                                     </div>
@@ -821,6 +898,17 @@ export default function SalesPage() {
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                             <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest text-gray-900 dark:text-gray-100" placeholder="1234567890" />
                                         </div>
+                                    </div>
+
+                                    <div className="space-y-2 col-span-full">
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Package</label>
+                                        <input
+                                            type="text"
+                                            value={packageDetails}
+                                            onChange={e => setPackageDetails(e.target.value)}
+                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100"
+                                            placeholder="Package details"
+                                        />
                                     </div>
 
                                     {/* Products Selection Section - Multi Product */}
@@ -951,7 +1039,7 @@ export default function SalesPage() {
                                 )}
 
                                 <div className="grid grid-cols-1 gap-3">
-                                    {(['processing', 'sent', 'delivered', 'returned', 'exchange', 'cancelled'] as const).map((status) => (
+                                    {(['processing', 'sent', 'delivered', 'returned', 'cancelled'] as const).map((status) => (
                                         <div key={status} className="space-y-2">
                                             <button
                                                 onClick={() => {
@@ -1107,6 +1195,13 @@ export default function SalesPage() {
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Address</p>
                                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                                         {viewSale.customer_address}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Package</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                        {viewSale.package || '-'}
                                     </p>
                                 </div>
 
