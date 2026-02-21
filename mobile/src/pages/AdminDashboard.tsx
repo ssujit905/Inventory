@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom"
 import DashboardLayout from "../layouts/DashboardLayout"
-import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, DollarSign } from 'lucide-react'
+import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, IndianRupee } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -301,13 +301,7 @@ export default function AdminDashboard() {
                                 sent={stats.sentCount}
                                 accent="bg-amber-500"
                             />
-                            <StatCard
-                                title="MTD Success Rate"
-                                value={`${stats.deliverySuccessRate.toFixed(1)}%`}
-                                desc="Delivered / (Delivered + Returned)"
-                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
-                                accent="bg-emerald-500"
-                            />
+                            <StatCard title="Est. Revenue" value={`Rs. ${stats.pendingTotal.toLocaleString()}`} icon={<IndianRupee size={22} />} accent="bg-emerald-500" />
                         </div>
 
                         {/* Charts Section */}

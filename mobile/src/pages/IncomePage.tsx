@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, TrendingUp, AlertCircle, X, ArrowRight, DollarSign } from 'lucide-react';
+import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee } from 'lucide-react';
 import { format } from 'date-fns';
 
 type IncomeEntry = {
@@ -153,7 +153,7 @@ export default function IncomePage() {
                                                     {entry.description}
                                                 </div>
                                                 <div className="text-left text-sm font-black text-green-600 font-mono tracking-tight">
-                                                    ${Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
                                         </div>
@@ -166,9 +166,9 @@ export default function IncomePage() {
 
                 {/* Form Modal */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[90vh]">
-                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent flex-shrink-0">
+                    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[92svh]">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
                                         <div className="p-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-600/30">
@@ -183,7 +183,7 @@ export default function IncomePage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddIncome} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                                         <AlertCircle size={20} /> {message.text}
@@ -228,9 +228,9 @@ export default function IncomePage() {
                                     </div>
 
                                     <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount (Rs.) <span className="text-red-500">*</span></label>
                                         <div className="relative">
-                                            <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
+                                            <IndianRupee className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
                                             <input
                                                 required
                                                 type="number"

@@ -9,6 +9,8 @@ import ReportsPage from './pages/ReportsPage';
 import StaffManagementPage from './pages/StaffManagementPage';
 import IncomePage from './pages/IncomePage';
 import ProfitPage from './pages/ProfitPage';
+import PrintCenter from './pages/PrintCenter';
+import ChatbotPage from './pages/ChatbotPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -90,6 +92,14 @@ function App() {
 
         <Route path="/admin/sales" element={
           user ? <SalesPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/print" element={
+          user ? <PrintCenter /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/chatbot" element={
+          user && profile?.role === 'admin' ? <ChatbotPage /> : <Navigate to="/" replace />
         } />
 
 

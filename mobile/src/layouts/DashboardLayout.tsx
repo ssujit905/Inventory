@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, cloneElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, DollarSign, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { supabase } from '../lib/supabase';
@@ -280,7 +280,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
                 <div
                     className="p-5 max-w-md mx-auto transition-transform duration-150"
-                    style={{ transform: `translateY(${Math.round(Math.min(18, pullDistance * 0.2))}px)` }}
+                    style={pullDistance > 0 ? { transform: `translateY(${Math.round(Math.min(18, pullDistance * 0.2))}px)` } : undefined}
                 >
                     {children}
                 </div>
@@ -304,9 +304,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" />
                                 <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" badge={pendingCostCount} />
                                 <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" />
-                                <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" />
+                                <MenuLink icon={<Printer className="text-blue-500" />} label="Print Center" path="/admin/print" />
+                                <MenuLink icon={<IndianRupee className="text-amber-500" />} label="Expenses" path="/admin/expenses" />
                                 {role === 'admin' && (
-                                    <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" />
+                                    <>
+                                        <MenuLink icon={<MessageSquare className="text-primary" />} label="AI Chatbot" path="/admin/chatbot" />
+                                        <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" />
+                                    </>
                                 )}
                             </div>
                         </section>
@@ -347,22 +351,36 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
 function MenuLink({ icon, label, path, badge }: { icon: React.ReactNode, label: string, path: string, badge?: number }) {
     const navigate = useNavigate();
+    const location = useLocation();
+    const isActive = location.pathname === path;
+
     return (
         <button
             onClick={() => navigate(path)}
-            className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-900 active:bg-gray-100 dark:active:bg-gray-800 transition-colors group"
+            className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all duration-200 group ${isActive
+                ? 'bg-primary/10 dark:bg-primary/20'
+                : 'hover:bg-gray-50 dark:hover:bg-gray-900 active:bg-gray-100 dark:active:bg-gray-800'
+                }`}
         >
             <div className="flex items-center gap-4">
-                <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl group-hover:bg-white dark:group-hover:bg-gray-800 transition-colors">
-                    {icon}
+                <div className={`p-2.5 rounded-xl transition-all duration-200 ${isActive
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                    : 'bg-gray-50 dark:bg-gray-900 group-hover:bg-white dark:group-hover:bg-gray-800'
+                    }`}>
+                    {/* We override the icon color to white when active for better contrast */}
+                    {isActive && React.isValidElement(icon) ? (
+                        cloneElement(icon as React.ReactElement, { className: 'text-white' } as any)
+                    ) : icon}
                 </div>
-                <span className="font-bold text-gray-700 dark:text-gray-300">{label}</span>
+                <span className={`font-black tracking-tight transition-colors ${isActive ? 'text-primary' : 'text-gray-700 dark:text-gray-300'}`}>
+                    {label}
+                </span>
             </div>
             <div className="flex items-center gap-3">
                 {badge ? (
-                    <span className="px-2 py-0.5 bg-primary text-white text-[10px] font-black rounded-full">{badge}</span>
+                    <span className="px-2 py-0.5 bg-primary text-white text-[10px] font-black rounded-full shadow-sm">{badge}</span>
                 ) : null}
-                <ChevronRight size={18} className="text-gray-300" />
+                <ChevronRight size={18} className={`transition-transform duration-200 ${isActive ? 'text-primary translate-x-1' : 'text-gray-300'}`} />
             </div>
         </button>
     );

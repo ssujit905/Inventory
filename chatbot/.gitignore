@@ -1,0 +1,4 @@
+node_modules/
+.env
+this_profile's_activity_across_facebook/
+.DS_Store

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, DollarSign, AlertCircle, X, History, ArrowRight } from 'lucide-react';
+import { Plus, IndianRupee, AlertCircle, X, History, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Expense = {
@@ -141,7 +141,7 @@ export default function ExpensesPage() {
                     <div className="space-y-3">
                         {expenses.length === 0 ? (
                             <div className="py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2rem] bg-gray-50/50 dark:bg-gray-900/20">
-                                <DollarSign size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
+                                <IndianRupee size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
                                 <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No expense records found</p>
                                 <button onClick={openEntryForm} className="mt-4 text-red-600 font-black flex items-center gap-2 hover:underline">
                                     Record First Expense <ArrowRight size={16} />
@@ -174,7 +174,7 @@ export default function ExpensesPage() {
                                                     {exp.description}
                                                 </div>
                                                 <div className="text-left text-sm font-black text-red-600 font-mono tracking-tight">
-                                                    ${Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
                                         </div>
@@ -187,9 +187,9 @@ export default function ExpensesPage() {
 
                 {/* Form Modal */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
-                            <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent">
+                    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[92svh] flex flex-col">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
                                         <div className="p-2 bg-red-600 text-white rounded-xl shadow-lg shadow-red-600/30">
@@ -204,7 +204,7 @@ export default function ExpensesPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddExpense} className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddExpense} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
                                         <AlertCircle size={20} /> {message.text}
@@ -270,9 +270,9 @@ export default function ExpensesPage() {
                                     )}
 
                                     <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>
+                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount (Rs.) <span className="text-red-500">*</span></label>
                                         <div className="relative">
-                                            <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
+                                            <IndianRupee className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
                                             <input
                                                 required
                                                 type="number"

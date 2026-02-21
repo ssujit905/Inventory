@@ -324,22 +324,22 @@ export default function ProfitPage() {
                                                     <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.qty_sold}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className={`p-4 text-sm font-black text-right ${row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        ${row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -388,25 +388,25 @@ export default function ProfitPage() {
                                                     <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.quantity}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className={`p-4 text-sm font-black text-right ${row.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        ${row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
                                             ))}

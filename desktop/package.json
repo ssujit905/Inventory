@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "electron/entry.cjs",
+  "main": "electron/entry.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "unset ELECTRON_RUN_AS_NODE && vite",
     "build": "tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -23,10 +23,19 @@
       "electron/entry.cjs"
     ],
     "mac": {
-      "target": "zip",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "universal"
+        },
+        {
+          "target": "zip",
+          "arch": "universal"
+        }
+      ],
       "icon": "build/icon.png",
       "category": "public.app-category.business",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
@@ -59,7 +68,7 @@
     "autoprefixer": "^10.4.24",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^24.8.8",
+    "electron": "^40.6.0",
     "electron-builder": "^26.7.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",

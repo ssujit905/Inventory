@@ -1,7 +1,8 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const { pathToFileURL } = require('node:url');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mainModulePath = path.join(__dirname, '..', 'dist-electron', 'main.js');
 
 function boot() {
@@ -11,7 +12,7 @@ function boot() {
   }
 
   import(pathToFileURL(mainModulePath).href).catch((error) => {
-    console.error('Failed to load Electron main module:', error);
+    console.error('Main Process Load Error:', error);
     process.exit(1);
   });
 }

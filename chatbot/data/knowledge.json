@@ -1,0 +1,109 @@
+{
+    "ne": [
+        {
+            "keywords": [
+                "kati",
+                "price",
+                "mulyo",
+                "mol",
+                "pp",
+                "dar"
+            ],
+            "response": "हजुर, धेरैजसो सामानको मूल्य रु १४०० देखि १५०० को बीचमा छ। काठमाडौं भित्र डेलिभरी निशुल्क छ र बाहिर १०० रुपैयाँ लाग्छ। तपाईंलाई कुन सामानको मूल्य थाहा पाउनु पर्ने हो?"
+        },
+        {
+            "keywords": [
+                "location",
+                "thau",
+                "address",
+                "kata",
+                "cod",
+                "pasal"
+            ],
+            "response": "हाम्रो मुख्य स्टोर काठमाडौंको कात्यानी चोकमा अवस्थित छ। तपाईं गूगल म्यापमा 'Ktm Gadget' खोजेर पनि आउन सक्नुहुन्छ!"
+        },
+        {
+            "keywords": [
+                "delivery",
+                "shipping",
+                "kati din",
+                "pathauna",
+                "baira",
+                "valley"
+            ],
+            "response": "हामी नेपाल अधिराज्यभरि डेलिभरी गर्छौं। काठमाडौं उपत्यका भित्र डेलिभरी फ्री छ र उपत्यका बाहिर रु १०० अतिरिक्त शुल्क लाग्छ।"
+        },
+        {
+            "keywords": [
+                "color",
+                "size",
+                "design",
+                "shades"
+            ],
+            "response": "हामीसँग विभिन्न कलर र साइजहरू उपलब्ध छन्। तपाईंलाई कुन कलर वा साइज मनपर्छ? कृपया जानकारी दिनुहोला।"
+        },
+        {
+            "keywords": [
+                "neckband",
+                "earphone",
+                "headset",
+                "ucool",
+                "100 hours"
+            ],
+            "response": "हाम्रो Ucool Soul Neckband मा १०० घण्टाको ग्यारेन्टीड ब्याकअप छ। यो एक इम्पोर्टेड सामान हो र यसको मूल्य रु १४००-१५०० को बीचमा छ।"
+        }
+    ],
+    "en": [
+        {
+            "keywords": [
+                "price",
+                "cost",
+                "how much",
+                "pp",
+                "rate"
+            ],
+            "response": "Most items are priced between Rs. 1400 - 1500. We offer free delivery inside Kathmandu valley and Rs. 100 for outside. Which product are you interested in?"
+        },
+        {
+            "keywords": [
+                "location",
+                "where",
+                "store",
+                "address",
+                "place",
+                "shop"
+            ],
+            "response": "We are located at Katyani Chowk, Kathmandu. You can find us on Google Maps by searching 'Ktm Gadget'!"
+        },
+        {
+            "keywords": [
+                "delivery",
+                "shipping",
+                "how long",
+                "outside",
+                "inside",
+                "charge"
+            ],
+            "response": "We deliver all over Nepal! Delivery is FREE inside Kathmandu valley, and we charge Rs. 100 for orders outside the valley."
+        },
+        {
+            "keywords": [
+                "color",
+                "size",
+                "available",
+                "stock"
+            ],
+            "response": "We have various colors and sizes available. Which color or size are you looking for? Please let us know!"
+        },
+        {
+            "keywords": [
+                "neckband",
+                "earphone",
+                "headset",
+                "ucool",
+                "100 hours"
+            ],
+            "response": "Our Ucool Soul Neckband comes with a guaranteed 100-hour battery backup. It is an imported high-quality item priced around Rs. 1400-1500."
+        }
+    ]
+}

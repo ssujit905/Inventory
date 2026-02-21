@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
@@ -38,23 +38,23 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             const results: { text: string, type: 'name' | 'phone' | 'status' | 'sku' }[] = [];
 
             (salesData || []).forEach(item => {
-                    const name = item.customer_name;
-                    const phone = item.phone1;
-                    const status = item.parcel_status;
+                const name = item.customer_name;
+                const phone = item.phone1;
+                const status = item.parcel_status;
 
-                    if (name.toLowerCase().includes(query.toLowerCase()) && !unique.has('n:' + name)) {
-                        unique.add('n:' + name);
-                        results.push({ text: name, type: 'name' });
-                    }
-                    if (phone.includes(query) && !unique.has('p:' + phone)) {
-                        unique.add('p:' + phone);
-                        results.push({ text: phone, type: 'phone' });
-                    }
-                    if (status?.toLowerCase().includes(query.toLowerCase()) && !unique.has('s:' + status)) {
-                        unique.add('s:' + status);
-                        results.push({ text: status, type: 'status' });
-                    }
-                });
+                if (name.toLowerCase().includes(query.toLowerCase()) && !unique.has('n:' + name)) {
+                    unique.add('n:' + name);
+                    results.push({ text: name, type: 'name' });
+                }
+                if (phone.includes(query) && !unique.has('p:' + phone)) {
+                    unique.add('p:' + phone);
+                    results.push({ text: phone, type: 'phone' });
+                }
+                if (status?.toLowerCase().includes(query.toLowerCase()) && !unique.has('s:' + status)) {
+                    unique.add('s:' + status);
+                    results.push({ text: status, type: 'status' });
+                }
+            });
 
             (productData || []).forEach((item: any) => {
                 const sku = item.sku;
@@ -182,6 +182,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     />
                     <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
                     <NavItem icon={<ShoppingCart size={18} strokeWidth={1.5} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
+                    <NavItem icon={<Printer size={18} strokeWidth={1.5} />} label="Print Center" path="/admin/print" active={location.pathname === '/admin/print'} />
+                    {role === 'admin' && (
+                        <NavItem icon={<MessageSquare size={18} strokeWidth={1.5} />} label="AI Chatbot" path="/admin/chatbot" active={location.pathname === '/admin/chatbot'} />
+                    )}
                     {role === 'admin' && (
                         <>
                             <div className="pt-6 pb-2">
@@ -252,17 +256,17 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     {suggestions.map((s, i) => (
                                         <button
                                             key={i}
-                                        onClick={() => handleSelectSuggestion(s.text, s.type)}
-                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                    >
-                                        <div className={`p-1.5 rounded-lg ${s.type === 'name'
-                                            ? 'bg-blue-50 text-blue-600'
-                                            : s.type === 'phone'
-                                                ? 'bg-green-50 text-green-600'
-                                                : s.type === 'status'
-                                                    ? 'bg-violet-50 text-violet-600'
-                                                    : 'bg-amber-50 text-amber-600'
-                                            }`}>
+                                            onClick={() => handleSelectSuggestion(s.text, s.type)}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                        >
+                                            <div className={`p-1.5 rounded-lg ${s.type === 'name'
+                                                ? 'bg-blue-50 text-blue-600'
+                                                : s.type === 'phone'
+                                                    ? 'bg-green-50 text-green-600'
+                                                    : s.type === 'status'
+                                                        ? 'bg-violet-50 text-violet-600'
+                                                        : 'bg-amber-50 text-amber-600'
+                                                }`}>
                                                 {s.type === 'name' ? <User size={14} /> : s.type === 'phone' ? <Phone size={14} /> : s.type === 'status' ? <CircleDot size={14} /> : <Barcode size={14} />}
                                             </div>
                                             <span className="font-bold text-gray-700 dark:text-gray-300">{s.text}</span>

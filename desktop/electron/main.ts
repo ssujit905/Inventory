@@ -1,40 +1,62 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
-import { writeFile } from 'node:fs/promises'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { writeFile } from 'node:fs/promises';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// Handle dirname
+const _filename = fileURLToPath(import.meta.url);
+const _dirname = path.dirname(_filename);
+
+// Global error handling to capture startup crashes
+process.on('uncaughtException', (error: any) => {
+    dialog.showErrorBox('Application Error', error.stack || error.message);
+});
 
 // The built directory structure
-process.env.APP_ROOT = path.join(__dirname, '..')
+process.env.APP_ROOT = path.join(_dirname, '..')
 
-export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
-export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
-export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
+const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
+const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+let win: BrowserWindow | null = null
 
 function createWindow() {
-    win = new BrowserWindow({
-        width: 1200,
-        height: 800,
-        icon: path.join(process.env.VITE_PUBLIC || '', 'electron-vite.svg'),
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-        },
-    })
+    try {
+        win = new BrowserWindow({
+            width: 1200,
+            height: 800,
+            show: false, // Don't show until ready
+            icon: path.join(process.env.VITE_PUBLIC || '', 'vite.svg'),
+            webPreferences: {
+                preload: path.join(_dirname, 'preload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+            },
+        })
 
-    // Test active push message to Renderer-process.
-    win?.webContents.on('did-finish-load', () => {
-        win?.webContents.send('main-process-message', (new Date).toLocaleString())
-    })
+        // Graceful window showing
+        win.once('ready-to-show', () => {
+            win?.show()
+        })
 
-    if (VITE_DEV_SERVER_URL) {
-        win?.loadURL(VITE_DEV_SERVER_URL)
-    } else {
-        win?.loadFile(path.join(RENDERER_DIST, 'index.html'))
+        // Test active push message to Renderer-process.
+        win.webContents.on('did-finish-load', () => {
+            win?.webContents.send('main-process-message', (new Date).toLocaleString())
+        })
+
+        if (VITE_DEV_SERVER_URL) {
+            win.loadURL(VITE_DEV_SERVER_URL)
+        } else {
+            const indexPath = path.join(RENDERER_DIST, 'index.html')
+            win.loadFile(indexPath).catch((err: any) => {
+                dialog.showErrorBox('Load Error', `Failed to load index.html: ${err.message}\nPath: ${indexPath}`);
+            });
+        }
+    } catch (error: any) {
+        dialog.showErrorBox('Window Creation Error', error.message);
     }
 }
 
@@ -51,7 +73,9 @@ app.on('activate', () => {
     }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(createWindow).catch((err: any) => {
+    dialog.showErrorBox('Initialization Error', err.message);
+});
 
 ipcMain.handle('save-xlsx-download', async (_event, payload: { fileName: string; base64: string }) => {
     try {

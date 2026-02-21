@@ -1,12 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, Eye, FileDown } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+
+const FileExport = registerPlugin<{
+    saveBase64ToDownloads(options: { fileName: string; base64: string }): Promise<{ ok: boolean; uri?: string }>;
+}>('FileExport');
 
 type SaleItem = {
     id?: string;
@@ -625,6 +630,16 @@ export default function SalesPage() {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
         const fileName = `sales_export_${exportDate}.xlsx`;
         const ipc = (window as any).ipcRenderer;
+        const downloadWithAnchor = (blob: Blob) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        };
 
         if (ipc?.invoke) {
             const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
@@ -635,6 +650,20 @@ export default function SalesPage() {
             }
             setExportNotice({ type: 'success', text: `File saved to Downloads: ${fileName}` });
         } else {
+            if (Capacitor.isNativePlatform()) {
+                try {
+                    const base64 = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+                    const result = await FileExport.saveBase64ToDownloads({ fileName, base64 });
+                    if (result?.ok) {
+                        setExportNotice({ type: 'success', text: `Saved to Downloads/InvPro: ${fileName}` });
+                        setTimeout(() => setExportNotice(null), 4000);
+                        return;
+                    }
+                } catch {
+                    // Fallback to share / browser-like download below.
+                }
+            }
+
             // Mobile/Web fallback: prefer native share so user can save to Files/Downloads apps.
             const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
             const blob = new Blob([arrayBuffer], {
@@ -652,17 +681,11 @@ export default function SalesPage() {
                     });
                     setExportNotice({ type: 'success', text: 'Export ready. Choose Files/Drive in share sheet to save.' });
                 } catch {
-                    setExportNotice({ type: 'error', text: 'Export cancelled from share sheet.' });
+                    downloadWithAnchor(blob);
+                    setExportNotice({ type: 'success', text: `Share cancelled. Download started: ${fileName}` });
                 }
             } else {
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                URL.revokeObjectURL(url);
+                downloadWithAnchor(blob);
                 setExportNotice({ type: 'success', text: `Export started: ${fileName}` });
             }
         }
@@ -773,7 +796,7 @@ export default function SalesPage() {
                                                 </div>
 
                                                 <div className="text-left text-sm font-black text-primary font-mono tracking-tight">
-                                                    ${Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
                                         </div>
@@ -827,9 +850,9 @@ export default function SalesPage() {
 
                 {/* Form Modal */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[90vh]">
-                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent flex-shrink-0">
+                    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-4xl rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[92svh]">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent flex-shrink-0">
                                 <div>
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-primary text-white rounded-xl shadow-lg">
@@ -844,7 +867,7 @@ export default function SalesPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleCreateSale} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleCreateSale} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                         <CheckCircle2 size={20} /> {message.text}
@@ -975,9 +998,9 @@ export default function SalesPage() {
                                     </div>
 
                                     <div className="space-y-2 col-span-full">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount ($) *</label>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount (Rs.) *</label>
                                         <div className="relative">
-                                            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                            <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                             <input required type="number" step="1" min="1" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-xl text-primary text-gray-900 dark:text-gray-100" placeholder="0" />
                                         </div>
                                     </div>
@@ -992,7 +1015,7 @@ export default function SalesPage() {
                                             <option value="">-- Select Ads Campaign --</option>
                                             {adsOptions.map(ad => (
                                                 <option key={ad.id} value={ad.id}>
-                                                    {ad.description} (${Number(ad.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                    {ad.description} (Rs. {Number(ad.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                                                 </option>
                                             ))}
                                         </select>
@@ -1014,9 +1037,9 @@ export default function SalesPage() {
 
                 {/* Status Update Modal */}
                 {isStatusModalOpen && selectedSale && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
-                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent">
+                    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[92svh] flex flex-col">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit uppercase">Update Status</h2>
                                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mt-1 line-clamp-1">{selectedSale.customer_name}</p>
@@ -1026,104 +1049,104 @@ export default function SalesPage() {
                                 </button>
                             </div>
 
-                            <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+                            <div className="p-5 sm:p-8 space-y-5 overflow-y-auto custom-scrollbar flex-1">
                                 {(() => {
                                     const staffDeliveredLocked = !isAdmin && Number(selectedSale.sold_amount || 0) > 0;
                                     const staffReturnedLocked = !isAdmin && Number(selectedSale.return_cost || 0) > 0;
                                     return (
                                         <>
-                                {message && (
-                                    <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                        <CheckCircle2 size={16} /> {message.text}
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-1 gap-3">
-                                    {(['processing', 'sent', 'delivered', 'returned', 'cancelled'] as const).map((status) => (
-                                        <div key={status} className="space-y-2">
-                                            <button
-                                                onClick={() => {
-                                                    if (status === 'delivered' || status === 'returned') {
-                                                        setPendingStatus(prev => prev === status ? null : status);
-                                                        return;
-                                                    }
-                                                    setPendingStatus(null);
-                                                    handleStatusUpdate(status);
-                                                }}
-                                                disabled={loading}
-                                                className={`h-14 w-full px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
-                                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
-                                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
-                                                    }`}
-                                            >
-                                                {status}
-                                                {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
-                                            </button>
-
-                                            {status === 'delivered' && pendingStatus === 'delivered' && (
-                                                <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
-                                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
-                                                    {staffDeliveredLocked && (
-                                                        <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                                            Staff can enter sold amount only once. Admin can edit it later.
-                                                        </div>
-                                                    )}
-                                                    <div className="relative">
-                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="1"
-                                                            value={soldAmountInput}
-                                                            onChange={(e) => setSoldAmountInput(Number(e.target.value))}
-                                                            disabled={staffDeliveredLocked}
-                                                            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
-                                                            placeholder="Total sold amount"
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleStatusUpdate('delivered')}
-                                                        disabled={loading || staffDeliveredLocked}
-                                                        className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
-                                                    >
-                                                        Confirm Delivered
-                                                    </button>
+                                            {message && (
+                                                <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    <CheckCircle2 size={16} /> {message.text}
                                                 </div>
                                             )}
 
-                                            {status === 'returned' && pendingStatus === 'returned' && (
-                                                <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
-                                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
-                                                    {staffReturnedLocked && (
-                                                        <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                                            Staff can enter return cost only once. Admin can edit it later.
-                                                        </div>
-                                                    )}
-                                                    <div className="relative">
-                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="1"
-                                                            value={returnCostInput}
-                                                            onChange={(e) => setReturnCostInput(Number(e.target.value))}
-                                                            disabled={staffReturnedLocked}
-                                                            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
-                                                            placeholder="Return cost"
-                                                        />
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {(['processing', 'sent', 'delivered', 'returned', 'cancelled'] as const).map((status) => (
+                                                    <div key={status} className="space-y-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                if (status === 'delivered' || status === 'returned') {
+                                                                    setPendingStatus(prev => prev === status ? null : status);
+                                                                    return;
+                                                                }
+                                                                setPendingStatus(null);
+                                                                handleStatusUpdate(status);
+                                                            }}
+                                                            disabled={loading}
+                                                            className={`h-14 w-full px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
+                                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
+                                                                : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
+                                                                }`}
+                                                        >
+                                                            {status}
+                                                            {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
+                                                        </button>
+
+                                                        {status === 'delivered' && pendingStatus === 'delivered' && (
+                                                            <div className="p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 space-y-3">
+                                                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sold Amount (Total)</div>
+                                                                {staffDeliveredLocked && (
+                                                                    <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                                        Staff can enter sold amount only once. Admin can edit it later.
+                                                                    </div>
+                                                                )}
+                                                                <div className="relative">
+                                                                    <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        step="1"
+                                                                        value={soldAmountInput}
+                                                                        onChange={(e) => setSoldAmountInput(Number(e.target.value))}
+                                                                        disabled={staffDeliveredLocked}
+                                                                        className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                                        placeholder="Total sold amount"
+                                                                    />
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleStatusUpdate('delivered')}
+                                                                    disabled={loading || staffDeliveredLocked}
+                                                                    className="w-full h-12 bg-primary text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-primary/25"
+                                                                >
+                                                                    Confirm Delivered
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {status === 'returned' && pendingStatus === 'returned' && (
+                                                            <div className="p-4 rounded-2xl border-2 border-rose-200 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/10 space-y-3">
+                                                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Return Courier Cost</div>
+                                                                {staffReturnedLocked && (
+                                                                    <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                                                        Staff can enter return cost only once. Admin can edit it later.
+                                                                    </div>
+                                                                )}
+                                                                <div className="relative">
+                                                                    <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        step="1"
+                                                                        value={returnCostInput}
+                                                                        onChange={(e) => setReturnCostInput(Number(e.target.value))}
+                                                                        disabled={staffReturnedLocked}
+                                                                        className="w-full h-12 pl-12 pr-4 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm"
+                                                                        placeholder="Return cost"
+                                                                    />
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleStatusUpdate('returned')}
+                                                                    disabled={loading || staffReturnedLocked}
+                                                                    className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
+                                                                >
+                                                                    Confirm Returned
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleStatusUpdate('returned')}
-                                                        disabled={loading || staffReturnedLocked}
-                                                        className="w-full h-12 bg-rose-600 text-white font-black rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-rose-600/25"
-                                                    >
-                                                        Confirm Returned
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                                ))}
+                                            </div>
                                         </>
                                     );
                                 })()}
@@ -1134,9 +1157,9 @@ export default function SalesPage() {
 
                 {/* View Sale Modal */}
                 {isViewModalOpen && viewSale && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5">
-                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent">
+                    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[92svh] flex flex-col">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit uppercase">Sale Details</h2>
                                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mt-1">
@@ -1151,7 +1174,7 @@ export default function SalesPage() {
                                 </button>
                             </div>
 
-                            <div className="p-8 space-y-6">
+                            <div className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Date</p>
@@ -1174,7 +1197,7 @@ export default function SalesPage() {
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">COD Amount</p>
                                         <p className="text-sm font-black text-primary font-mono">
-                                            ${Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            Rs. {Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </p>
                                     </div>
                                     <div>

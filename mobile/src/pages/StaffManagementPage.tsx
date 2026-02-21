@@ -279,9 +279,9 @@ export default function StaffManagementPage() {
 
                 {/* Add Staff Modal */}
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 flex flex-col max-h-[90vh]">
-                            <div className="p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent flex-shrink-0">
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 flex flex-col max-h-[92svh]">
+                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent flex-shrink-0">
                                 <div>
                                     <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Initialize new secure account</p>
@@ -294,7 +294,7 @@ export default function StaffManagementPage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddStaff} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
                                     New accounts can log in immediately only if Supabase email confirmation is disabled.
                                 </div>

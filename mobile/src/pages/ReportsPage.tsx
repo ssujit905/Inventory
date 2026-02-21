@@ -5,7 +5,7 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { DollarSign } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 
 type FinanceStats = {
     totalRevenue: number;
@@ -543,7 +543,7 @@ function FinanceStatCard({ title, value, trend, color, sub }: any) {
                     </p>
                 </div>
                 <div className={`h-10 w-10 ${accents[color] || 'bg-primary'} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
-                    <DollarSign size={18} strokeWidth={1.5} />
+                    <IndianRupee size={18} strokeWidth={1.5} />
                 </div>
             </div>
         </div>
