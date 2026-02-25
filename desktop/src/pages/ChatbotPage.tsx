@@ -291,7 +291,7 @@ export default function ChatbotPage() {
                             <FaqManager
                                 faqs={faqs}
                                 onAdd={() => setShowAddFaq(true)}
-                                onDelete={(id) => handleDelete('chatbot_faqs', id)}
+                                onDelete={(id: string) => handleDelete('chatbot_faqs', id)}
                             />
                         )}
 
@@ -306,7 +306,7 @@ export default function ChatbotPage() {
                             <ShortcutManager
                                 shortcuts={shortcuts}
                                 onAdd={() => setShowAddShortcut(true)}
-                                onDelete={(id) => handleDelete('chatbot_shortcuts', id)}
+                                onDelete={(id: string) => handleDelete('chatbot_shortcuts', id)}
                                 onToggle={toggleShortcut}
                             />
                         )}

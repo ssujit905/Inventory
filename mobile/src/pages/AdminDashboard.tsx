@@ -301,7 +301,13 @@ export default function AdminDashboard() {
                                 sent={stats.sentCount}
                                 accent="bg-amber-500"
                             />
-                            <StatCard title="Est. Revenue" value={`Rs. ${stats.pendingTotal.toLocaleString()}`} icon={<IndianRupee size={22} />} accent="bg-emerald-500" />
+                            <StatCard
+                                title="MTD Success Rate"
+                                value={`${stats.deliverySuccessRate.toFixed(1)}%`}
+                                desc="Delivered / (Delivered + Returned)"
+                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
+                                accent="bg-emerald-500"
+                            />
                         </div>
 
                         {/* Charts Section */}

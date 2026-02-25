@@ -20,7 +20,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "electron/entry.cjs"
+      "electron/entry.js"
     ],
     "mac": {
       "target": [
