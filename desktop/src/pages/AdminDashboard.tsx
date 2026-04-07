@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom"
 import DashboardLayout from "../layouts/DashboardLayout"
-import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, DollarSign } from 'lucide-react'
+import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, DollarSign, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -29,6 +29,7 @@ export default function AdminDashboard() {
     const [monthlySalesCount, setMonthlySalesCount] = useState<{ month: string; delivered: number; returns: number }[]>([]);
     const [statusData, setStatusData] = useState<{ name: string; value: number; color: string }[]>([]);
     const [fastMovingSkus, setFastMovingSkus] = useState<{ sku: string; qty: number }[]>([]);
+    const [websiteOrdersCount, setWebsiteOrdersCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
         () => fetchDashboardData(false),
         {
             channelName: 'dashboard-updates-v2',
-            tables: ['sales', 'product_lots', 'transactions'],
+            tables: ['sales', 'product_lots', 'transactions', 'website_orders'],
             pollMs: 10000
         }
     );
@@ -54,31 +55,40 @@ export default function AdminDashboard() {
             const todayStr = format(now, 'yyyy-MM-dd');
             const yearStart = startOfYear(now);
 
-            const { data: globalSales, error: salesError } = await supabase
-                .from('sales')
-                .select('parcel_status, order_date');
+            const [salesRes, productsRes, websiteOrdersRes] = await Promise.all([
+                supabase
+                    .from('sales')
+                    .select('parcel_status, order_date'),
+                supabase
+                    .from('products')
+                    .select(`
+                        id,
+                        min_stock_alert,
+                        product_lots(
+                            id,
+                            transactions(
+                                type,
+                                quantity_changed,
+                                sales(parcel_status)
+                            )
+                        )
+                    `),
+                supabase
+                    .from('website_orders')
+                    .select('id, status')
+                    .eq('status', 'pending')
+            ]);
 
-            if (salesError) throw salesError;
+            if (salesRes.error) throw salesRes.error;
+            if (productsRes.error) throw productsRes.error;
+
+            setWebsiteOrdersCount(websiteOrdersRes.data?.length || 0);
+
+            const globalSales = salesRes.data;
+            const productsData = productsRes.data;
 
             const totalDelivered = globalSales?.filter(s => s.parcel_status === 'delivered').length || 0;
             const totalReturns = globalSales?.filter(s => s.parcel_status === 'returned').length || 0;
-
-            const { data: productsData, error: prodError } = await supabase
-                .from('products')
-                .select(`
-                    id,
-                    min_stock_alert,
-                    product_lots(
-                        id,
-                        transactions(
-                            type,
-                            quantity_changed,
-                            sales(parcel_status)
-                        )
-                    )
-                `);
-
-            if (prodError) throw prodError;
 
             const productRemaining = (productsData || []).map((p: any) => {
                 const totalRemaining = (p.product_lots || []).reduce((sum: number, lot: any) => {
@@ -122,12 +132,13 @@ export default function AdminDashboard() {
                 .from('transactions')
                 .select(`
                     quantity_changed,
-                    sale:sales(order_date, parcel_status),
+                    sale:sales!inner(order_date, parcel_status),
                     lot:product_lots(
                         products(sku)
                     )
                 `)
-                .eq('type', 'sale');
+                .eq('type', 'sale')
+                .gte('sales.order_date', last30StartStr);
 
             if (movementError) throw movementError;
 
@@ -278,7 +289,15 @@ export default function AdminDashboard() {
                         </div>
 
                         {/* Stats Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+                            <StatCard
+                                title="Website Orders"
+                                value={websiteOrdersCount.toString()}
+                                desc="Pending web orders"
+                                icon={<Globe size={20} strokeWidth={1.5} />}
+                                accent="bg-primary"
+                                onClick={() => navigate('/admin/website/orders')}
+                            />
                             <StatCard
                                 title="Total Delivered"
                                 value={stats.totalDelivered.toString()}
@@ -510,9 +529,11 @@ export default function AdminDashboard() {
     );
 }
 
-function StatCard({ title, value, desc, icon, accent, isWarning = false }: any) {
+function StatCard({ title, value, desc, icon, accent, isWarning = false, onClick }: any) {
     return (
-        <div className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''}`}>
+        <div 
+            onClick={onClick}
+            className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''} ${onClick ? 'cursor-pointer hover:border-primary/30' : ''}`}>
             <div className="flex items-start justify-between">
                 <div>
                     <p className="text-[10px] font-bold text-gray-500 dark:text-gray-300 uppercase tracking-widest mb-1">{title}</p>

@@ -52,36 +52,15 @@ export default function ReportsPage() {
     const fetchFinanceData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            // 1. Fetch income entries for Revenue
-            const { data: incomeEntries, error: incomeError } = await supabase
-                .from('income_entries')
-                .select('amount, income_date, category');
-
-            if (incomeError) throw incomeError;
-
-            // 2. Fetch all stock-in transactions for COGS
-            const { data: saleTransactions, error: transError } = await supabase
-                .from('transactions')
-                .select(`
+            const [incomeRes, transRes, expensesRes, lotSalesRes, lotsRes] = await Promise.all([
+                supabase.from('income_entries').select('amount, income_date, category'),
+                supabase.from('transactions').select(`
                     quantity_changed,
                     lot:product_lots(cost_price),
                     sale:sales(parcel_status)
-                `)
-                .eq('type', 'in');
-
-            if (transError) throw transError;
-
-            // 3. Fetch all expenses
-            const { data: expensesData, error: expError } = await supabase
-                .from('expenses')
-                .select('id, amount, description, expense_date, category, created_at');
-
-            if (expError) throw expError;
-
-            // 4. Fetch lot-level sales transactions for profit allocation
-            const { data: lotSales, error: lotSalesError } = await supabase
-                .from('transactions')
-                .select(`
+                `).eq('type', 'in'),
+                supabase.from('expenses').select('id, amount, description, expense_date, category, created_at'),
+                supabase.from('transactions').select(`
                     id,
                     sale_id,
                     quantity_changed,
@@ -92,15 +71,8 @@ export default function ReportsPage() {
                         products(sku)
                     ),
                     sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
-                `)
-                .eq('type', 'sale');
-
-            if (lotSalesError) throw lotSalesError;
-
-            // 4. Fetch lots with transactions to compute remaining (Inventory logic)
-            const { data: lotsData, error: lotsError } = await supabase
-                .from('product_lots')
-                .select(`
+                `).eq('type', 'sale'),
+                supabase.from('product_lots').select(`
                     id,
                     cost_price,
                     transactions (
@@ -108,9 +80,20 @@ export default function ReportsPage() {
                         quantity_changed,
                         sales (parcel_status)
                     )
-                `);
+                `)
+            ]);
 
-            if (lotsError) throw lotsError;
+            if (incomeRes.error) throw incomeRes.error;
+            if (transRes.error) throw transRes.error;
+            if (expensesRes.error) throw expensesRes.error;
+            if (lotSalesRes.error) throw lotSalesRes.error;
+            if (lotsRes.error) throw lotsRes.error;
+
+            const incomeEntries = incomeRes.data;
+            const saleTransactions = transRes.data;
+            const expensesData = expensesRes.data;
+            const lotSales = lotSalesRes.data;
+            const lotsData = lotsRes.data;
 
             // Calculate Stats
             // 5. Calculate Revenue from Delivered Sales (Avoiding double-counting lots)

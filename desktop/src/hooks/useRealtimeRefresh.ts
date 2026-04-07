@@ -69,19 +69,30 @@ export function useRealtimeRefresh(
             void runRefresh();
         }, pollMs);
 
-        const handleVisible = () => {
-            if (document.visibilityState === 'visible') {
-                void runRefresh();
-            }
+        const handleFocus = () => {
+            // Force reset locks in case a fetch Promise hung infinitely during computer sleep
+            inFlightRef.current = false;
+            queuedRef.current = false;
+            
+            // Force an immediate data re-validation when the user returns to the app
+            void runRefresh();
         };
-        window.addEventListener('focus', handleVisible);
-        document.addEventListener('visibilitychange', handleVisible);
+        window.addEventListener('focus', handleFocus);
+
+        // Native Electron IPC fallback for strict focus detection
+        const ipcWindow = window as any;
+        const _handleIpcFocus = () => handleFocus();
+        if (ipcWindow.ipcRenderer) {
+            ipcWindow.ipcRenderer.on('window-focus', _handleIpcFocus);
+        }
 
         return () => {
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
             clearInterval(interval);
-            window.removeEventListener('focus', handleVisible);
-            document.removeEventListener('visibilitychange', handleVisible);
+            window.removeEventListener('focus', handleFocus);
+            if (ipcWindow.ipcRenderer) {
+                ipcWindow.ipcRenderer.off('window-focus', _handleIpcFocus);
+            }
             supabase.removeChannel(channel);
         };
     }, [channelName, tablesKey, enabled, debounceMs, pollMs]);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare, Globe, ShoppingBag, Settings, MapPin, RotateCcw } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
@@ -14,6 +14,8 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' | 'status' | 'sku' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [pendingCostCount, setPendingCostCount] = useState(0);
+    const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+    const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -76,26 +78,44 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             setPendingCostCount(0);
             return;
         }
-
         const { count } = await supabase
             .from('product_lots')
             .select('id', { count: 'exact', head: true })
             .eq('cost_price', 0);
-
         setPendingCostCount(count || 0);
+    };
+
+    const fetchPendingWebItems = async () => {
+        // Pending Orders
+        const { count: ordersCount } = await supabase
+            .from('website_orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending');
+        setPendingOrdersCount(ordersCount || 0);
+
+        // Pending Returns
+        const { count: returnsCount } = await supabase
+            .from('website_order_returns')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending');
+        setPendingReturnsCount(returnsCount || 0);
     };
 
     useEffect(() => {
         fetchPendingCosts();
+        fetchPendingWebItems();
     }, [role]);
 
     useRealtimeRefresh(
-        fetchPendingCosts,
+        () => {
+            fetchPendingCosts();
+            fetchPendingWebItems();
+        },
         {
-            channelName: 'pending-cost-badge-v2',
-            tables: ['product_lots'],
+            channelName: 'sidebar-badges-v3',
+            tables: ['product_lots', 'website_orders', 'website_order_returns'],
             pollMs: 10000,
-            enabled: role === 'admin'
+            enabled: true
         }
     );
 
@@ -182,9 +202,31 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     />
                     <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
                     <NavItem icon={<ShoppingCart size={18} strokeWidth={1.5} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
-                    <NavItem icon={<Printer size={18} strokeWidth={1.5} />} label="Print Center" path="/admin/print" active={location.pathname === '/admin/print'} />
+                    <div className="pt-6 pb-2">
+                        <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Website</p>
+                    </div>
                     {role === 'admin' && (
-                        <NavItem icon={<MessageSquare size={18} strokeWidth={1.5} />} label="AI Chatbot" path="/admin/chatbot" active={location.pathname === '/admin/chatbot'} />
+                        <NavItem icon={<Globe size={18} strokeWidth={1.5} />} label="Products" path="/admin/website/products" active={location.pathname === '/admin/website/products'} />
+                    )}
+                    <NavItem 
+                        icon={<ShoppingBag size={18} strokeWidth={1.5} />} 
+                        label="Orders" 
+                        path="/admin/website/orders" 
+                        active={location.pathname === '/admin/website/orders'} 
+                        badge={pendingOrdersCount > 0 ? pendingOrdersCount : undefined}
+                    />
+                    <NavItem 
+                        icon={<RotateCcw size={18} strokeWidth={1.5} />} 
+                        label="Returns" 
+                        path="/admin/website/returns" 
+                        active={location.pathname === '/admin/website/returns'} 
+                        badge={pendingReturnsCount > 0 ? pendingReturnsCount : undefined}
+                    />
+                    {role === 'admin' && (
+                        <NavItem icon={<MapPin size={18} strokeWidth={1.5} />} label="Delivery" path="/admin/website/delivery" active={location.pathname === '/admin/website/delivery'} />
+                    )}
+                    {role === 'admin' && (
+                        <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />
                     )}
                     {role === 'admin' && (
                         <>
@@ -196,6 +238,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
                             <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
                         </>
+                    )}
+                    <div className="pt-6 pb-2">
+                        <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tools</p>
+                    </div>
+                    <NavItem icon={<Printer size={18} strokeWidth={1.5} />} label="Print Center" path="/admin/print" active={location.pathname === '/admin/print'} />
+                    {role === 'admin' && (
+                        <NavItem icon={<MessageSquare size={18} strokeWidth={1.5} />} label="AI Chatbot" path="/admin/chatbot" active={location.pathname === '/admin/chatbot'} />
                     )}
                 </nav>
 

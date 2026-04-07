@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --primary-red: #ef4444;
+    --primary-blue: #0f172a;
+    --accent-blue: #3b82f6;
+    --bg-white: #ffffff;
+    --bg-gray: #f8fafc;
+    --text-dark: #0f172a;
+    --text-gray: #64748b;
+    --border-color: #f1f5f9;
+    --font-main: 'Plus Jakarta Sans', sans-serif;
+    
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-md: 0 4px 20px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+    --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    
+    --radius-sm: 0.5rem;
+    --radius-md: 1rem;
+    --radius-lg: 1.5rem;
+    --radius-xl: 2rem;
+
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+a {
+    text-decoration: none !important;
+    transition: all 0.2s ease;
+}
+
+a:hover {
+    color: var(--primary-red);
+}
+
+html {
+    scroll-behavior: smooth;
+    font-size: 16px;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: #fff;
+    color: var(--text-dark);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+/* Fluid Typography */
+h1 { font-size: clamp(2.25rem, 8vw, 4rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; }
+h2 { font-size: clamp(1.75rem, 5vw, 2.75rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; }
+h3 { font-size: clamp(1.25rem, 3vw, 1.75rem); font-weight: 700; letter-spacing: -0.02em; }
+p { font-size: clamp(0.9rem, 2vw, 1rem); }
+
+/* Global Container */
+.container {
+    width: 100%;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+}
+
+@media (min-width: 1024px) {
+    .container { padding: 0 2.5rem; }
+}
+
+/* Enhanced Buttons */
+button, .btn {
+    font-family: var(--font-main);
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.btn-primary {
+    background-color: var(--primary-red);
+    color: white;
+    box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.39);
+}
+
+.btn-primary:active { transform: scale(0.96); }
+
+.btn-secondary {
+    background-color: var(--bg-gray);
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+}
+
+/* Form Optimization for iOS */
+input, textarea, select {
+    font-size: 16px !important; /* Forces iOS not to zoom */
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    padding: 0.875rem 1.25rem;
+    background: #fdfdfd;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+input:focus, textarea:focus {
+    border-color: var(--primary-red);
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.05);
+}
+
+/* Layout Sections */
+.section {
+    padding: 3.5rem 0;
+}
+
+@media (min-width: 768px) {
+    .section { padding: 6rem 0; }
+}
+
+/* Universal Grids */
+.grid {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 640px) {
+    .grid-cols-2, .grid-cols-3, .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-mobile-single {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Visibility Helpers */
+.mobile-only { display: block !important; }
+.desktop-only { display: none !important; }
+
+@media (min-width: 769px) {
+    .mobile-only { display: none !important; }
+    .desktop-only { display: block !important; }
+}
+
+/* Premium Card Style */
+.card {
+    background: white;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Glassmorphism Classes */
+.glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Scroll Indicators for Horizontal Swipe */
+.horizontal-scroll {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 1rem;
+    padding: 0.5rem 1.25rem;
+    margin: 0 -1.25rem;
+    scrollbar-width: none;
+}
+
+.horizontal-scroll::-webkit-scrollbar { display: none; }
+
+.horizontal-scroll > * {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+}
+
+/* Modal Adaptive Styles */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    display: flex;
+    align-items: flex-end; /* Mobile Bottom Sheet */
+}
+
+@media (min-width: 641px) {
+    .modal-overlay { align-items: center; justify-content: center; padding: 2rem; }
+}
+
+.modal-content {
+    width: 100%;
+    background: white;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+@media (min-width: 641px) {
+    .modal-content {
+        max-width: 500px;
+        border-radius: var(--radius-lg);
+    }
+}

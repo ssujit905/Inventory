@@ -11,6 +11,11 @@ import IncomePage from './pages/IncomePage';
 import ProfitPage from './pages/ProfitPage';
 import PrintCenter from './pages/PrintCenter';
 import ChatbotPage from './pages/ChatbotPage';
+import WebsiteProductsPage from './pages/WebsiteProductsPage';
+import WebsiteOrdersPage from './pages/WebsiteOrdersPage';
+import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
+import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
+import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -100,6 +105,22 @@ function App() {
 
         <Route path="/admin/chatbot" element={
           user && profile?.role === 'admin' ? <ChatbotPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/website/products" element={
+          user && profile?.role === 'admin' ? <WebsiteProductsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/orders" element={
+          user ? <WebsiteOrdersPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/settings" element={
+          user && profile?.role === 'admin' ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/delivery" element={
+          user && profile?.role === 'admin' ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/returns" element={
+          user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />
         } />
 
 

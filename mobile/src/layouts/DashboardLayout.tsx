@@ -1,6 +1,6 @@
 import React, { useState, useEffect, cloneElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare, Globe } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { supabase } from '../lib/supabase';
@@ -304,6 +304,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" />
                                 <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" badge={pendingCostCount} />
                                 <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" />
+                                <MenuLink icon={<Globe className="text-pink-500" />} label="Website Orders" path="/admin/website/orders" />
                                 <MenuLink icon={<Printer className="text-blue-500" />} label="Print Center" path="/admin/print" />
                                 <MenuLink icon={<IndianRupee className="text-amber-500" />} label="Expenses" path="/admin/expenses" />
                                 {role === 'admin' && (

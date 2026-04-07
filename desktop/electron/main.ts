@@ -42,6 +42,14 @@ function createWindow() {
             win?.show()
         })
 
+        // Force native focus rebroadcasting for stale-data recovery
+        win.on('focus', () => {
+            win?.webContents.send('window-focus')
+        })
+        win.on('restore', () => {
+            win?.webContents.send('window-focus')
+        })
+
         // Test active push message to Renderer-process.
         win.webContents.on('did-finish-load', () => {
             win?.webContents.send('main-process-message', (new Date).toLocaleString())
