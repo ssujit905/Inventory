@@ -84,9 +84,12 @@ export default function WebsiteReturnsPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
+            {/* Global Toast Notification — Always at the top-right! */}
             {toast && (
-                <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-white text-sm font-bold ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                    {toast.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+                <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                        {toast.type === 'success' ? <Check size={14} strokeWidth={3} /> : <AlertTriangle size={14} strokeWidth={3} />}
+                    </div>
                     {toast.msg}
                 </div>
             )}

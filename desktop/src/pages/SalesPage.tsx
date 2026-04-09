@@ -4,7 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, FileDown } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, FileDown, Globe } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -38,6 +38,7 @@ type Sale = {
     return_cost?: number | null;
     ad_id?: string | null;
     created_at: string;
+    is_website?: boolean;
     // We'll derive products from sale_items
     items?: SaleItem[];
 };
@@ -672,14 +673,25 @@ export default function SalesPage() {
 
                 {/* History Grid */}
                 <div className="space-y-6">
-                    {exportNotice && (
-                        <div className={`px-4 py-3 rounded-xl text-sm font-bold border ${exportNotice.type === 'success'
-                            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-300 dark:border-green-900/30'
-                            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/30'
-                            }`}>
-                            {exportNotice.text}
+                {/* Global Success/Error Notifications */}
+                {exportNotice && (
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${exportNotice.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {exportNotice.type === 'success' ? <CheckCircle2 size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}
                         </div>
-                    )}
+                        {exportNotice.text}
+                    </div>
+                )}
+
+                {message && (
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {message.type === 'success' ? <CheckCircle2 size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}
+                        </div>
+                        {message.text}
+                    </div>
+                )}
+
                     <div className="flex items-center gap-2">
                         <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
                             <History size={20} className="text-gray-500" />
@@ -717,7 +729,15 @@ export default function SalesPage() {
                                                     </span>
                                                 </div>
                                                 <div className="md:col-span-2 min-w-0 pr-2">
-                                                    <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                        {sale.is_website && (
+                                                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-md border border-sky-100 dark:border-sky-800 animate-pulse">
+                                                                <Globe size={10} strokeWidth={3} />
+                                                                <span className="text-[8px] font-black uppercase tracking-tighter">Web</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
                                                         {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
                                                     </div>
@@ -1004,11 +1024,7 @@ export default function SalesPage() {
                                     const staffReturnedLocked = !isAdmin && Number(selectedSale.return_cost || 0) > 0;
                                     return (
                                         <>
-                                {message && (
-                                    <div className={`p-4 rounded-xl text-xs font-black flex items-center gap-3 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                        <CheckCircle2 size={16} /> {message.text}
-                                    </div>
-                                )}
+
 
                                 <div className="grid grid-cols-1 gap-3">
                                     {(['processing', 'sent', 'delivered', 'returned', 'cancelled'] as const).map((status) => (

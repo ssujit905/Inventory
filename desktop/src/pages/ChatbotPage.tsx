@@ -173,11 +173,10 @@ export default function ChatbotPage() {
                 </div>
 
                 {status && (
-                    <div className={`p-4 rounded-2xl text-sm font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-4 ${status.type === 'success'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        : 'bg-rose-50 text-rose-700 border border-rose-100'
-                        }`}>
-                        {status.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${status.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {status.type === 'success' ? <CheckCircle2 size={14} strokeWidth={3} /> : <AlertCircle size={14} strokeWidth={3} />}
+                        </div>
                         {status.text}
                     </div>
                 )}

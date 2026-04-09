@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, Hash } from 'lucide-react';
+import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, Hash, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type RecentTransaction = {
@@ -330,8 +330,11 @@ export default function StockInPage() {
 
                             <form onSubmit={handleStockIn} className="p-8 space-y-6">
                                 {message && (
-                                    <div className={`p-4 rounded-xl text-xs font-bold flex items-center gap-3 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                        <AlertCircle size={16} /> {message.text}
+                                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                                            {message.type === 'success' ? <Check size={14} strokeWidth={3} /> : <X size={14} strokeWidth={3} />}
+                                        </div>
+                                        {message.text}
                                     </div>
                                 )}
 

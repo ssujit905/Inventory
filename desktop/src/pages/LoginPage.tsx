@@ -50,12 +50,15 @@ export default function LoginPage() {
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-6">
-                        {error && (
-                            <div className="p-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/30 rounded-xl flex items-center gap-3 text-rose-600">
-                                <AlertCircle size={18} strokeWidth={1.5} />
-                                <p className="text-xs font-semibold">{error}</p>
-                            </div>
-                        )}
+            {/* Global Error Notification */}
+            {error && (
+                <div className="fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl bg-rose-500 text-white text-sm font-black animate-in slide-in-from-right-full duration-500">
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                        <AlertCircle size={14} strokeWidth={3} />
+                    </div>
+                    {error}
+                </div>
+            )}
 
                         <div className="space-y-4">
                             <div className="space-y-1.5">

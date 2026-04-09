@@ -185,19 +185,11 @@ export default function StaffManagementPage() {
                 </div>
 
                 {message && (
-                    <div className={`p-6 rounded-3xl text-sm font-black flex items-center justify-between animate-in slide-in-from-top-4 ${message.type === 'success'
-                        ? 'bg-green-100 text-green-700 border border-green-200 shadow-lg shadow-green-500/10'
-                        : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-lg shadow-rose-500/10'
-                        }`}>
-                        <div className="flex items-center gap-4">
-                            <div className={`p-2 rounded-xl ${message.type === 'success' ? 'bg-green-500/20' : 'bg-rose-500/20'}`}>
-                                <AlertCircle size={20} />
-                            </div>
-                            {message.text}
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {message.type === 'success' ? <UserCheck size={14} strokeWidth={3} /> : <AlertCircle size={14} strokeWidth={3} />}
                         </div>
-                        <button onClick={() => setMessage(null)} className="p-2 hover:bg-black/5 rounded-lg transition-colors">
-                            <X size={18} />
-                        </button>
+                        {message.text}
                     </div>
                 )}
 

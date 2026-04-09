@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, TrendingUp, AlertCircle, X, ArrowRight, DollarSign } from 'lucide-react';
+import { Plus, TrendingUp, AlertCircle, X, ArrowRight, DollarSign, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type IncomeEntry = {
@@ -196,8 +196,11 @@ export default function IncomePage() {
 
                             <form onSubmit={handleAddIncome} className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
-                                    <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-                                        <AlertCircle size={20} /> {message.text}
+                                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                                            {message.type === 'success' ? <Check size={14} strokeWidth={3} /> : <AlertCircle size={14} strokeWidth={3} />}
+                                        </div>
+                                        {message.text}
                                     </div>
                                 )}
 

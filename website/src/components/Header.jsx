@@ -29,12 +29,14 @@ const Header = () => {
         return () => { document.body.style.overflow = 'unset'; };
     }, [isMenuOpen]);
 
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const handleSearch = (e) => {
         e.preventDefault();
         if (searchQuery.trim()) {
             navigate(`/shop?q=${encodeURIComponent(searchQuery.trim())}`);
             setSearchQuery('');
+            setIsSearchOpen(false);
         }
     };
 
@@ -84,42 +86,40 @@ const Header = () => {
                     </Link>
                 </div>
 
-                {/* Center: Desktop Navigation & Desktop Search */}
+                {/* Center: Desktop Navigation */}
                 <div className="desktop-only" style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem' }}>
                     <nav>
                          <ul style={{ display: 'flex', gap: '1.5rem', listStyle: 'none', margin: 0, padding: 0 }}>
                             <li><NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Home</NavLink></li>
                             <li><NavLink to="/shop" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Shop</NavLink></li>
+                            <li><NavLink to="/contact" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Contact</NavLink></li>
                             <li><NavLink to="/my-orders" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Account</NavLink></li>
                          </ul>
                     </nav>
-
-                    {!hideSearch && (
-                        <form onSubmit={handleSearch} style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
-                            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)', pointerEvents: 'none' }}>
-                                <Search size={16} />
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Find Products..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{
-                                    padding: '0.6rem 1rem 0.6rem 2.4rem',
-                                    borderRadius: '100px',
-                                    border: '1px solid var(--border-color)',
-                                    background: '#f8fafc',
-                                    fontSize: '0.85rem',
-                                    fontWeight: '500',
-                                    width: '100%'
-                                }}
-                            />
-                        </form>
-                    )}
                 </div>
 
                 {/* Right Side: Action Icons */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+                    {/* Desktop Search Toggle */}
+                    {!hideSearch && (
+                        <button 
+                            className="desktop-only"
+                            onClick={() => setIsSearchOpen(!isSearchOpen)}
+                            style={{ 
+                                color: isSearchOpen ? 'var(--primary-red)' : 'var(--text-dark)', 
+                                padding: '8px', 
+                                borderRadius: '12px', 
+                                display: 'flex', 
+                                background: isSearchOpen ? 'var(--primary-red-50)' : '#f8fafc',
+                                border: '1px solid var(--border-color)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {isSearchOpen ? <X size={22} strokeWidth={2.2} /> : <Search size={22} strokeWidth={2.2} />}
+                        </button>
+                    )}
+
                     <Link id="cart-icon" to="/cart" style={{ position: 'relative', color: 'var(--text-dark)', padding: '8px', borderRadius: '12px', display: 'flex', transition: 'all 0.2s', background: '#f8fafc', border: '1px solid var(--border-color)' }}>
                         <ShoppingCart size={22} strokeWidth={2.2} />
                         {cartCount > 0 && (
@@ -146,6 +146,67 @@ const Header = () => {
                     </Link>
                 </div>
             </div>
+
+            {/* Desktop Transition Search Bar */}
+            {!hideSearch && isSearchOpen && (
+                <div className="desktop-only animate-slide-down" 
+                     style={{ 
+                        backgroundColor: '#ffffff', 
+                        borderBottom: '1px solid var(--border-color)', 
+                        padding: '1.5rem 0',
+                        position: 'absolute',
+                        top: '70px',
+                        left: 0,
+                        right: 0,
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                     }}>
+                    <div className="container">
+                        <form onSubmit={handleSearch} style={{ position: 'relative', maxWidth: '800px', margin: '0 auto' }}>
+                            <Search 
+                                size={20} 
+                                style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} 
+                            />
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="What are you looking for?"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{
+                                    padding: '1.2rem 1.5rem 1.2rem 3.5rem',
+                                    borderRadius: '16px',
+                                    border: '2px solid var(--primary-blue-50)',
+                                    background: '#f8fafc',
+                                    fontSize: '1.1rem',
+                                    fontWeight: '600',
+                                    width: '100%',
+                                    outline: 'none',
+                                    transition: 'all 0.2s'
+                                }}
+                            />
+                            <button 
+                                type="submit"
+                                style={{ 
+                                    position: 'absolute', 
+                                    right: '10px', 
+                                    top: '50%', 
+                                    transform: 'translateY(-50%)',
+                                    backgroundColor: 'var(--primary-blue)',
+                                    color: 'white',
+                                    padding: '0.6rem 1.5rem',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Search Now
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Premium Mobile Search Bar (Only shown on mobile) */}
             {!hideSearch && (
@@ -175,7 +236,7 @@ const Header = () => {
                 </div>
             )}
             <style>{`
-                @media (max-width: 991px) {
+                @media (max-width: 768px) {
                     .header-logo {
                         position: absolute;
                         left: 50%;

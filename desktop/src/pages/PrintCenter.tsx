@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
-import { Printer, Calendar, Search, Loader2, CheckCircle2, Package, Eye, X, Settings, Building2, Save, CheckSquare, Square, Hash, ChevronRight } from 'lucide-react'
+import { Printer, Calendar, Search, Loader2, CheckCircle2, Package, Eye, X, Settings, Building2, Save, CheckSquare, Square, Hash, ChevronRight, AlertCircle } from 'lucide-react'
 import ReceiptTemplate from '../components/ReceiptTemplate'
 import { useAuthStore } from '../hooks/useAuthStore'
 import DashboardLayout from '../layouts/DashboardLayout'
@@ -188,12 +188,16 @@ export default function PrintCenter() {
                 </div>
 
                 {status && (
-                    <div className={`p-4 rounded-xl flex items-center gap-3 border animate-in fade-in slide-in-from-top-4 duration-300 ${status.includes('Error') || status.includes('No') || status.includes('failed')
-                            ? 'bg-rose-50 border-rose-100 text-rose-600 dark:bg-rose-900/10 dark:border-rose-900/20'
-                            : 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-900/10 dark:border-emerald-900/20'
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${status.includes('Error') || status.includes('No') || status.includes('failed')
+                        ? 'bg-rose-500 font-black'
+                        : 'bg-emerald-500 font-black'
                         }`}>
-                        <CheckCircle2 size={18} />
-                        <p className="text-sm font-bold">{status}</p>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {status.includes('Error') || status.includes('No') || status.includes('failed')
+                                ? <AlertCircle size={14} strokeWidth={3} />
+                                : <CheckCircle2 size={14} strokeWidth={3} />}
+                        </div>
+                        {status}
                     </div>
                 )}
 

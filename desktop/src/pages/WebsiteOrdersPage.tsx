@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import {
     ShoppingBag, Loader2, ChevronDown, ChevronUp,
-    Package, Truck, Check, X, Clock, AlertTriangle, Globe, Phone, MapPin, Mail
+    Package, Truck, Check, X, Clock, AlertTriangle, Globe, Phone, MapPin, Mail,
+    ArrowUpCircle, Info, Star, Save
 } from 'lucide-react';
 
 interface OrderItem {
@@ -52,6 +53,13 @@ export default function WebsiteOrdersPage() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
+    // Push to Sales State
+    const [isPushModalOpen, setIsPushModalOpen] = useState(false);
+    const [selectedOrderForPush, setSelectedOrderForPush] = useState<Order | null>(null);
+    const [skuMappings, setSkuMappings] = useState<Record<number, string>>({}); // order_item_id -> product_id
+    const [physicalProducts, setPhysicalProducts] = useState<Array<{id: string, sku: string}>>([]);
+    const [pushing, setPushing] = useState(false);
+
     useEffect(() => { 
         fetchOrders(); 
         
@@ -67,6 +75,150 @@ export default function WebsiteOrdersPage() {
             supabase.removeChannel(channel);
         };
     }, []);
+
+    useEffect(() => {
+        if (isPushModalOpen) {
+            fetchPhysicalProducts();
+        }
+    }, [isPushModalOpen]);
+
+    const fetchPhysicalProducts = async () => {
+        const { data } = await supabase.from('products').select('id, sku').order('sku');
+        if (data) setPhysicalProducts(data);
+    };
+
+    const openPushModal = (order: Order) => {
+        setSelectedOrderForPush(order);
+        setSkuMappings({});
+        setIsPushModalOpen(true);
+    };
+
+    const handlePushToSales = async () => {
+        if (!selectedOrderForPush || !profile) return;
+        
+        // Validate all items mapped
+        const unmapped = selectedOrderForPush.website_order_items.some(item => !skuMappings[item.id]);
+        if (unmapped) return showToast('Please select a matching SKU for all items', 'error');
+
+        setPushing(true);
+        try {
+            // 1. Create Sale Header
+            const firstItemId = selectedOrderForPush.website_order_items[0].id;
+            const firstPhysicalId = skuMappings[firstItemId];
+            const totalQty = selectedOrderForPush.website_order_items.reduce((s: number, i: any) => s + i.quantity, 0);
+
+            const salePayloadFull = {
+                order_date: format(new Date(), 'yyyy-MM-dd'),
+                destination_branch: selectedOrderForPush.city,
+                customer_name: selectedOrderForPush.customer_name,
+                customer_address: `${selectedOrderForPush.address}, ${selectedOrderForPush.city}`,
+                phone1: selectedOrderForPush.phone,
+                phone2: selectedOrderForPush.phone2 || null,
+                cod_amount: selectedOrderForPush.total_amount,
+                parcel_status: 'processing',
+                is_website: true,
+                recorded_by: profile.id,
+                notes: `WEB ORDER: ${selectedOrderForPush.order_number}`,
+                product_id: firstPhysicalId,
+                quantity: totalQty
+            };
+
+            let newSale: any = null;
+            let saleError: any = null;
+
+            ({ data: newSale, error: saleError } = await supabase
+                .from('sales')
+                .insert([salePayloadFull])
+                .select('id')
+                .single());
+
+            // Fallback for older schema without 'notes' or 'is_website'
+            if (saleError && /column.*(notes|is_website)|schema cache/i.test(String(saleError.message || ''))) {
+                const { notes, is_website, ...legacyPayload } = salePayloadFull;
+                ({ data: newSale, error: saleError } = await supabase
+                    .from('sales')
+                    .insert([legacyPayload])
+                    .select('id')
+                    .single());
+            }
+
+            if (saleError) throw saleError;
+
+            // 2. Loop through each item to deduct stock and create sale items
+            for (const item of selectedOrderForPush.website_order_items) {
+                const physicalId = skuMappings[item.id];
+                
+                // Fetch lots for FIFO stock deduction
+                const { data: lots, error: lotError } = await supabase
+                    .from('product_lots')
+                    .select('id, product_id, received_date, transactions (type, quantity_changed, sales (parcel_status))')
+                    .eq('product_id', physicalId)
+                    .order('received_date', { ascending: true });
+
+                if (lotError) throw lotError;
+
+                // Process lots to find current stock
+                const processedLots = (lots || []).map((lot: any) => {
+                    const txs = lot.transactions || [];
+                    const stockIn = txs.filter((t: any) => t.type === 'in').reduce((s: number, t: any) => s + t.quantity_changed, 0);
+                    const sold = txs.filter((t: any) => {
+                        if (t.type !== 'sale') return false;
+                        if (t.sales) return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
+                        return true;
+                    }).reduce((s: number, t: any) => s + Math.abs(t.quantity_changed), 0);
+                    return { ...lot, current: stockIn - sold };
+                }).filter(l => l.current > 0);
+
+                const totalStock = processedLots.reduce((s, l) => s + l.current, 0);
+                if (totalStock < item.quantity) {
+                    const sku = physicalProducts.find(p => p.id === physicalId)?.sku;
+                    throw new Error(`Insufficient stock for physical SKU: ${sku}`);
+                }
+
+                // Deduct using FIFO
+                let remainingToDeduct = item.quantity;
+                for (const lot of processedLots) {
+                    if (remainingToDeduct <= 0) break;
+                    const deduction = Math.min(lot.current, remainingToDeduct);
+                    
+                    // Update Physical Stock
+                    await supabase.from('product_lots').update({ quantity_remaining: lot.current - deduction }).eq('id', lot.id);
+                    
+                    // Create Transaction
+                    await supabase.from('transactions').insert([{
+                        product_id: physicalId,
+                        lot_id: lot.id,
+                        sale_id: newSale.id,
+                        type: 'sale',
+                        quantity_changed: -deduction,
+                        performed_by: profile.id
+                    }]);
+                    remainingToDeduct -= deduction;
+                }
+
+                // Create Sale Item
+                await supabase.from('sale_items').insert([{
+                    sale_id: newSale.id,
+                    product_id: physicalId,
+                    quantity: item.quantity
+                }]);
+            }
+
+            // 3. Update Website Order Status to Confirmed
+            await updateStatus(selectedOrderForPush.id, 'confirmed');
+            
+            showToast('Order pushed to app sales and stock updated!');
+            setIsPushModalOpen(false);
+        } catch (error: any) {
+            console.error('Push to Sales Error:', error);
+            const msg = error.message?.includes('column "is_website" does not exist') 
+                ? 'DATABASE ERROR: Please add the "is_website" column to your sales table in Supabase.'
+                : error.message;
+            showToast(msg, 'error');
+        } finally {
+            setPushing(false);
+        }
+    };
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
@@ -101,10 +253,12 @@ export default function WebsiteOrdersPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            {/* Toast */}
+            {/* Global Toast Notification — Always at the top-right! */}
             {toast && (
-                <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-white text-sm font-bold ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                    {toast.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
+                <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                        {toast.type === 'success' ? <Check size={14} strokeWidth={3} /> : <AlertTriangle size={14} strokeWidth={3} />}
+                    </div>
                     {toast.msg}
                 </div>
             )}
@@ -179,6 +333,18 @@ export default function WebsiteOrdersPage() {
                                         </div>
                                         {isExpanded ? <ChevronUp size={18} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={18} className="text-gray-400 flex-shrink-0" />}
                                     </div>
+
+                                    {/* Action Header — Quick Push */}
+                                    {!isExpanded && order.status === 'pending' && (
+                                        <div className="px-4 pb-4 flex justify-end">
+                                            <button 
+                                                onClick={() => openPushModal(order)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-black shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
+                                            >
+                                                <ArrowUpCircle size={14} /> Push to App Sales
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Expanded Details */}
                                     {isExpanded && (
@@ -262,6 +428,81 @@ export default function WebsiteOrdersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Push to Sales Mapping Modal */}
+            {isPushModalOpen && selectedOrderForPush && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md">
+                    <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/5 animate-in zoom-in-95 duration-300">
+                        <div className="p-8 border-b dark:border-gray-800 bg-gradient-to-r from-primary/5 to-transparent flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Push to App Sales</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Map website items to physical SKUs</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsPushModalOpen(false)}
+                                className="h-10 w-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-red-500 transition-all"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-6">
+                            {/* Order Summary */}
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 flex items-center justify-between border border-gray-100 dark:border-gray-700/50">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</p>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{selectedOrderForPush.customer_name}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total COD</p>
+                                    <p className="text-sm font-black text-primary">Rs. {selectedOrderForPush.total_amount.toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            {/* Item Mapping */}
+                            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                                {selectedOrderForPush.website_order_items.map(item => (
+                                    <div key={item.id} className="p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                                                {item.product_image ? <img src={item.product_image} alt="" className="w-full h-full object-cover" /> : <Package className="w-full h-full p-2 text-gray-300" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">{item.product_title}</p>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase">Qty: {item.quantity}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block ml-1">Select Physical App SKU</label>
+                                            <select 
+                                                value={skuMappings[item.id] || ''}
+                                                onChange={(e) => setSkuMappings(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                className="w-full h-11 px-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/50 text-xs font-bold rounded-xl outline-none transition-all"
+                                            >
+                                                <option value="">-- Choose SKU --</option>
+                                                {physicalProducts.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.sku}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                disabled={pushing}
+                                onClick={handlePushToSales}
+                                className="w-full py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/30 flex items-center justify-center gap-3 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:grayscale transition-all"
+                            >
+                                {pushing ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                                {pushing ? 'PUSHING TO APP...' : 'CONFIRM & PUSH TO SALES'}
+                            </button>
+                            <p className="text-[10px] text-center text-gray-400 font-bold uppercase tracking-widest">Deducts stock & creates sale record in App history</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </DashboardLayout>
     );
 }
