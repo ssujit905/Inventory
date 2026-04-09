@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import {
     ShoppingBag, Loader2, ChevronDown, ChevronUp,
-    Package, Truck, Check, X, Clock, AlertTriangle, Globe, Phone, MapPin, Mail
+    Package, Truck, Check, X, Clock, AlertTriangle, Globe, Phone, MapPin, Mail, Share2
 } from 'lucide-react';
 
 interface OrderItem {
@@ -75,6 +75,24 @@ export default function WebsiteOrdersPage() {
         if (error) return showToast(error.message, 'error');
         setOrders(os => os.map(o => o.id === id ? { ...o, status } : o));
         showToast('Status updated!');
+    };
+
+    const handleShare = async (order: Order) => {
+        const text = `📦 *Order Receipt - ${order.order_number}*\n\n` +
+            `👤 *Customer:* ${order.customer_name}\n` +
+            `📍 *Address:* ${order.address}, ${order.city}\n\n` +
+            `🛒 *Items:*\n` +
+            order.website_order_items.map(item => `• ${item.product_title} x${item.quantity}`).join('\n') +
+            `\n\n💰 *Total:* Rs. ${order.total_amount.toLocaleString()}\n` +
+            `💳 *Payment:* ${order.payment_method.toUpperCase()}\n\n` +
+            `Thank you for shopping with us!`;
+
+        if (navigator.share) {
+            try { await navigator.share({ title: `Order ${order.order_number}`, text }); } catch (e) {}
+        } else {
+            navigator.clipboard.writeText(text);
+            showToast('Receipt copied to clipboard!');
+        }
     };
 
     const filtered = filterStatus === 'all' ? orders : orders.filter(o => o.status === filterStatus);
@@ -159,9 +177,17 @@ export default function WebsiteOrdersPage() {
                                             <p className="font-bold text-gray-900 dark:text-gray-100 text-sm mt-1 truncate">{order.customer_name}</p>
                                             <p className="text-xs text-gray-400">{format(new Date(order.created_at), 'MMM d, yyyy · h:mm a')}</p>
                                         </div>
-                                        <div className="text-right flex-shrink-0">
-                                            <p className="font-black text-gray-900 dark:text-gray-100">Rs. {order.total_amount.toLocaleString()}</p>
-                                            <p className="text-xs text-gray-400">{order.website_order_items?.length || 0} item{order.website_order_items?.length !== 1 ? 's' : ''}</p>
+                                        <div className="text-right flex-shrink-0 flex items-center gap-4">
+                                            <div className="text-right">
+                                                <p className="font-black text-gray-900 dark:text-gray-100">Rs. {order.total_amount.toLocaleString()}</p>
+                                                <p className="text-xs text-gray-400">{order.website_order_items?.length || 0} item{order.website_order_items?.length !== 1 ? 's' : ''}</p>
+                                            </div>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleShare(order); }}
+                                                className="p-2.5 bg-gray-50 dark:bg-gray-800 text-gray-500 rounded-xl active:scale-90 transition-all"
+                                            >
+                                                <Share2 size={16} />
+                                            </button>
                                         </div>
                                         {isExpanded ? <ChevronUp size={18} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={18} className="text-gray-400 flex-shrink-0" />}
                                     </div>

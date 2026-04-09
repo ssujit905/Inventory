@@ -38,11 +38,34 @@ const ProductCard = ({ product }) => {
                         width: '100%',
                         aspectRatio: '1',
                         objectFit: 'cover',
-                        display: 'block'
+                        display: 'block',
+                        opacity: product.is_sold_out ? 0.6 : 1
                     }}
                 />
 
-
+                {product.is_sold_out && (
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(255,255,255,0.3)',
+                        zIndex: 2
+                    }}>
+                        <span style={{
+                            backgroundColor: '#ef4444',
+                            color: 'white',
+                            padding: '4px 10px',
+                            fontWeight: '900',
+                            fontSize: '0.7rem',
+                            borderRadius: '2px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}>Sold Out</span>
+                    </div>
+                )}
             </Link>
 
             <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '0.5rem' }}>

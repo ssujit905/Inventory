@@ -31,7 +31,54 @@ const ProductDetail = () => {
     const [selectedVariation, setSelectedVariation] = useState(1);
     const [isFavorite, setIsFavorite] = useState(false);
 
-    const product = products.find(p => p.id === parseInt(id));
+    const idNum = parseInt(id);
+    const product = products.find(p => p.id === idNum);
+
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [pickerAction, setPickerAction] = useState('buy'); // 'cart' or 'buy'
+    const [selectedSize, setSelectedSize] = useState('');
+    const [quantity, setQuantity] = useState(1);
+    const [touchStart, setTouchStart] = useState(0);
+
+    // Ratings state
+    const [ratings, setRatings] = useState([]);
+    const [loadingRatings, setLoadingRatings] = useState(true);
+
+    useEffect(() => {
+        if (id) fetchRatings();
+    }, [id]);
+
+    const fetchRatings = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('website_product_ratings')
+                .select('*')
+                .eq('product_id', id)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            setRatings(data || []);
+        } catch (err) {
+            console.error('Error fetching ratings:', err);
+        } finally {
+            setLoadingRatings(false);
+        }
+    };
+
+    const images = product?.images && product.images.length > 0 ? product.images : (product ? [{ url: product.image, label: '' }] : []);
+    const variations = product?.variations || [];
+    const averageRating = ratings.length > 0
+        ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
+        : 0;
+    
+    // Group images to identify unique variations (based on labels, normalized)
+    const normalizeLabel = (label) => (label || '').trim().toLowerCase();
+    const variationImages = images.filter((img, index, self) => 
+        img.label && self.findIndex(t => normalizeLabel(t.label) === normalizeLabel(img.label)) === index
+    );
+    
+    // If no labeled images exist, use the first image as the default variation
+    const displayVariations = variationImages.length > 0 ? variationImages : (images.length > 0 ? [images[0]] : []);
 
     // While products are still loading from Supabase, show a spinner
     // (avoids false "not found" on direct URL load / refresh)
@@ -52,52 +99,7 @@ const ProductDetail = () => {
         );
     }
 
-    const [isPickerOpen, setIsPickerOpen] = useState(false);
-    const [pickerAction, setPickerAction] = useState('buy'); // 'cart' or 'buy'
-    const [selectedSize, setSelectedSize] = useState('');
-    const [quantity, setQuantity] = useState(1);
-    const [touchStart, setTouchStart] = useState(0);
 
-    const images = product.images && product.images.length > 0 ? product.images : [{ url: product.image, label: '' }];
-    const variations = product.variations || [];
-    
-    // Ratings state
-    const [ratings, setRatings] = useState([]);
-    const [loadingRatings, setLoadingRatings] = useState(true);
-
-    useEffect(() => {
-        fetchRatings();
-    }, [id]);
-
-    const fetchRatings = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('website_product_ratings')
-                .select('*')
-                .eq('product_id', id)
-                .order('created_at', { ascending: false });
-            
-            if (error) throw error;
-            setRatings(data || []);
-        } catch (err) {
-            console.error('Error fetching ratings:', err);
-        } finally {
-            setLoadingRatings(false);
-        }
-    };
-
-    const averageRating = ratings.length > 0
-        ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
-        : 0;
-    
-    // Group images to identify unique variations (based on labels, normalized)
-    const normalizeLabel = (label) => (label || '').trim().toLowerCase();
-    const variationImages = images.filter((img, index, self) => 
-        img.label && self.findIndex(t => normalizeLabel(t.label) === normalizeLabel(img.label)) === index
-    );
-    
-    // If no labeled images exist, use the first image as the default variation
-    const displayVariations = variationImages.length > 0 ? variationImages : [images[0]];
 
     const isSelectionComplete = () => {
         // Must select a size if sizes exist
@@ -330,14 +332,14 @@ const ProductDetail = () => {
                                         className="image-nav-btn"
                                         style={{ left: '10px' }}
                                     >
-                                        <ChevronLeft size={24} />
+                                        <ChevronLeft size={36} strokeWidth={2.5} />
                                     </button>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); handleNext(); }}
                                         className="image-nav-btn"
                                         style={{ right: '10px' }}
                                     >
-                                        <ChevronRight size={24} />
+                                        <ChevronRight size={36} strokeWidth={2.5} />
                                     </button>
                                 </>
                             )}
@@ -393,8 +395,20 @@ const ProductDetail = () => {
                     {/* Pricing Section */}
                     <div style={{ backgroundColor: 'white', padding: '1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {(product.price || 0).toLocaleString()}</span>
+                                {product.is_sold_out && (
+                                    <span style={{
+                                        backgroundColor: '#ef4444',
+                                        color: 'white',
+                                        padding: '4px 10px',
+                                        fontWeight: '900',
+                                        fontSize: '0.7rem',
+                                        borderRadius: '4px',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.05em'
+                                    }}>Sold Out</span>
+                                )}
                             </div>
                             <button
                                 onClick={() => setIsFavorite(!isFavorite)}
@@ -586,23 +600,33 @@ const ProductDetail = () => {
                         <MessageCircle size={20} color="var(--primary-blue)" />
                     </div>
                     <button
-                        onClick={handleAddToCartTrigger}
-                        style={{ width: '44px', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)', padding: 0, minWidth: '44px' }}
+                        onClick={product.is_sold_out ? null : handleAddToCartTrigger}
+                        style={{ 
+                            width: '44px', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+                            background: product.is_sold_out ? '#f1f5f9' : '#f8fafc', 
+                            borderRadius: '12px', border: '1px solid var(--border-color)', 
+                            padding: 0, minWidth: '44px',
+                            opacity: product.is_sold_out ? 0.6 : 1,
+                            cursor: product.is_sold_out ? 'not-allowed' : 'pointer'
+                        }}
                     >
-                        <ShoppingCart size={20} color="var(--primary-blue)" />
+                        <ShoppingCart size={20} color={product.is_sold_out ? "#94a3b8" : "var(--primary-blue)"} />
                     </button>
                 </div>
                 <button
-                    onClick={handleBuyNowTrigger}
+                    onClick={product.is_sold_out ? null : handleBuyNowTrigger}
                     className="btn btn-primary"
                     style={{
                         flex: 1,
                         fontSize: '1rem',
                         fontWeight: '800',
-                        borderRadius: '12px'
+                        borderRadius: '12px',
+                        backgroundColor: product.is_sold_out ? '#94a3b8' : 'var(--primary-red)',
+                        border: 'none',
+                        cursor: product.is_sold_out ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    Buy Now
+                    {product.is_sold_out ? 'Sold Out' : 'Buy Now'}
                 </button>
             </div>
 
@@ -747,30 +771,27 @@ const ProductDetail = () => {
                     position: absolute;
                     top: 50%;
                     transform: translateY(-50%);
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 50%;
-                    background-color: rgba(255, 255, 255, 0.8);
-                    color: #333;
+                    width: 44px;
+                    height: 44px;
+                    background: transparent;
+                    color: #1e293b; /* Dark slate color for the icon */
                     border: none;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     cursor: pointer;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    opacity: 0;
-                    transition: all 0.2s ease;
-                    z-index: 5;
-                }
-
-                .swiper-container:hover .image-nav-btn {
-                    opacity: 1;
+                    opacity: 0.85;
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    z-index: 10;
+                    padding: 0;
+                    /* Strong white glow so it's visible even on dark product images */
+                    filter: drop-shadow(0 0 8px rgba(255,255,255,1)) drop-shadow(0 2px 4px rgba(255,255,255,0.8));
                 }
 
                 .image-nav-btn:hover {
-                    background-color: white;
                     color: var(--primary-red);
-                    transform: translateY(-50%) scale(1.1);
+                    transform: translateY(-50%) scale(1.15);
+                    opacity: 1;
                 }
 
                 @keyframes slideUp {
@@ -780,7 +801,9 @@ const ProductDetail = () => {
 
                 @media (max-width: 991px) {
                     .image-nav-btn {
-                        display: none !important; // Only show arrows on desktop, swipe for mobile
+                        opacity: 1 !important;
+                        width: 32px;
+                        height: 32px;
                     }
                 }
 
@@ -814,7 +837,10 @@ const ProductDetail = () => {
                         top: 20px !important;
                     }
                     .mobile-floating-nav {
-                        display: none !important;
+                        display: flex !important;
+                        top: 15px !important;
+                        left: 15px !important;
+                        right: 15px !important;
                     }
                 }
             `}</style>

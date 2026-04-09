@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from "react-router-dom"
 import DashboardLayout from "../layouts/DashboardLayout"
-import { Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock, IndianRupee } from 'lucide-react'
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { Globe, Package, Activity, AlertTriangle, TrendingUp, ShoppingBag, ArrowRightLeft, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar
@@ -29,6 +29,7 @@ export default function AdminDashboard() {
     const [monthlySalesCount, setMonthlySalesCount] = useState<{ month: string; delivered: number; returns: number }[]>([]);
     const [statusData, setStatusData] = useState<{ name: string; value: number; color: string }[]>([]);
     const [fastMovingSkus, setFastMovingSkus] = useState<{ sku: string; qty: number }[]>([]);
+    const [websiteOrdersCount, setWebsiteOrdersCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
         () => fetchDashboardData(false),
         {
             channelName: 'dashboard-updates-v2',
-            tables: ['sales', 'product_lots', 'transactions'],
+            tables: ['sales', 'product_lots', 'transactions', 'website_orders'],
             pollMs: 10000
         }
     );
@@ -54,31 +55,40 @@ export default function AdminDashboard() {
             const todayStr = format(now, 'yyyy-MM-dd');
             const yearStart = startOfYear(now);
 
-            const { data: globalSales, error: salesError } = await supabase
-                .from('sales')
-                .select('parcel_status, order_date');
-
-            if (salesError) throw salesError;
-
-            const totalDelivered = globalSales?.filter(s => s.parcel_status === 'delivered').length || 0;
-            const totalReturns = globalSales?.filter(s => s.parcel_status === 'returned').length || 0;
-
-            const { data: productsData, error: prodError } = await supabase
-                .from('products')
-                .select(`
-                    id,
-                    min_stock_alert,
-                    product_lots(
+            const [salesRes, productsRes, websiteOrdersRes] = await Promise.all([
+                supabase
+                    .from('sales')
+                    .select('parcel_status, order_date'),
+                supabase
+                    .from('products')
+                    .select(`
                         id,
-                        transactions(
-                            type,
-                            quantity_changed,
-                            sales(parcel_status)
+                        min_stock_alert,
+                        product_lots(
+                            id,
+                            transactions(
+                                type,
+                                quantity_changed,
+                                sales(parcel_status)
+                            )
                         )
-                    )
-                `);
+                    `),
+                supabase
+                    .from('website_orders')
+                    .select('id, status')
+                    .eq('status', 'pending')
+            ]);
 
-            if (prodError) throw prodError;
+            if (salesRes.error) throw salesRes.error;
+            if (productsRes.error) throw productsRes.error;
+
+            setWebsiteOrdersCount(websiteOrdersRes.data?.length || 0);
+
+            const globalSales = salesRes.data || [];
+            const productsData = productsRes.data;
+
+            const totalDelivered = globalSales.filter((s: any) => s.parcel_status === 'delivered').length;
+            const totalReturns = globalSales.filter((s: any) => s.parcel_status === 'returned').length;
 
             const productRemaining = (productsData || []).map((p: any) => {
                 const totalRemaining = (p.product_lots || []).reduce((sum: number, lot: any) => {
@@ -277,20 +287,35 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Stats Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        {/* Stats Vertical Stack */}
+                        <div className="grid grid-cols-1 gap-6">
+                            <StatCard
+                                title="Website Orders"
+                                value={websiteOrdersCount.toString()}
+                                desc="Pending web orders"
+                                icon={<Globe size={24} strokeWidth={1.5} />}
+                                accent="bg-primary"
+                                onClick={() => navigate('/admin/website/orders')}
+                            />
+                            <StatCard
+                                title="MTD Success Rate"
+                                value={`${stats.deliverySuccessRate.toFixed(1)}%`}
+                                desc="Handled parcels success"
+                                icon={<TrendingUp size={24} strokeWidth={1.5} />}
+                                accent="bg-emerald-500"
+                            />
                             <StatCard
                                 title="Total Delivered"
                                 value={stats.totalDelivered.toString()}
                                 desc="Global successful orders"
-                                icon={<ShoppingBag size={20} strokeWidth={1.5} />}
+                                icon={<ShoppingBag size={24} strokeWidth={1.5} />}
                                 accent="bg-emerald-500"
                             />
                             <StatCard
                                 title="Total Returns"
                                 value={stats.totalReturns.toString()}
                                 desc="Global parcel returns"
-                                icon={<ArrowRightLeft size={20} strokeWidth={1.5} />}
+                                icon={<ArrowRightLeft size={24} strokeWidth={1.5} />}
                                 accent="bg-rose-500"
                                 isWarning={stats.totalReturns > 0}
                             />
@@ -300,13 +325,6 @@ export default function AdminDashboard() {
                                 processing={stats.processingCount}
                                 sent={stats.sentCount}
                                 accent="bg-amber-500"
-                            />
-                            <StatCard
-                                title="MTD Success Rate"
-                                value={`${stats.deliverySuccessRate.toFixed(1)}%`}
-                                desc="Delivered / (Delivered + Returned)"
-                                icon={<TrendingUp size={20} strokeWidth={1.5} />}
-                                accent="bg-emerald-500"
                             />
                         </div>
 
@@ -510,9 +528,12 @@ export default function AdminDashboard() {
     );
 }
 
-function StatCard({ title, value, desc, icon, accent, isWarning = false }: any) {
+function StatCard({ title, value, desc, icon, accent, isWarning = false, onClick }: any) {
     return (
-        <div className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''}`}>
+        <div 
+            onClick={onClick}
+            className={`group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px] ${isWarning ? 'ring-1 ring-rose-500/20' : ''} ${onClick ? 'cursor-pointer active:scale-95' : ''}`}
+        >
             <div className="flex items-start justify-between">
                 <div>
                     <p className="text-[10px] font-bold text-gray-500 dark:text-gray-300 uppercase tracking-widest mb-1">{title}</p>
