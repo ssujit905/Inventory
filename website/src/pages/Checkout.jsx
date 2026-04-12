@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { Truck, CreditCard, ArrowLeft, Loader2, MapPin, Info } from 'lucide-react';
+import { Truck, CreditCard, ArrowLeft, Loader2, MapPin, Info, AlertTriangle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
-    const { customer } = useCustomer();
+    const { customer, login } = useCustomer();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -31,6 +31,7 @@ const Checkout = () => {
     const [creatingAccount, setCreatingAccount] = useState(false);
     const [accountCreated, setAccountCreated] = useState(false);
     const [cartReady, setCartReady] = useState(false);
+    const [checkoutError, setCheckoutError] = useState(null);
 
     // Delivery branches from DB
     const [branches, setBranches] = useState([]);
@@ -136,43 +137,47 @@ const Checkout = () => {
 
         setSaving(true);
         try {
-            const { data: order, error: orderError } = await supabase
-                .from('website_orders')
-                .insert({
-                    customer_name: formData.fullName,
-                    phone: formData.phone,
-                    phone2: formData.phone2,
-                    address: formData.address,
-                    city: formData.city,
-                    payment_method: formData.paymentMethod,
-                    total_amount: grandTotal,
-                    shipping_fee: shippingFee,
-                    status: 'pending'
-                })
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-            if (!order) throw new Error('Could not retrieve order. Ensure RLS SELECT policy exists on website_orders.');
-
-            const items = checkoutItems.map(item => ({
-                order_id: order.id,
+            // Prepare Items for Atomic RPC
+            const orderItems = checkoutItems.map(item => ({
+                variant_id: item.variant_id,
+                quantity: item.quantity,
+                unit_price: item.price,
                 product_id: item.id,
                 product_title: item.title,
-                product_image: item.image || '',
-                quantity: item.quantity,
-                unit_price: item.price
+                sku: item.sku
             }));
 
-            const { error: itemsError } = await supabase
-                .from('website_order_items')
-                .insert(items);
+            // SINGLE ATOMIC CALL
+            const { data: result, error: rpcError } = await supabase.rpc('create_atomic_website_order', {
+                p_customer_name: formData.fullName,
+                p_phone: formData.phone,
+                p_phone2: formData.phone2,
+                p_address: formData.address,
+                p_city: formData.city,
+                p_payment_method: formData.paymentMethod,
+                p_shipping_fee: shippingFee,
+                p_total_amount: grandTotal,
+                p_items: orderItems
+            });
 
-            if (itemsError) throw itemsError;
+            setCheckoutError(null);
+            if (rpcError) {
+                console.error("Atomic Purchase Error:", rpcError.message);
+                if (rpcError.message?.includes('STOCK')) {
+                    const itemName = rpcError.message.split(': ')[1] || 'An item in your cart';
+                    setCheckoutError(`Oops! We just ran out of stock for "${itemName}". Please remove it from your cart or adjust the quantity to continue.`);
+                    return; // Stop here, don't clear cart
+                }
+                throw rpcError;
+            }
 
-            setOrderNumber(order.order_number);
-            setIsOrdered(true);
-            if (!isBuyNow) clearSelectedItems();
+            if (result && result.order_number) {
+                setOrderNumber(result.order_number);
+                setIsOrdered(true);
+                if (!isBuyNow) clearSelectedItems();
+            } else {
+                throw new Error("Order creation succeeded but no order number was returned.");
+            }
         } catch (err) {
             alert('Order failed: ' + (err.message || 'Please try again'));
         } finally {
@@ -180,7 +185,6 @@ const Checkout = () => {
         }
     };
 
-    const { login } = useCustomer();
     const handleCreateAccount = async () => {
         if (pin.length < 4) return alert('Please enter a 4-digit PIN');
         setCreatingAccount(true);
@@ -285,8 +289,16 @@ const Checkout = () => {
                             <div className="success-actions">
                                 <button
                                     onClick={() => navigate('/my-orders')}
+                                    disabled={!accountCreated && !customer}
                                     className="btn btn-primary"
-                                    style={{ flex: 1, padding: '1rem', fontWeight: '800' }}
+                                    title={(!accountCreated && !customer) ? "Please save your PIN first" : ""}
+                                    style={{ 
+                                        flex: 1, 
+                                        padding: '1rem', 
+                                        fontWeight: '800',
+                                        opacity: (!accountCreated && !customer) ? 0.5 : 1,
+                                        cursor: (!accountCreated && !customer) ? 'not-allowed' : 'pointer'
+                                    }}
                                 >
                                     Track Your Orders
                                 </button>
@@ -313,6 +325,17 @@ const Checkout = () => {
                             <h2 className="section-title" style={{ margin: 0 }}>Checkout</h2>
                         </div>
 
+                        {checkoutError && (
+                            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', boxShadow: '0 4px 15px rgba(239,68,68,0.1)' }}>
+                                <div style={{ background: 'white', padding: '0.5rem', borderRadius: '0.75rem', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+                                    <AlertTriangle size={24} color="#ef4444" strokeWidth={2.5} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <h4 style={{ color: '#991b1b', fontWeight: '900', margin: '0 0 0.25rem 0', fontSize: '1.1rem' }}>Item Sold Out</h4>
+                                    <p style={{ color: '#b91c1c', margin: 0, fontSize: '0.9rem', lineHeight: '1.5', fontWeight: '500' }}>{checkoutError}</p>
+                                </div>
+                            </div>
+                        )}
                         <form onSubmit={handleSubmit} className="checkout-layout">
                             {/* ── Left: Form Fields ── */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '100px' }}>

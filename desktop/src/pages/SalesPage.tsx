@@ -122,34 +122,44 @@ export default function SalesPage() {
     );
 
     const fetchSales = async () => {
-        // Fetch sales and their associated transactions to identify products
-        const { data } = await supabase
-            .from('sales')
-            .select(`
-                *,
-                sale_items (
-                    id,
-                    quantity,
-                    sold_amount,
-                    product:products(sku)
-                )
-            `)
-            .order('created_at', { ascending: false })
-            .limit(100);
+        try {
+            const { data, error } = await supabase
+                .from('sales')
+                .select(`
+                    *,
+                    sale_items (
+                        id,
+                        quantity,
+                        sold_amount,
+                        product:products(sku)
+                    ),
+                    website_orders!sale_id(id)
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100);
 
-        if (data) {
-            const processedSales = data.map((sale: any) => {
-                return {
-                    ...sale,
-                    items: (sale.sale_items || []).map((i: any) => ({
-                        id: i.id,
-                        product: { sku: i.product?.sku || 'SKU' },
-                        quantity: i.quantity,
-                        sold_amount: i.sold_amount ?? null
-                    }))
-                };
-            });
-            setSales(processedSales as any);
+            if (error) {
+                console.error('Fetch error:', error);
+                return;
+            }
+
+            if (data) {
+                const processedSales = data.map((sale: any) => {
+                    return {
+                        ...sale,
+                        is_website: !!(sale.website_orders && sale.website_orders.length > 0),
+                        items: (sale.sale_items || []).map((i: any) => ({
+                            id: i.id,
+                            product: { sku: i.product?.sku || 'SKU' },
+                            quantity: i.quantity,
+                            sold_amount: i.sold_amount ?? null
+                        }))
+                    };
+                });
+                setSales(processedSales as any);
+            }
+        } catch (err) {
+            console.error('Catch error:', err);
         }
     };
 

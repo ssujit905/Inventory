@@ -86,11 +86,11 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     };
 
     const fetchPendingWebItems = async () => {
-        // Pending Orders
+        // Processing Orders Alert
         const { count: ordersCount } = await supabase
             .from('website_orders')
             .select('id', { count: 'exact', head: true })
-            .eq('status', 'pending');
+            .eq('status', 'processing');
         setPendingOrdersCount(ordersCount || 0);
 
         // Pending Returns

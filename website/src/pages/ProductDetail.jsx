@@ -19,26 +19,69 @@ import {
     User,
     Loader2
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 const ProductDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { addToCart, cart } = useCart();
-    const { products, loading: productsLoading } = useProducts();
-    const [activeImageIndex, setActiveImageIndex] = useState(0);
-    const [selectedVariation, setSelectedVariation] = useState(1);
-    const [isFavorite, setIsFavorite] = useState(false);
-
-    const idNum = parseInt(id);
-    const product = products.find(p => p.id === idNum);
-
+    const [product, setProduct] = useState(null);
+    const [variants, setVariants] = useState([]);
+    const [selectedColor, setSelectedColor] = useState(null);
+    const [selectedSize, setSelectedSize] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [isPickerOpen, setIsPickerOpen] = useState(false);
-    const [pickerAction, setPickerAction] = useState('buy'); // 'cart' or 'buy'
-    const [selectedSize, setSelectedSize] = useState('');
+    const [pickerAction, setPickerAction] = useState('buy');
     const [quantity, setQuantity] = useState(1);
     const [touchStart, setTouchStart] = useState(0);
+    const [isFavorite, setIsFavorite] = useState(false);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+
+    // ── VARIANT LOGIC ──
+    const uniqueColors = useMemo(() => 
+        Array.from(new Set(variants.map(v => v.color))), 
+        [variants]
+    );
+
+    const filteredSizes = useMemo(() => 
+        variants.filter(v => v.color === selectedColor),
+        [variants, selectedColor]
+    );
+
+    const currentVariant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
+    const activePrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);
+
+    useEffect(() => {
+        const fetchProductData = async () => {
+            try {
+                // 1. Fetch Product Basic Info with Images
+                const { data: p } = await supabase
+                    .from('website_products')
+                    .select('*, website_product_images(*)')
+                    .eq('id', id)
+                    .single();
+                
+                if (!p) return;
+                setProduct(p);
+
+                // 2. Fetch Variants with real-time stock
+                const { data: v } = await supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id);
+                setVariants(v || []);
+
+                // Auto-select first color if none selected
+                if (v && v.length > 0 && !selectedColor) {
+                    setSelectedColor(v[0].color);
+                }
+            } catch (err) {
+                console.error("Fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProductData();
+    }, [id]);
 
     // Ratings state
     const [ratings, setRatings] = useState([]);
@@ -65,7 +108,7 @@ const ProductDetail = () => {
         }
     };
 
-    const images = product?.images && product.images.length > 0 ? product.images : (product ? [{ url: product.image, label: '' }] : []);
+    const images = product?.website_product_images || [];
     const variations = product?.variations || [];
     const averageRating = ratings.length > 0
         ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
@@ -80,9 +123,8 @@ const ProductDetail = () => {
     // If no labeled images exist, use the first image as the default variation
     const displayVariations = variationImages.length > 0 ? variationImages : (images.length > 0 ? [images[0]] : []);
 
-    // While products are still loading from Supabase, show a spinner
-    // (avoids false "not found" on direct URL load / refresh)
-    if (productsLoading) {
+    // While product is still loading, show a spinner
+    if (loading) {
         return (
             <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Loader2 size={40} className="animate-spin" color="var(--primary-red)" />
@@ -102,9 +144,7 @@ const ProductDetail = () => {
 
 
     const isSelectionComplete = () => {
-        // Must select a size if sizes exist
-        if (product.sizes && !selectedSize) return false;
-        return true;
+        return !!selectedColor && !!selectedSize;
     };
 
     const handleNext = () => {
@@ -138,23 +178,29 @@ const ProductDetail = () => {
     const handleFinalPurchase = (e) => {
         if (!isSelectionComplete()) return;
         
-        // Build the variant-specific product for the cart
-        const variantProduct = {
+        if (!currentVariant || currentVariant.current_stock <= 0) {
+            alert('Sorry, this specific variation is out of stock!');
+            return;
+        }
+
+        const cartItem = {
             ...product,
-            title: `${product.title}${images[activeImageIndex]?.label ? ` (${images[activeImageIndex].label})` : ''}${selectedSize ? ` - ${selectedSize}` : ''}`,
+            price: activePrice,
+            variant_id: currentVariant.variant_id,
+            sku: currentVariant.sku,
+            selectedColor,
+            selectedSize,
             quantity: quantity,
-            selectedSize: selectedSize,
-            variationLabel: images[activeImageIndex]?.label,
-            selectedImage: images[activeImageIndex]?.url
+            image: images[activeImageIndex]?.image_url || product.image
         };
         
         if (pickerAction === 'buy') {
             setIsPickerOpen(false);
-            navigate('/checkout', { state: { buyNowItem: variantProduct } });
+            navigate('/checkout', { state: { buyNowItem: cartItem } });
         } else {
-            addToCart(variantProduct);
+            addToCart(cartItem);
             setIsPickerOpen(false);
-            animateToCart(e, images[activeImageIndex]?.url);
+            animateToCart(e, cartItem.image);
         }
     };
 
@@ -316,11 +362,13 @@ const ProductDetail = () => {
                         >
                             <img
                                 key={activeImageIndex} // Key ensures smooth re-render logic if needed
-                                src={images[activeImageIndex]?.url}
+                                src={images[activeImageIndex]?.image_url}
                                 alt={product.title}
+                                onClick={() => setIsFullscreenOpen(true)}
                                 style={{ 
                                     width: '100%', height: '100%', objectFit: 'cover',
-                                    animation: 'fadeIn 0.3s ease-in-out'
+                                    animation: 'fadeIn 0.3s ease-in-out',
+                                    cursor: 'pointer'
                                 }}
                             />
 
@@ -386,7 +434,7 @@ const ProductDetail = () => {
                                         transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    <img src={img.url} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: activeImageIndex === i ? 1 : 0.7 }} />
+                                    <img src={img.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: activeImageIndex === i ? 1 : 0.7 }} />
                                 </div>
                             ))}
                         </div>
@@ -396,7 +444,7 @@ const ProductDetail = () => {
                     <div style={{ backgroundColor: 'white', padding: '1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {(product.price || 0).toLocaleString()}</span>
+                                <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
                                 {product.is_sold_out && (
                                     <span style={{
                                         backgroundColor: '#ef4444',
@@ -641,10 +689,10 @@ const ProductDetail = () => {
                         {/* Header: Small Img + Title */}
                         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                             <div className="card" style={{ width: '80px', height: '80px', borderRadius: '0.75rem', flexShrink: 0 }}>
-                                <img src={images[activeImageIndex]?.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img src={images[activeImageIndex]?.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <p style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>Rs. {(product.price || 0).toLocaleString()}</p>
+                                <p style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>Rs. {activePrice.toLocaleString()}</p>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-gray)', marginTop: '2px' }}>
                                     {images[activeImageIndex]?.label ? `Variation: ${images[activeImageIndex].label}` : 'Select Variation'}
                                 </p>
@@ -657,85 +705,84 @@ const ProductDetail = () => {
                         {/* Options Selection */}
                         <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingBottom: '80px' }}>
                             
-                            {/* Visual Variation Selection (Grouped by Label) */}
+                            {/* COLOR SELECTION */}
                             <div style={{ marginBottom: '25px' }}>
-                                <p style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px' }}>Choose Variation</p>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                                    {displayVariations.map((img, i) => {
-                                        // Find index in main images array for this variation by label (normalized)
-                                        const mainIdx = img.label
-                                            ? images.findIndex(m => normalizeLabel(m.label) === normalizeLabel(img.label))
-                                            : images.findIndex(m => m.url === img.url);
-                                        const isSelected = normalizeLabel(images[activeImageIndex]?.label) === normalizeLabel(img.label) || (!img.label && activeImageIndex === mainIdx);
-                                        
+                                <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Select Color</p>
+                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                    {uniqueColors.map((color) => {
+                                        const isSelected = selectedColor === color;
+                                        const hasStock = variants.some(v => v.color === color && v.current_stock > 0);
                                         return (
                                             <div 
-                                                key={i} 
-                                                onClick={() => setActiveImageIndex(mainIdx)}
+                                                key={color} 
+                                                onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
                                                 style={{
-                                                    aspectRatio: '1/1',
-                                                    borderRadius: '8px',
-                                                    overflow: 'hidden',
-                                                    border: isSelected ? '2.5px solid var(--primary-red)' : '1px solid #f0f0f0',
+                                                    padding: '8px 20px',
+                                                    borderRadius: '12px',
+                                                    border: isSelected ? '2px solid var(--primary-red)' : '1px solid #e2e8f0',
+                                                    background: isSelected ? 'rgba(239, 68, 68, 0.05)' : (hasStock ? 'white' : '#f8fafc'),
                                                     cursor: 'pointer',
-                                                    transition: 'all 0.1s ease',
-                                                    opacity: isSelected ? 1 : 0.6,
-                                                    transform: isSelected ? 'scale(1.05)' : 'scale(1)'
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: isSelected ? '900' : '600',
+                                                    color: isSelected ? 'var(--primary-red)' : (hasStock ? '#475569' : '#cbd5e1'),
+                                                    opacity: hasStock ? 1 : 0.6
                                                 }}
                                             >
-                                                <img src={img.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                {img.label && (
-                                                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: '8px', textAlign: 'center', padding: '2px' }}>
-                                                        {img.label}
-                                                    </div>
-                                                )}
+                                                {color}
                                             </div>
                                         );
                                     })}
                                 </div>
-                                {images[activeImageIndex]?.label && (
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--primary-red)', fontWeight: '700', marginTop: '8px' }}>
-                                        Selected: {images[activeImageIndex].label}
-                                    </p>
-                                )}
                             </div>
 
-                            {/* Size Selection from Simple Field */}
-                            {product.sizes && (
+                            {/* SIZE SELECTION (Filtered by Color) */}
+                            {selectedColor && (
                                 <div style={{ marginBottom: '20px' }}>
-                                    <p style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '10px' }}>Select Size</p>
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        {product.sizes.split(',').map(size => {
-                                            const s = size.trim();
-                                            if (!s) return null;
+                                    <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>2. Select Size</p>
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        {filteredSizes.map(v => {
+                                            const isSelected = selectedSize === v.size;
+                                            const isOOS = v.current_stock <= 0;
                                             return (
                                                 <div 
-                                                    key={s} 
-                                                    onClick={() => setSelectedSize(s)}
+                                                    key={v.variant_id} 
+                                                    onClick={() => !isOOS && setSelectedSize(v.size)}
                                                     style={{
-                                                        minWidth: '45px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        border: selectedSize === s ? '1.5px solid var(--primary-red)' : '1px solid #ddd',
-                                                        borderRadius: '6px', fontSize: '0.85rem', fontWeight: selectedSize === s ? '700' : '500',
-                                                        cursor: 'pointer', backgroundColor: selectedSize === s ? 'rgba(var(--primary-red-rgb), 0.05)' : 'white'
+                                                        minWidth: '60px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        border: isSelected ? '2px solid var(--primary-red)' : '1px solid #e2e8f0',
+                                                        borderRadius: '12px', 
+                                                        fontSize: '0.9rem', 
+                                                        fontWeight: isSelected ? '900' : '600',
+                                                        cursor: isOOS ? 'not-allowed' : 'pointer',
+                                                        position: 'relative',
+                                                        backgroundColor: isSelected ? 'rgba(239, 68, 68, 0.05)' : (isOOS ? '#f8fafc' : 'white'),
+                                                        color: isOOS ? '#cbd5e1' : (isSelected ? 'var(--primary-red)' : '#475569'),
+                                                        opacity: isOOS ? 0.6 : 1
                                                     }}
                                                 >
-                                                    {s}
+                                                    {v.size}
+                                                    {isOOS && (
+                                                        <div style={{ position: 'absolute', width: '100%', height: '1.5px', background: '#cbd5e1', transform: 'rotate(-25deg)' }} />
+                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
+                                    {currentVariant && (
+                                        <p style={{ fontSize: '0.75rem', marginTop: '10px', fontWeight: '800', color: currentVariant.current_stock < 5 ? '#ef4444' : '#10b981' }}>
+                                            {currentVariant.current_stock < 5 ? `⚠️ Only ${currentVariant.current_stock} left!` : '✅ In Stock'}
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
-
-
                             {/* Quantity Control */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
-                                <p style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Quantity</p>
-                                <div style={{ display: 'flex', border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: '35px', height: '35px', border: 'none', background: '#f5f5f5' }}>-</button>
-                                    <div style={{ width: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 'bold' }}>{quantity}</div>
-                                    <button onClick={() => setQuantity(q => q + 1)} style={{ width: '35px', height: '35px', border: 'none', background: '#f5f5f5' }}>+</button>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '15px', background: '#f8fafc', borderRadius: '15px' }}>
+                                <p style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>Quantity</p>
+                                <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', background: 'white shadow-sm' }}>
+                                    <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: '40px', height: '40px', border: 'none', background: 'transparent', fontWeight: 'bold' }}>-</button>
+                                    <div style={{ width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: '900' }}>{quantity}</div>
+                                    <button onClick={() => setQuantity(q => q + 1)} style={{ width: '40px', height: '40px', border: 'none', background: 'transparent', fontWeight: 'bold' }}>+</button>
                                 </div>
                             </div>
                         </div>
@@ -760,8 +807,75 @@ const ProductDetail = () => {
                 </div>
             )}
 
+            {/* Fullscreen Image Overlay */}
+            {isFullscreenOpen && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 100000,
+                    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(10px)'
+                }}>
+                    <button 
+                        onClick={() => setIsFullscreenOpen(false)}
+                        style={{
+                            position: 'absolute', top: '20px', left: '20px',
+                            background: 'rgba(255,255,255,0.1)', border: 'none',
+                            color: 'white', padding: '10px', borderRadius: '50%',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                            zIndex: 100001
+                        }}
+                    >
+                        <X size={28} />
+                    </button>
+                    
+                    {/* Main Fullscreen Image */}
+                    <img 
+                        key={activeImageIndex}
+                        src={images[activeImageIndex]?.image_url} 
+                        alt={product.title}
+                        style={{
+                            maxWidth: '100vw', maxHeight: '100vh', 
+                            objectFit: 'contain', animation: 'fadeIn 0.3s ease-out'
+                        }}
+                    />
+
+                    {/* Desktop/Fullscreen Arrow Nav */}
+                    {images.length > 1 && (
+                        <>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                                style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: '10px', opacity: 0.8 }}
+                            >
+                                <ChevronLeft size={48} strokeWidth={2} />
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: '10px', opacity: 0.8 }}
+                            >
+                                <ChevronRight size={48} strokeWidth={2} />
+                            </button>
+                            <div style={{
+                                position: 'absolute', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+                                color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px',
+                                fontSize: '0.85rem', fontWeight: 'bold'
+                            }}>
+                                {activeImageIndex + 1} / {images.length}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
             {/* Custom Animations & Swiper Styles */}
             <style jsx="true">{`
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                .animate-spin {
+                    animation: spin 1s linear infinite;
+                }
+
                 @keyframes fadeIn {
                     from { opacity: 0; }
                     to { opacity: 1; }

@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import {
     ShoppingBag, Loader2, ChevronDown, ChevronUp,
     Package, Truck, Check, X, Clock, AlertTriangle, Globe, Phone, MapPin, Mail,
-    ArrowUpCircle, Info, Star, Save
+    ArrowUpCircle, Info, Star, Save, RotateCcw
 } from 'lucide-react';
 
 interface OrderItem {
@@ -15,6 +15,7 @@ interface OrderItem {
     product_image: string;
     quantity: number;
     unit_price: number;
+    sku: string;
 }
 
 interface Order {
@@ -38,12 +39,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
     pending: { label: 'Pending', color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Clock size={12} /> },
     confirmed: { label: 'Confirmed', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Check size={12} /> },
     processing: { label: 'Processing', color: 'bg-violet-50 text-violet-600 border-violet-200', icon: <Package size={12} /> },
-    shipped: { label: 'Shipped', color: 'bg-cyan-50 text-cyan-600 border-cyan-200', icon: <Truck size={12} /> },
+    sent: { label: 'Sent', color: 'bg-cyan-50 text-cyan-600 border-cyan-200', icon: <Truck size={12} /> },
     delivered: { label: 'Delivered', color: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <Check size={12} /> },
+    returned: { label: 'Returned', color: 'bg-slate-50 text-slate-600 border-slate-200', icon: <RotateCcw size={12} /> },
     cancelled: { label: 'Cancelled', color: 'bg-rose-50 text-rose-600 border-rose-200', icon: <X size={12} /> },
 };
 
-const STATUS_ORDER = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+const STATUS_ORDER = ['processing', 'sent', 'delivered', 'returned', 'cancelled'];
 
 export default function WebsiteOrdersPage() {
     const { profile } = useAuthStore();
@@ -237,7 +239,18 @@ export default function WebsiteOrdersPage() {
     };
 
     const updateStatus = async (id: number, status: string) => {
-        const { error } = await supabase.from('website_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+        let error;
+        if (status === 'cancelled') {
+            const { error: cancelError } = await supabase.rpc('handle_website_order_cancellation', {
+                p_order_id: id,
+                p_reason: 'ADMIN CANCEL'
+            });
+            error = cancelError;
+        } else {
+            const { error: updateError } = await supabase.from('website_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+            error = updateError;
+        }
+
         if (error) return showToast(error.message, 'error');
         setOrders(os => os.map(o => o.id === id ? { ...o, status } : o));
         showToast('Status updated!');
@@ -335,16 +348,6 @@ export default function WebsiteOrdersPage() {
                                     </div>
 
                                     {/* Action Header — Quick Push */}
-                                    {!isExpanded && order.status === 'pending' && (
-                                        <div className="px-4 pb-4 flex justify-end">
-                                            <button 
-                                                onClick={() => openPushModal(order)}
-                                                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-black shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
-                                            >
-                                                <ArrowUpCircle size={14} /> Push to App Sales
-                                            </button>
-                                        </div>
-                                    )}
 
                                     {/* Expanded Details */}
                                     {isExpanded && (
@@ -374,24 +377,24 @@ export default function WebsiteOrdersPage() {
                                                     {order.notes && <div className="text-sm text-gray-500">Notes: <span className="text-gray-700 dark:text-gray-300">{order.notes}</span></div>}
                                                 </div>
 
-                                                {/* Status Update */}
-                                                <div>
-                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Update Status</p>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {STATUS_ORDER.map(s => {
-                                                            const sc = STATUS_CONFIG[s];
-                                                            return (
-                                                                <button
-                                                                    key={s}
-                                                                    onClick={() => updateStatus(order.id, s)}
-                                                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${order.status === s ? sc.color : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-500 hover:border-gray-300'}`}
-                                                                >
-                                                                    {sc.icon} {sc.label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
+                                                 <div className="space-y-4">
+                                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Order Tracking</p>
+                                                     <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`h-10 w-10 rounded-full flex items-center justify-center ${cfg.color} bg-opacity-20`}>
+                                                                {cfg.icon}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">{cfg.label}</p>
+                                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Live Sync Active</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[9px] font-black text-primary px-2 py-1 bg-primary/5 rounded-md border border-primary/10 uppercase tracking-widest animate-pulse">Synced</span>
+                                                     </div>
+                                                     <p className="text-[9px] text-gray-400 font-medium leading-relaxed italic">
+                                                        This order is linked to your master Sales ledger. Changes made in the "Sales" tab will reflect here automatically.
+                                                     </p>
+                                                 </div>
                                             </div>
 
                                             {/* Order Items */}
@@ -404,7 +407,10 @@ export default function WebsiteOrdersPage() {
                                                                 <img src={item.product_image} alt="" className="w-12 h-12 object-cover rounded-lg flex-shrink-0" />
                                                             )}
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{item.product_title}</p>
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{item.product_title}</p>
+                                                                    {item.sku && <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-500 font-black">{item.sku}</span>}
+                                                                </div>
                                                                 <p className="text-xs text-gray-400">Qty: {item.quantity} × Rs. {item.unit_price.toLocaleString()}</p>
                                                             </div>
                                                             <p className="font-black text-gray-900 dark:text-gray-100 text-sm flex-shrink-0">

@@ -187,7 +187,8 @@ export default function ProfitPage() {
                 const returnAllocated = isReturned ? (qty / totalQtyInSale) * returnCost : 0;
                 const adsSpentPerSale = adSpentBySale.get(t.sale_id) || 0;
                 const adsAllocated = (qty / totalQtyInSale) * adsSpentPerSale;
-                const packagingPerSale = packagingBySale.get(t.sale_id) || 0;
+                const isCancelled = t.sale?.parcel_status === 'cancelled';
+                const packagingPerSale = isCancelled ? 0 : (packagingBySale.get(t.sale_id) || 0);
                 const packagingAllocated = (qty / totalQtyInSale) * packagingPerSale;
 
                 const existing = lotAgg.get(lotId);
@@ -240,9 +241,14 @@ export default function ProfitPage() {
                     const saleDate = new Date(t.sale?.created_at || 0);
                     const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
                     const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
-                    const profitLoss = status === 'returned'
-                        ? -(returnCost + adsSpentRow + packagingSpent)
-                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+                    let profitLoss = 0;
+                    if (status === 'returned') {
+                        profitLoss = -(returnCost + adsSpentRow + packagingSpent);
+                    } else if (status === 'cancelled') {
+                        profitLoss = -adsSpentRow;
+                    } else {
+                        profitLoss = soldAmount - (qty * costPrice + adsSpentRow + packagingSpent);
+                    }
                     return {
                         sale_id: t.sale_id,
                         lot_number: t.lot?.lot_number || 'N/A',

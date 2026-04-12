@@ -159,9 +159,17 @@ const MyOrders = () => {
     const confirmCancelOrder = async () => {
         setIsCancelling(true);
         try {
-            await supabase.from('website_orders').update({ status: 'cancelled', notes: `CUSTOMER: ${cancelReason}` }).eq('id', cancellingOrderId);
+            const { error: cancelError } = await supabase.rpc('handle_website_order_cancellation', {
+                p_order_id: cancellingOrderId,
+                p_reason: `CUSTOMER: ${cancelReason}`
+            });
+            if (cancelError) throw cancelError;
+            
             await fetchOrders();
             setShowCancelModal(false);
+        } catch (err) {
+            console.error('Cancel error:', err);
+            alert('Could not cancel order. Please contact support.');
         } finally {
             setIsCancelling(false);
         }
@@ -265,13 +273,9 @@ const MyOrders = () => {
     const getStatusStyle = (status) => {
         const s = status ? status.toLowerCase() : '';
         switch (s) {
-            case 'pending':
-                return { bg: '#fef3c7', color: '#d97706', border: '#fde68a' }; // Amber
-            case 'confirmed':
-                return { bg: '#e0e7ff', color: '#4338ca', border: '#c7d2fe' }; // Indigo
             case 'processing':
                 return { bg: '#e0f2fe', color: '#0284c7', border: '#bae6fd' }; // Light Blue
-            case 'shipped':
+            case 'sent':
                 return { bg: '#f3e8ff', color: '#9333ea', border: '#e9d5ff' }; // Purple
             case 'delivered':
                 return { bg: '#dcfce7', color: '#16a34a', border: '#bbf7d0' }; // Green
@@ -285,7 +289,7 @@ const MyOrders = () => {
     };
 
     const filteredOrders = activeStatus === 'All' ? orders : orders.filter(o => o.status?.toLowerCase() === activeStatus.toLowerCase());
-    const statuses = ['All', 'Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+    const statuses = ['All', 'Processing', 'Sent', 'Delivered', 'Returned', 'Cancelled'];
 
     return (
         <div className="section" style={{ background: '#f8fafc', minHeight: '90vh' }}>
@@ -341,16 +345,19 @@ const MyOrders = () => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                         {order.items?.map(item => (
                                             <div key={item.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                                <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                {item.product_image && <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />}
                                                 <div style={{ flex: 1 }}>
                                                     <p style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>{item.product_title}</p>
-                                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-gray)', fontWeight: '600' }}>Qty: {item.quantity}</p>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-gray)', fontWeight: '600' }}>Qty: {item.quantity}</p>
+                                                        {item.sku && <span style={{ fontSize: '0.65rem', padding: '1px 6px', background: '#f1f5f9', borderRadius: '4px', fontWeight: '700', color: 'var(--primary-blue)' }}>{item.sku}</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                     
-                                    {['pending', 'processing', 'confirmed'].includes(order.status?.toLowerCase()) && (
+                                    {['pending', 'processing'].includes(order.status?.toLowerCase()) && (
                                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-gray)' }}>Expect delivery in 2-3 days</span>
                                             <button 

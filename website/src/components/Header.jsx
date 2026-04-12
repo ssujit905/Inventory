@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
-import { ShoppingCart, Menu, X, Search, Home, ShoppingBag, MessageSquare, User, Settings as SettingsIcon, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Menu, X, Search, Home, ShoppingBag, MessageSquare, User, Settings as SettingsIcon, ChevronRight, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -144,6 +144,28 @@ const Header = () => {
                             </span>
                         )}
                     </Link>
+                    {customer && (
+                        <button 
+                            className="desktop-only hover-scale"
+                            onClick={() => {
+                                customerLogout();
+                                navigate('/');
+                            }}
+                            title="Sign Out"
+                            style={{ 
+                                color: '#ef4444', 
+                                padding: '8px', 
+                                borderRadius: '12px', 
+                                display: 'flex', 
+                                transition: 'all 0.2s', 
+                                background: '#fef2f2', 
+                                border: '1px solid #fecaca',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <LogOut size={22} strokeWidth={2.2} />
+                        </button>
+                    )}
                 </div>
             </div>
 

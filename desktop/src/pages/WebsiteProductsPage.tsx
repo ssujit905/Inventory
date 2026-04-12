@@ -7,6 +7,17 @@ import {
     Package, Loader2, Check, AlertTriangle, Globe
 } from 'lucide-react';
 
+interface ProductVariant {
+    id?: string;
+    product_id: number;
+    color: string;
+    size: string;
+    sku: string;
+    inventory_product_id: string;
+    current_stock?: number;
+    price?: number | string | null;
+}
+
 interface ProductImage {
     id?: number;
     image_url: string;
@@ -44,9 +55,11 @@ const CITIES = ['Kathmandu', 'Pokhara', 'Bhaktapur', 'Lalitpur', 'Bharatpur', 'B
 export default function WebsiteProductsPage() {
     const { profile } = useAuthStore();
     const [products, setProducts] = useState<WebsiteProduct[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editingProduct, setEditingProduct] = useState<WebsiteProduct | null>(null);
+    const [variants, setVariants] = useState<ProductVariant[]>([]);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
@@ -77,7 +90,32 @@ export default function WebsiteProductsPage() {
             .order('created_at', { ascending: false });
         if (error) showToast(error.message, 'error');
         else setProducts(data || []);
+
+        // Also fetch inventory items for mapping
+        const { data: inv } = await supabase.from('products').select('id, name, sku');
+        setInventoryItems(inv || []);
+
         setLoading(false);
+    };
+
+    const fetchVariants = async (productId: number) => {
+        const { data } = await supabase
+            .from('website_variant_stock_view')
+            .select('*')
+            .eq('parent_product_id', productId);
+        
+        if (data) {
+            setVariants(data.map(v => ({
+                id: v.variant_id,
+                product_id: v.parent_product_id,
+                color: v.color,
+                size: v.size,
+                sku: v.sku,
+                inventory_product_id: v.inventory_product_id,
+                current_stock: v.current_stock,
+                price: v.price?.toString() || ''
+            })));
+        }
     };
 
     const openAdd = () => {
@@ -105,6 +143,8 @@ export default function WebsiteProductsPage() {
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img }))
         });
+        setVariants([]);
+        fetchVariants(p.id);
         setShowForm(true);
     };
 
@@ -135,14 +175,17 @@ export default function WebsiteProductsPage() {
     };
 
     const handleSave = async () => {
-        if (!form.title.trim() || !form.price) return showToast('Title and price are required', 'error');
+        if (!form.title.trim()) return showToast('Title is required', 'error');
         setSaving(true);
         try {
+            const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
+            const computedBasePrice = prices.length > 0 ? Math.min(...prices) : 0;
+
             const productData = {
                 title: form.title.trim(),
                 description: form.description.trim(),
-                price: parseFloat(form.price),
-                original_price: form.original_price ? parseFloat(form.original_price) : null,
+                price: computedBasePrice,
+                original_price: null,
                 category: form.category,
                 city: form.city,
                 delivery_days: form.delivery_days,
@@ -167,7 +210,51 @@ export default function WebsiteProductsPage() {
                 productId = data.id;
             }
 
-            showToast(editingProduct ? 'Product updated!' : 'Product added!');
+            // --- SAVE VARIANTS ---
+            if (productId) {
+                // Remove deleted ones (best effort)
+                if (editingProduct) {
+                    const existingIds = variants.filter(v => v.id).map(v => v.id);
+                    let delQuery = supabase.from('website_variants').delete().eq('product_id', productId);
+                    if (existingIds.length > 0) {
+                        delQuery = delQuery.not('id', 'in', `(${existingIds.join(',')})`);
+                    }
+                    await delQuery; // errors ignored for rows blocked by foreign order constraints
+                }
+                // Clean Upsert by separating Inserts and Updates to bypass PostgREST null mapping bugs
+                if (variants.length > 0) {
+                    const toInsert = variants.filter(v => !v.id).map(v => ({
+                        product_id: productId,
+                        color: v.color,
+                        size: v.size,
+                        sku: v.sku,
+                        price: v.price ? parseFloat(v.price.toString()) : null,
+                        inventory_product_id: v.inventory_product_id
+                    }));
+
+                    const toUpdate = variants.filter(v => !!v.id);
+
+                    // 1. Explicitly Insert New Variants
+                    if (toInsert.length > 0) {
+                        const { error: insErr } = await supabase.from('website_variants').insert(toInsert);
+                        if (insErr) throw insErr;
+                    }
+
+                    // 2. Explicitly Update Existing Variants by ID
+                    for (const v of toUpdate) {
+                        const { error: updErr } = await supabase.from('website_variants').update({
+                            color: v.color,
+                            size: v.size,
+                            sku: v.sku,
+                            price: v.price ? parseFloat(v.price.toString()) : null,
+                            inventory_product_id: v.inventory_product_id
+                        }).eq('id', v.id);
+                        if (updErr) throw updErr;
+                    }
+                }
+            }
+
+            showToast(editingProduct ? 'Product and Variants updated!' : 'Product added!');
             setShowForm(false);
             setSaving(false);
             fetchProducts();
@@ -337,16 +424,7 @@ export default function WebsiteProductsPage() {
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Description</label>
                                     <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Product description..." className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Price (Rs.) *</label>
-                                        <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="1200" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Original Price (optional)</label>
-                                        <input type="number" value={form.original_price} onChange={e => setForm(f => ({ ...f, original_price: e.target.value }))} placeholder="1500" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                                    </div>
-                                </div>
+
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Category</label>
@@ -393,18 +471,96 @@ export default function WebsiteProductsPage() {
                                     </label>
                                 </div>
                                 
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Available Sizes (optional)</label>
-                                        <input 
-                                            value={form.sizes} 
-                                            onChange={e => setForm(f => ({ ...f, sizes: e.target.value }))} 
-                                            placeholder="e.g. S, M, L (Commas)" 
-                                            className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" 
-                                        />
+                                
+                                <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-8">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-sm font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2">
+                                            <Package size={14} className="text-primary" /> Inventory Mapping
+                                        </h3>
+                                        <div className="flex gap-4">
+                                            <button 
+                                                type="button"
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Standard', size: 'Universal', sku: `${(form.title.split(' ')[0] || 'SKU').toUpperCase()}-STD-${Math.random().toString(36).substring(2,6).toUpperCase()}`, price: '', inventory_product_id: '' }])}
+                                                className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-widest"
+                                            >
+                                                <Check size={12} strokeWidth={3} /> Standard (No Size)
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: `${(form.title.split(' ')[0] || 'SKU').toUpperCase()}-${Math.random().toString(36).substring(2,6).toUpperCase()}`, price: '', inventory_product_id: '' }])}
+                                                className="text-[10px] font-black text-primary hover:text-primary/80 flex items-center gap-1 uppercase tracking-widest"
+                                            >
+                                                <Plus size={12} strokeWidth={3} /> Custom Size/Color
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {variants.map((v, idx) => (
+                                            <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Color</label>
+                                                    <input 
+                                                        value={v.color} 
+                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, color: e.target.value } : vi))}
+                                                        placeholder="Red" 
+                                                        className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Size</label>
+                                                    <input 
+                                                        value={v.size} 
+                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, size: e.target.value } : vi))}
+                                                        placeholder="M" 
+                                                        className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Price</label>
+                                                    <input 
+                                                        type="number"
+                                                        value={v.price || ''} 
+                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, price: e.target.value } : vi))}
+                                                        placeholder="Rs." 
+                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[11px] font-bold text-primary" 
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">SKU</label>
+                                                    <input readOnly value={v.sku} className="w-full h-9 px-2 rounded-lg border border-gray-100 bg-gray-100 text-[9px] font-mono font-bold text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap" />
+                                                </div>
+                                                <div className="col-span-3">
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Link Inventory Item</label>
+                                                    <select 
+                                                        value={v.inventory_product_id}
+                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, inventory_product_id: e.target.value } : vi))}
+                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
+                                                    >
+                                                        <option value="">-- Link SKU --</option>
+                                                        {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <button onClick={() => setVariants(vs => vs.filter((_, i) => i !== idx))} className="h-9 w-9 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={16} /></button>
+                                                </div>
+                                                {v.current_stock !== undefined && (
+                                                    <div className="col-span-12 mt-2 flex items-center gap-2">
+                                                        <div className={`h-1.5 w-1.5 rounded-full ${v.current_stock > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                                                            Current Inventory Stock: <span className={v.current_stock > 0 ? 'text-emerald-500' : 'text-rose-500'}>{v.current_stock} units</span>
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {variants.length === 0 && (
+                                            <div className="py-8 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center gap-2">
+                                                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No variants mapped yet</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-gray-400 mt-1 font-medium">Type all sizes separated by commas. Leave empty if not applicable.</p>
                             </div>
 
                             <div>
