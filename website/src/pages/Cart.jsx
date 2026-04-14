@@ -93,7 +93,7 @@ const Cart = () => {
                                     <p style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>
                                         {item.selectedSize && `Size: ${item.selectedSize}`} {item.variationLabel && `| ${item.variationLabel}`}
                                     </p>
-                                    <p style={{ fontSize: '1.1rem', fontWeight: '950', color: 'var(--primary-blue)', margin: '0.25rem 0' }}>Rs. {item.price.toLocaleString()}</p>
+                                    <p style={{ fontSize: '1.1rem', fontWeight: '950', color: 'var(--primary-red)', margin: '0.25rem 0' }}>Rs. {item.price.toLocaleString()}</p>
                                     
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px', borderRadius: '100px', border: '1px solid #e2e8f0' }}>
@@ -122,7 +122,7 @@ const Cart = () => {
                                 <span>Shipping Fee</span>
                                 <span style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '100px' }}>At Checkout</span>
                             </div>
-                            <div style={{ borderTop: '2px dashed #e2e8f0', paddingTop: '1.5rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontWeight: '950', fontSize: '1.5rem', color: '#0f172a' }}>
+                            <div style={{ borderTop: '2px dashed #e2e8f0', paddingTop: '1.5rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontWeight: '950', fontSize: '1.5rem', color: 'var(--primary-red)' }}>
                                 <span>Total</span>
                                 <span>Rs. {cartTotal.toLocaleString()}</span>
                             </div>
@@ -147,7 +147,7 @@ const Cart = () => {
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Amount</span>
-                    <span style={{ fontSize: '1.5rem', fontWeight: '950', color: '#0f172a' }}>Rs. {cartTotal.toLocaleString()}</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: '950', color: 'var(--primary-red)' }}>Rs. {cartTotal.toLocaleString()}</span>
                 </div>
                 <button 
                     onClick={() => selectedCount > 0 && navigate('/checkout')}

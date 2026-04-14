@@ -27,6 +27,15 @@ function App() {
 
   useEffect(() => {
     initialize();
+
+    // Re-check session when user comes back to the app
+    const handleFocus = () => {
+      console.log('App focused, verifying session...');
+      initialize();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

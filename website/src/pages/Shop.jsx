@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Filter, X, ChevronDown, LayoutGrid, ListFilter, SlidersHorizontal, Search } from 'lucide-react';
 
 const Shop = () => {
-    const { products } = useProducts();
+    const { products, loading } = useProducts();
     const location = useLocation();
     const navigate = useNavigate();
     
@@ -106,7 +106,19 @@ const Shop = () => {
                 </div>
 
                 {/* Grid */}
-                {filteredProducts.length > 0 ? (
+                {loading ? (
+                    <div className="shop-grid">
+                        {[...Array(10)].map((_, i) => (
+                            <div key={i} className="card" style={{ border: 'none', boxShadow: 'none' }}>
+                                <div className="skeleton skeleton-img" />
+                                <div style={{ padding: '1rem' }}>
+                                    <div className="skeleton skeleton-text" style={{ width: '80%' }} />
+                                    <div className="skeleton skeleton-text" style={{ width: '40%' }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : filteredProducts.length > 0 ? (
                     <div className="shop-grid">
                         <div className="grid-column" style={{ paddingTop: '20px' }}>
                             {leftColumn.map(p => <ProductCard key={p.id} product={p} />)}

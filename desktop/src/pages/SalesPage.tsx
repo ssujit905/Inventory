@@ -133,7 +133,10 @@ export default function SalesPage() {
                         sold_amount,
                         product:products(sku)
                     ),
-                    website_orders!sale_id(id)
+                    website_orders!sale_id(
+                        id,
+                        website_order_items(sku, quantity)
+                    )
                 `)
                 .order('created_at', { ascending: false })
                 .limit(100);
@@ -145,15 +148,29 @@ export default function SalesPage() {
 
             if (data) {
                 const processedSales = data.map((sale: any) => {
-                    return {
-                        ...sale,
-                        is_website: !!(sale.website_orders && sale.website_orders.length > 0),
-                        items: (sale.sale_items || []).map((i: any) => ({
+                    // Map sale_items or fall back to website_order_items
+                    let processedItems: SaleItem[] = [];
+                    
+                    if (sale.sale_items && sale.sale_items.length > 0) {
+                        processedItems = sale.sale_items.map((i: any) => ({
                             id: i.id,
                             product: { sku: i.product?.sku || 'SKU' },
                             quantity: i.quantity,
                             sold_amount: i.sold_amount ?? null
-                        }))
+                        }));
+                    } else if (sale.website_orders && sale.website_orders[0]?.website_order_items) {
+                        // Fallback to website items if physical mapping is missing
+                        processedItems = sale.website_orders[0].website_order_items.map((wi: any) => ({
+                            product: { sku: wi.sku || 'SKU' },
+                            quantity: wi.quantity,
+                            sold_amount: null
+                        }));
+                    }
+
+                    return {
+                        ...sale,
+                        is_website: !!(sale.website_orders && sale.website_orders.length > 0),
+                        items: processedItems
                     };
                 });
                 setSales(processedSales as any);
@@ -718,10 +735,11 @@ export default function SalesPage() {
                         ) : (
                             <>
                                 <div className="hidden md:grid grid-cols-12 gap-5 px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    <div className="col-span-2">Date</div>
+                                    <div className="col-span-1">Date</div>
                                     <div className="col-span-2">Customer</div>
                                     <div className="col-span-2">Branch</div>
-                                    <div className="col-span-2 text-right">COD</div>
+                                    <div className="col-span-2">Product SKU</div>
+                                    <div className="col-span-1 text-right">COD</div>
                                     <div className="col-span-2 text-right">Status</div>
                                     <div className="col-span-2 text-right">Actions</div>
                                 </div>
@@ -730,7 +748,7 @@ export default function SalesPage() {
                                     return (
                                         <div key={sale.id} className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
                                             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 px-6 py-4 items-center">
-                                                <div className="md:col-span-2 flex items-center gap-3">
+                                                <div className="md:col-span-1 flex items-center gap-3">
                                                     <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
                                                         {displayIndex}
                                                     </div>
@@ -748,14 +766,31 @@ export default function SalesPage() {
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 line-clamp-1">
                                                         {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
                                                     </div>
                                                 </div>
                                                 <div className="md:col-span-2 text-xs text-gray-600 dark:text-gray-300 truncate pr-2">
                                                     {sale.destination_branch}
                                                 </div>
-                                                <div className="md:col-span-2 text-right text-sm font-black text-primary font-mono tracking-tight">
+                                                <div className="md:col-span-2 min-w-0">
+                                                    {sale.items && sale.items.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {sale.items.length === 1 ? (
+                                                                <span className="text-[10px] px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded font-black text-gray-500 uppercase truncate max-w-full">
+                                                                    {sale.items[0].product.sku || 'NO SKU SET'}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[10px] px-2 py-0.5 bg-primary/5 text-primary rounded font-black uppercase border border-primary/20">
+                                                                    {sale.items.length} Multiple Items
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[10px] text-amber-500 italic font-bold">Unmapped Inventory Item</span>
+                                                    )}
+                                                </div>
+                                                <div className="md:col-span-1 text-right text-sm font-black text-primary font-mono tracking-tight">
                                                     ${Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                                 <div className="md:col-span-2 flex items-center justify-end">

@@ -54,12 +54,12 @@ DECLARE
 BEGIN
     SELECT id INTO v_system_user_id FROM profiles LIMIT 1;
     INSERT INTO sales (order_date, customer_name, customer_address, phone1, phone2, cod_amount, destination_branch, parcel_status, product_id, quantity)
-    VALUES (CURRENT_DATE, p_customer_name, p_address, p_phone, NULLIF(p_phone2, ''), p_total_amount, p_city, 'processing', (SELECT inventory_product_id FROM website_variants WHERE id = (SELECT (p_items->0->>'variant_id')::uuid)), (SELECT SUM((x->>'quantity')::int) FROM jsonb_array_elements(p_items) AS x))
+    VALUES (CURRENT_DATE, p_customer_name, p_address, p_phone, NULLIF(p_phone2, ''), p_total_amount, p_city, 'processing', (SELECT inventory_product_id FROM website_variants WHERE id = (SELECT (p_items->0->>'variant_id')::bigint)), (SELECT SUM((x->>'quantity')::int) FROM jsonb_array_elements(p_items) AS x))
     RETURNING id INTO v_sale_record_id;
     INSERT INTO website_orders (customer_name, phone, phone2, address, city, payment_method, total_amount, shipping_fee, status, sale_id)
     VALUES (p_customer_name, p_phone, p_phone2, p_address, p_city, p_payment_method, p_total_amount, p_shipping_fee, 'processing', v_sale_record_id)
     RETURNING id, order_number INTO v_order_id, v_order_number;
-    FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items) AS x(variant_id UUID, quantity INT, unit_price NUMERIC, product_id BIGINT, product_title TEXT, sku TEXT) LOOP
+    FOR v_item IN SELECT * FROM jsonb_to_recordset(p_items) AS x(variant_id BIGINT, quantity INT, unit_price NUMERIC, product_id BIGINT, product_title TEXT, sku TEXT) LOOP
         SELECT inventory_product_id INTO v_inventory_id FROM website_variants WHERE id = v_item.variant_id;
         INSERT INTO website_order_items (order_id, variant_id, product_id, product_title, quantity, unit_price, sku) VALUES (v_order_id, v_item.variant_id, v_item.product_id, v_item.product_title, v_item.quantity, v_item.unit_price, v_item.sku);
         INSERT INTO sale_items (sale_id, product_id, quantity) VALUES (v_sale_record_id, v_inventory_id, v_item.quantity);

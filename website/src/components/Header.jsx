@@ -90,10 +90,26 @@ const Header = () => {
                 <div className="desktop-only" style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem' }}>
                     <nav>
                          <ul style={{ display: 'flex', gap: '1.5rem', listStyle: 'none', margin: 0, padding: 0 }}>
-                            <li><NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Home</NavLink></li>
-                            <li><NavLink to="/shop" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Shop</NavLink></li>
-                            <li><NavLink to="/contact" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Contact</NavLink></li>
-                            <li><NavLink to="/my-orders" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem' })}>Account</NavLink></li>
+                            <li>
+                                <NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
+                                    <Home size={18} /> Home
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/shop" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
+                                    <ShoppingBag size={18} /> Shop
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/contact" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
+                                    <MessageSquare size={18} /> Contact
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/my-orders" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
+                                    <User size={18} /> Account
+                                </NavLink>
+                            </li>
                          </ul>
                     </nav>
                 </div>
@@ -188,24 +204,25 @@ const Header = () => {
                                 size={20} 
                                 style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} 
                             />
-                            <input
-                                autoFocus
-                                type="text"
-                                placeholder="What are you looking for?"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{
-                                    padding: '1.2rem 1.5rem 1.2rem 3.5rem',
-                                    borderRadius: '16px',
-                                    border: '2px solid var(--primary-blue-50)',
-                                    background: '#f8fafc',
-                                    fontSize: '1.1rem',
-                                    fontWeight: '600',
-                                    width: '100%',
-                                    outline: 'none',
-                                    transition: 'all 0.2s'
-                                }}
-                            />
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    placeholder="What are you looking for?"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    style={{
+                                        padding: '1.2rem 1.5rem 1.2rem 3.5rem',
+                                        borderRadius: '16px',
+                                        border: '2px solid var(--primary-red)',
+                                        background: '#f8fafc',
+                                        fontSize: '1.1rem',
+                                        fontWeight: '600',
+                                        width: '100%',
+                                        outline: 'none',
+                                        transition: 'all 0.2s',
+                                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)'
+                                    }}
+                                />
                             <button 
                                 type="submit"
                                 style={{ 
@@ -248,10 +265,12 @@ const Header = () => {
                             style={{
                                 padding: '0.85rem 1rem 0.85rem 2.8rem',
                                 borderRadius: '100px',
-                                border: '1px solid var(--border-color)',
+                                border: '1px solid var(--primary-red)',
                                 background: '#f8fafc',
                                 fontSize: '0.95rem',
-                                fontWeight: '500'
+                                fontWeight: '500',
+                                width: '100%',
+                                outline: 'none'
                             }}
                         />
                     </form>

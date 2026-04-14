@@ -118,6 +118,7 @@ export default function ReportsPage() {
 
             // Calculate Stock Purchase Value (Requested as COGS by user)
             const totalCOGS = (saleTransactions || [])
+                .filter((t: any) => t.sale?.parcel_status !== 'cancelled')
                 .reduce((sum, t: any) => sum + (Math.abs(t.quantity_changed) * Number(t.lot?.cost_price || 0)), 0);
             // Gross Profit synced with Profit page sale-wise Profit/Loss total
             const toTimeKey = (value: any) => {
@@ -191,9 +192,16 @@ export default function ReportsPage() {
                     const status = t.sale?.parcel_status;
                     const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
                     const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
-                    const profitLoss = status === 'returned'
-                        ? -(returnCost + adsSpentRow + packagingSpent)
-                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+                    
+                    let profitLoss = 0;
+                    if (status === 'returned') {
+                        const totalLoss = returnCost + adsSpentRow + packagingSpent;
+                        profitLoss = totalLoss === 0 ? 0 : -totalLoss;
+                    } else if (status === 'cancelled') {
+                        profitLoss = adsSpentRow === 0 ? 0 : -adsSpentRow;
+                    } else {
+                        profitLoss = soldAmount - (qty * costPrice + adsSpentRow + packagingSpent);
+                    }
                     return sum + profitLoss;
                 }, 0);
 
@@ -222,9 +230,16 @@ export default function ReportsPage() {
                     const status = t.sale?.parcel_status;
                     const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
                     const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
-                    const profitLoss = status === 'returned'
-                        ? -(returnCost + adsSpentRow + packagingSpent)
-                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+                    
+                    let profitLoss = 0;
+                    if (status === 'returned') {
+                        const totalLoss = returnCost + adsSpentRow + packagingSpent;
+                        profitLoss = totalLoss === 0 ? 0 : -totalLoss;
+                    } else if (status === 'cancelled') {
+                        profitLoss = adsSpentRow === 0 ? 0 : -adsSpentRow;
+                    } else {
+                        profitLoss = soldAmount - (qty * costPrice + adsSpentRow + packagingSpent);
+                    }
 
                     const saleDate = new Date(t.sale?.created_at || t.sale?.order_date || new Date());
                     const monthKey = format(saleDate, 'yyyy-MM');

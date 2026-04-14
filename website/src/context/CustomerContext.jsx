@@ -105,13 +105,30 @@ export const CustomerProvider = ({ children }) => {
         }
     };
 
+    const refreshCustomer = async () => {
+        if (!customer?.phone) return;
+        try {
+            const { data, error } = await supabase
+                .from('website_customers')
+                .select('*')
+                .eq('phone', customer.phone)
+                .single();
+            if (!error && data) {
+                setCustomer(data);
+                localStorage.setItem('shopy_customer', JSON.stringify(data));
+            }
+        } catch (err) {
+            console.error('Failed to refresh customer:', err);
+        }
+    };
+
     const logout = () => {
         setCustomer(null);
         localStorage.removeItem('shopy_customer');
     };
 
     return (
-        <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading }}>
+        <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading, refreshCustomer }}>
             {children}
         </CustomerContext.Provider>
     );

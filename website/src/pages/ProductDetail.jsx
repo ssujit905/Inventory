@@ -9,6 +9,7 @@ import {
     ShieldCheck,
     MessageCircle,
     Heart,
+    MapPin,
     Share2,
     MoreVertical,
     ChevronRight,
@@ -126,8 +127,18 @@ const ProductDetail = () => {
     // While product is still loading, show a spinner
     if (loading) {
         return (
-            <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Loader2 size={40} className="animate-spin" color="var(--primary-red)" />
+            <div style={{ backgroundColor: '#fff', minHeight: '100vh', padding: '1rem' }}>
+                <div className="product-layout" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                    <div className="image-column">
+                        <div className="skeleton skeleton-img" style={{ aspectRatio: '1/1', width: '100%' }} />
+                    </div>
+                    <div className="details-column" style={{ padding: '1.5rem' }}>
+                        <div className="skeleton" style={{ height: '32px', width: '80%', marginBottom: '1.5rem' }} />
+                        <div className="skeleton" style={{ height: '20px', width: '40%', marginBottom: '2rem' }} />
+                        <div className="skeleton" style={{ height: '100px', width: '100%', marginBottom: '1.5rem', borderRadius: '12px' }} />
+                        <div className="skeleton" style={{ height: '60px', width: '100%', borderRadius: '12px' }} />
+                    </div>
+                </div>
             </div>
         );
     }
@@ -458,6 +469,13 @@ const ProductDetail = () => {
                                     }}>Sold Out</span>
                                 )}
                             </div>
+
+                            {/* Ship from Info */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                <MapPin size={14} color="#64748b" strokeWidth={2.5} />
+                                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>{product.city || 'Kathmandu'}</span>
+                            </div>
+                            
                             <button
                                 onClick={() => setIsFavorite(!isFavorite)}
                                 style={{ background: 'none', border: 'none', color: isFavorite ? 'var(--primary-red)' : '#ccc' }}
@@ -645,7 +663,7 @@ const ProductDetail = () => {
             }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <div style={{ width: '44px', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <MessageCircle size={20} color="var(--primary-blue)" />
+                        <MessageCircle size={20} color="var(--primary-red)" />
                     </div>
                     <button
                         onClick={product.is_sold_out ? null : handleAddToCartTrigger}
@@ -658,7 +676,7 @@ const ProductDetail = () => {
                             cursor: product.is_sold_out ? 'not-allowed' : 'pointer'
                         }}
                     >
-                        <ShoppingCart size={20} color={product.is_sold_out ? "#94a3b8" : "var(--primary-blue)"} />
+                        <ShoppingCart size={20} color={product.is_sold_out ? "#94a3b8" : "var(--primary-red)"} />
                     </button>
                 </div>
                 <button
@@ -674,7 +692,7 @@ const ProductDetail = () => {
                         cursor: product.is_sold_out ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    {product.is_sold_out ? 'Sold Out' : 'Buy Now'}
+                    {product.is_sold_out ? 'Sold Out' : (product.is_prebook ? 'Pre-Book' : 'Buy Now')}
                 </button>
             </div>
 
@@ -799,7 +817,7 @@ const ProductDetail = () => {
                                 }}
                             >
                                 {isSelectionComplete() 
-                                    ? (pickerAction === 'buy' ? 'Proceed to Buy' : 'Add to Cart') 
+                                    ? (pickerAction === 'buy' ? (product.is_prebook ? 'Pre-Book Now' : 'Proceed to Buy') : 'Add to Cart') 
                                     : 'Please Select All Options'}
                             </button>
                         </div>

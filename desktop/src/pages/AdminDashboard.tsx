@@ -35,6 +35,15 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         fetchDashboardData();
+
+        // Auto-refresh when user returns to the tab (fixes "stuck loader" after sleep)
+        const handleFocus = () => {
+            console.log('Window focused, re-syncing dashboard...');
+            fetchDashboardData(false);
+        };
+
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
     }, []);
 
     useRealtimeRefresh(
@@ -47,7 +56,19 @@ export default function AdminDashboard() {
     );
 
     const fetchDashboardData = async (isInitial = true) => {
-        if (isInitial) setLoading(true);
+        if (isInitial) {
+            setLoading(true);
+            // Safety timeout: if sync takes > 15s, stop the loader to prevent freeze
+            setTimeout(() => {
+                setLoading(current => {
+                    if (current) {
+                        console.warn('Dashboard sync timed out, clearing loader.');
+                        return false;
+                    }
+                    return current;
+                });
+            }, 15000);
+        }
         try {
             const now = new Date();
             const monthStartStr = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -76,7 +97,7 @@ export default function AdminDashboard() {
                 supabase
                     .from('website_orders')
                     .select('id, status')
-                    .eq('status', 'pending')
+                    .or('status.eq.processing,status.eq.pending')
             ]);
 
             if (salesRes.error) throw salesRes.error;
@@ -165,7 +186,10 @@ export default function AdminDashboard() {
             });
 
             const trendData = last6Days.map(date => {
-                const daySales = globalSales?.filter(s => s.order_date === date) || [];
+                const daySales = globalSales?.filter(s => 
+                    s.order_date === date && 
+                    ['processing', 'sent', 'delivered'].includes(s.parcel_status)
+                ) || [];
                 return {
                     date: format(new Date(date), 'MMM dd'),
                     sales: daySales.length

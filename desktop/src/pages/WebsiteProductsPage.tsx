@@ -480,14 +480,14 @@ export default function WebsiteProductsPage() {
                                         <div className="flex gap-4">
                                             <button 
                                                 type="button"
-                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Standard', size: 'Universal', sku: `${(form.title.split(' ')[0] || 'SKU').toUpperCase()}-STD-${Math.random().toString(36).substring(2,6).toUpperCase()}`, price: '', inventory_product_id: '' }])}
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Standard', size: 'Universal', sku: 'SKU-' + Math.floor(Math.random()*1000), price: '', inventory_product_id: '' }])}
                                                 className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-widest"
                                             >
                                                 <Check size={12} strokeWidth={3} /> Standard (No Size)
                                             </button>
                                             <button 
                                                 type="button"
-                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: `${(form.title.split(' ')[0] || 'SKU').toUpperCase()}-${Math.random().toString(36).substring(2,6).toUpperCase()}`, price: '', inventory_product_id: '' }])}
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: 'SKU-' + Math.floor(Math.random()*1000), price: '', inventory_product_id: '' }])}
                                                 className="text-[10px] font-black text-primary hover:text-primary/80 flex items-center gap-1 uppercase tracking-widest"
                                             >
                                                 <Plus size={12} strokeWidth={3} /> Custom Size/Color
@@ -528,13 +528,26 @@ export default function WebsiteProductsPage() {
                                                 </div>
                                                 <div className="col-span-2">
                                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">SKU</label>
-                                                    <input readOnly value={v.sku} className="w-full h-9 px-2 rounded-lg border border-gray-100 bg-gray-100 text-[9px] font-mono font-bold text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap" />
+                                                    <input 
+                                                        value={v.sku} 
+                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, sku: e.target.value } : vi))}
+                                                        placeholder="SKU"
+                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold" 
+                                                    />
                                                 </div>
                                                 <div className="col-span-3">
                                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Link Inventory Item</label>
                                                     <select 
                                                         value={v.inventory_product_id}
-                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, inventory_product_id: e.target.value } : vi))}
+                                                        onChange={e => {
+                                                            const invId = e.target.value;
+                                                            const invItem = inventoryItems.find(p => p.id.toString() === invId);
+                                                            setVariants(vs => vs.map((vi, i) => i === idx ? { 
+                                                                ...vi, 
+                                                                inventory_product_id: invId,
+                                                                sku: invItem ? invItem.sku : vi.sku 
+                                                            } : vi));
+                                                        }}
                                                         className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
                                                     >
                                                         <option value="">-- Link SKU --</option>

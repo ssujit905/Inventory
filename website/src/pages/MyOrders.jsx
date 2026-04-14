@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 const MyOrders = () => {
-    const { customer, login, logout, register, updateProfile, loading: authLoading } = useCustomer();
+    const { customer, login, logout, register, updateProfile, loading: authLoading, refreshCustomer } = useCustomer();
     const location = useLocation();
     const navigate = useNavigate();
     
@@ -223,8 +223,13 @@ const MyOrders = () => {
                 rating: rateValue,
                 comment: rateComment
             });
+            // 🔥 Grant 25 Shopy Coins for reviewing!
+            await supabase.rpc('add_shopy_coins', { p_phone: customer.phone, p_coins: 25 });
+            await refreshCustomer();
+
             setRatedProductIds(prev => new Set([...prev, rateData.productId]));
             setShowRateModal(false);
+            alert("Thanks for your review! You've just earned 25 Shopy Coins! 🪙");
         } finally {
             setIsRating(false);
         }
@@ -294,9 +299,20 @@ const MyOrders = () => {
     return (
         <div className="section" style={{ background: '#f8fafc', minHeight: '90vh' }}>
             <div className="container">
-                <div style={{ marginBottom: '2.5rem' }}>
-                    <h1 style={{ fontSize: 'clamp(1.5rem, 5vw, 2.25rem)', fontWeight: '900', color: 'var(--primary-blue)' }}>My Orders</h1>
-                    <p style={{ color: 'var(--text-gray)', fontWeight: '600' }}>Logged in as {customer.name}</p>
+                <div style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                        <h1 style={{ fontSize: 'clamp(1.5rem, 5vw, 2.25rem)', fontWeight: '900', color: 'var(--primary-blue)' }}>My Orders</h1>
+                        <p style={{ color: 'var(--text-gray)', fontWeight: '600' }}>Logged in as {customer.name}</p>
+                    </div>
+                    {customer && (
+                        <div style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', padding: '0.6rem 1.2rem', borderRadius: '1.25rem', color: 'white', fontWeight: '900', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.5rem', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>🪙</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', lineHeight: '1', opacity: 0.9 }}>Shopy Coins</span>
+                                <span style={{ fontSize: '1.1rem', lineHeight: '1.2' }}>{customer.shopy_coins || 0}</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="status-tabs-container" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '1rem', scrollbarWidth: 'none' }}>
@@ -317,7 +333,11 @@ const MyOrders = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     {loadingOrders ? (
-                        <div style={{ textAlign: 'center', padding: '4rem' }}><Loader2 className="animate-spin" size={40} color="var(--primary-blue)" /></div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {[...Array(3)].map((_, i) => (
+                                <div key={i} className="skeleton" style={{ height: '180px', width: '100%', borderRadius: '1.5rem' }} />
+                            ))}
+                        </div>
                     ) : filteredOrders.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '5rem', background: 'white', borderRadius: '2rem', border: '1px solid var(--border-color)' }}>
                             <ShoppingBag size={48} color="var(--border-color)" style={{ marginBottom: '1rem' }} />
@@ -447,7 +467,14 @@ const MyOrders = () => {
                         <textarea placeholder="Tell us more..." value={rateComment} onChange={e => setRateComment(e.target.value)} style={{ width: '100%', height: '100px', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', outline: 'none' }} />
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button onClick={() => setShowRateModal(false)} className="btn" style={{ flex: 1, background: '#f1f5f9' }}>Cancel</button>
-                            <button onClick={confirmRateProduct} className="btn btn-primary" style={{ flex: 1 }}>Submit</button>
+                            <button 
+                                onClick={confirmRateProduct} 
+                                disabled={isRating}
+                                className="btn btn-primary" 
+                                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                            >
+                                {isRating ? <><Loader2 className="animate-spin" size={16} /> Saving...</> : 'Submit'}
+                            </button>
                         </div>
                     </div>
                 </div>

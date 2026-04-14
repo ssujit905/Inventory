@@ -137,6 +137,10 @@ export default function SalesPage() {
                     quantity,
                     sold_amount,
                     product:products(sku)
+                ),
+                website_orders!sale_id(
+                    id,
+                    website_order_items(sku, quantity)
                 )
             `)
             .order('created_at', { ascending: false })
@@ -144,14 +148,26 @@ export default function SalesPage() {
 
         if (data) {
             const processedSales = data.map((sale: any) => {
-                return {
-                    ...sale,
-                    items: (sale.sale_items || []).map((i: any) => ({
+                let processedItems: SaleItem[] = [];
+                
+                if (sale.sale_items && sale.sale_items.length > 0) {
+                    processedItems = sale.sale_items.map((i: any) => ({
                         id: i.id,
                         product: { sku: i.product?.sku || 'SKU' },
                         quantity: i.quantity,
                         sold_amount: i.sold_amount ?? null
-                    }))
+                    }));
+                } else if (sale.website_orders && sale.website_orders[0]?.website_order_items) {
+                    processedItems = sale.website_orders[0].website_order_items.map((wi: any) => ({
+                        product: { sku: wi.sku || 'SKU' },
+                        quantity: wi.quantity,
+                        sold_amount: null
+                    }));
+                }
+
+                return {
+                    ...sale,
+                    items: processedItems
                 };
             });
             setSales(processedSales as any);
@@ -789,7 +805,14 @@ export default function SalesPage() {
                                                 </div>
 
                                                 <div className="min-w-0">
-                                                    <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                        {sale.items && sale.items.length > 0 && (
+                                                            <div className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-md text-[9px] font-black text-gray-500 truncate max-w-[120px]">
+                                                                {sale.items.length === 1 ? sale.items[0].product.sku : `${sale.items.length} Items`}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
                                                         {sale.phone1}{sale.phone2 ? ` / ${sale.phone2}` : ''}
                                                     </div>

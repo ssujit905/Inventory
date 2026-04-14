@@ -243,9 +243,10 @@ export default function ProfitPage() {
                     const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
                     let profitLoss = 0;
                     if (status === 'returned') {
-                        profitLoss = -(returnCost + adsSpentRow + packagingSpent);
+                        const totalLoss = returnCost + adsSpentRow + packagingSpent;
+                        profitLoss = totalLoss === 0 ? 0 : -totalLoss;
                     } else if (status === 'cancelled') {
-                        profitLoss = -adsSpentRow;
+                        profitLoss = adsSpentRow === 0 ? 0 : -adsSpentRow;
                     } else {
                         profitLoss = soldAmount - (qty * costPrice + adsSpentRow + packagingSpent);
                     }

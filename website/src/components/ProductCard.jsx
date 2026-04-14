@@ -147,7 +147,7 @@ const ProductCard = ({ product }) => {
                     <span style={{
                         fontWeight: '800',
                         fontSize: '1.1rem',
-                        color: 'var(--text-dark)'
+                        color: 'var(--primary-red)'
                     }}>
                         Rs. {product.price.toLocaleString()}
                     </span>
@@ -162,6 +162,14 @@ const ProductCard = ({ product }) => {
                             Rs. {product.original_price.toLocaleString()}
                         </span>
                     )}
+                </div>
+
+                {/* Ship From Location */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                    <MapPin size={13} color="#64748b" />
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>
+                        {product.city || 'Kathmandu'}
+                    </span>
                 </div>
 
 

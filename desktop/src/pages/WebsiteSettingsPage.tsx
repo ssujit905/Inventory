@@ -11,13 +11,16 @@ interface Setting {
 
 const SETTING_GROUPS = [
     {
-        title: 'Hero Banner',
+        title: 'Hero Slider',
         icon: <Image size={16} />,
         keys: [
             { key: 'hero_badge', label: 'Badge Text', placeholder: "Nepal's Most Trusted Store" },
-            { key: 'hero_title', label: 'Headline', placeholder: 'Smart Shopping Made Easy' },
-            { key: 'hero_subtitle', label: 'Subtitle', placeholder: 'Get the best deals...', textarea: true },
-            { key: 'hero_cta', label: 'Button Text', placeholder: 'Shop Now' },
+            { key: 'hero_slider_1_image', label: 'Slide 1 Image URL', placeholder: 'https://...' },
+            { key: 'hero_slider_1_title', label: 'Slide 1 Title', placeholder: 'New Collection' },
+            { key: 'hero_slider_2_image', label: 'Slide 2 Image URL', placeholder: 'https://...' },
+            { key: 'hero_slider_2_title', label: 'Slide 2 Title', placeholder: 'Mega Sale' },
+            { key: 'hero_slider_3_image', label: 'Slide 3 Image URL', placeholder: 'https://...' },
+            { key: 'hero_slider_3_title', label: 'Slide 3 Title', placeholder: 'Loyalty Rewards' },
         ]
     },
     {
@@ -53,6 +56,7 @@ export default function WebsiteSettingsPage() {
     const [settings, setSettings] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState<string | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
     useEffect(() => { fetchSettings(); }, []);
@@ -74,11 +78,37 @@ export default function WebsiteSettingsPage() {
         setLoading(false);
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(key);
+        try {
+            const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+            const { error: uploadError } = await supabase.storage
+                .from('website-images')
+                .upload(fileName, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('website-images')
+                .getPublicUrl(fileName);
+
+            update(key, publicUrl);
+            showToast(`Image uploaded successfully!`);
+        } catch (err: any) {
+            showToast(err.message, 'error');
+        } finally {
+            setUploading(null);
+        }
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
             const upserts = Object.entries(settings).map(([key, value]) => ({
-                key, value, updated_at: new Date().toISOString()
+                key, value: value || '', updated_at: new Date().toISOString()
             }));
             const { error } = await supabase.from('website_settings').upsert(upserts, { onConflict: 'key' });
             if (error) throw error;
@@ -104,7 +134,7 @@ export default function WebsiteSettingsPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            {/* Global Toast Notification — Always at the top-right! */}
+            {/* Global Toast Notification */}
             {toast && (
                 <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                     <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
@@ -148,17 +178,58 @@ export default function WebsiteSettingsPage() {
                             <p className="text-sm font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest">{group.title}</p>
                         </div>
 
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-6">
                             {group.keys.map(field => (
-                                <div key={field.key}>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">{field.label}</label>
-                                    {field.textarea ? (
+                                <div key={field.key} className="space-y-2">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">{field.label}</label>
+                                    
+                                    {field.key.includes('image') ? (
+                                        <div className="space-y-3">
+                                            {settings[field.key] && (
+                                                <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden border border-gray-100 shadow-inner group">
+                                                    <img src={settings[field.key]} className="w-full h-full object-cover" alt="Preview" />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <button 
+                                                            onClick={() => update(field.key, '')}
+                                                            className="p-2 bg-rose-500 text-white rounded-full hover:scale-110 transition-transform"
+                                                        >
+                                                            <AlertTriangle size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-4">
+                                                <label className={`flex-1 flex items-center justify-center gap-2 px-4 py-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${uploading === field.key ? 'bg-gray-50 border-gray-200' : 'bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/40'}`}>
+                                                    <input 
+                                                        type="file" 
+                                                        accept="image/*" 
+                                                        className="hidden" 
+                                                        onChange={(e) => handleFileUpload(e, field.key)}
+                                                        disabled={uploading === field.key}
+                                                    />
+                                                    {uploading === field.key ? (
+                                                        <div className="flex items-center gap-2 text-primary font-bold">
+                                                            <Loader2 size={20} className="animate-spin" />
+                                                            <span>Uploading...</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <Image size={24} className="text-primary opacity-60" />
+                                                            <span className="text-xs font-black text-primary uppercase tracking-widest">
+                                                                {settings[field.key] ? 'Change Image' : 'Select Hero Banner'}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </label>
+                                            </div>
+                                        </div>
+                                    ) : field.textarea ? (
                                         <textarea
                                             value={settings[field.key] || ''}
                                             onChange={e => update(field.key, e.target.value)}
                                             placeholder={field.placeholder}
                                             rows={3}
-                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none"
                                         />
                                     ) : (
                                         <input
@@ -166,7 +237,7 @@ export default function WebsiteSettingsPage() {
                                             value={settings[field.key] || ''}
                                             onChange={e => update(field.key, e.target.value)}
                                             placeholder={field.placeholder}
-                                            className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                            className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none"
                                         />
                                     )}
                                 </div>
@@ -179,10 +250,10 @@ export default function WebsiteSettingsPage() {
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary text-white rounded-2xl font-black text-sm hover:bg-primary/90 disabled:opacity-60 shadow-lg shadow-primary/20"
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-primary text-white rounded-2xl font-black text-sm hover:bg-primary/90 disabled:opacity-60 shadow-lg shadow-primary/20"
                 >
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    {saving ? 'Saving...' : 'Save All Settings'}
+                    {saving ? 'Save All Website Content' : 'Save All Website Content'}
                 </button>
             </div>
         </DashboardLayout>

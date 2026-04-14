@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { Truck, CreditCard, ArrowLeft, Loader2, MapPin, Info, AlertTriangle } from 'lucide-react';
+import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
@@ -37,6 +37,7 @@ const Checkout = () => {
     const [branches, setBranches] = useState([]);
     const [loadingBranches, setLoadingBranches] = useState(true);
     const [selectedBranch, setSelectedBranch] = useState(null);
+    const [useCoins, setUseCoins] = useState(false);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -121,7 +122,16 @@ const Checkout = () => {
     if (!cartReady && !isOrdered) return null;
 
     const shippingFee = selectedBranch ? Number(selectedBranch.shipping_fee) : 0;
-    const grandTotal = checkoutSubtotal + shippingFee;
+    
+    // Loyalty Points (Coins) Evaluation
+    const userCoins = customer?.shopy_coins ? Number(customer.shopy_coins) : 0;
+    // Cap at 20% of order total OR 150 coins (whichever is lower)
+    const maxCoinDiscount = Math.floor((checkoutSubtotal + shippingFee) * 0.20);
+    const hardCap = 150;
+    const coinsUsable = Math.min(userCoins, maxCoinDiscount, hardCap);
+    const appliedCoinDiscount = (useCoins && coinsUsable > 0) ? coinsUsable : 0;
+
+    const grandTotal = checkoutSubtotal + shippingFee - appliedCoinDiscount;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -157,7 +167,8 @@ const Checkout = () => {
                 p_payment_method: formData.paymentMethod,
                 p_shipping_fee: shippingFee,
                 p_total_amount: grandTotal,
-                p_items: orderItems
+                p_items: orderItems,
+                p_coins_used: appliedCoinDiscount
             });
 
             setCheckoutError(null);
@@ -318,9 +329,22 @@ const Checkout = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
                             <button
                                 onClick={() => navigate(-1)}
-                                style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                type="button"
+                                style={{ 
+                                    width: '40px', 
+                                    height: '40px', 
+                                    borderRadius: '12px', 
+                                    border: '1.5px solid #e2e8f0', 
+                                    background: 'white', 
+                                    cursor: 'pointer', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                                    color: 'var(--primary-blue)'
+                                }}
                             >
-                                <ArrowLeft size={20} />
+                                <span style={{ fontSize: '1.5rem', fontWeight: '400', lineHeight: 0, marginTop: '-2px' }}>‹</span>
                             </button>
                             <h2 className="section-title" style={{ margin: 0 }}>Checkout</h2>
                         </div>
@@ -338,7 +362,7 @@ const Checkout = () => {
                         )}
                         <form onSubmit={handleSubmit} className="checkout-layout">
                             {/* ── Left: Form Fields ── */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '100px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                                 {/* Shipping Info */}
                                 <div style={{ background: 'white', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid #e2e8f0' }}>
@@ -455,11 +479,30 @@ const Checkout = () => {
                                             {shippingFee === 0 ? '🎉 Free' : `Rs. ${shippingFee.toLocaleString()}`}
                                         </span>
                                     </div>
+                                    {appliedCoinDiscount > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#10b981', fontWeight: '800' }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>🪙 Shopy Coins</span>
+                                            <span>- Rs. {appliedCoinDiscount.toLocaleString()}</span>
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '1.2rem', borderTop: '2px solid #e2e8f0', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
                                         <span>Total</span>
-                                        <span style={{ color: '#ef4444' }}>Rs. {grandTotal.toLocaleString()}</span>
+                                        <span style={{ color: 'var(--primary-red)' }}>Rs. {grandTotal.toLocaleString()}</span>
                                     </div>
                                 </div>
+
+                                {customer && userCoins > 0 && (
+                                    <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)', borderRadius: '1rem', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.1)' }}>
+                                        <div>
+                                            <h4 style={{ margin: 0, color: '#d97706', fontWeight: '800', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '4px' }}>🪙 Use Shopy Coins</h4>
+                                            <p style={{ margin: 0, color: '#b45309', fontSize: '0.75rem', fontWeight: '600' }}>Balance: {userCoins} · Max usage: {coinsUsable}</p>
+                                        </div>
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '0.4rem', background: 'white', padding: '0.4rem 0.8rem', borderRadius: '100px', border: '1px solid #fde68a' }}>
+                                            <input type="checkbox" checked={useCoins} onChange={(e) => setUseCoins(e.target.checked)} style={{ width: '1.1rem', height: '1.1rem', accentColor: '#d97706', cursor: 'pointer' }} />
+                                            <span style={{ fontWeight: '800', color: '#d97706', fontSize: '0.85rem' }}>Apply</span>
+                                        </label>
+                                    </div>
+                                )}
 
                                 <button
                                     type="submit"
@@ -475,30 +518,6 @@ const Checkout = () => {
                                 </p>
                             </div>
                         </form>
-
-                        {/* Sticky Bottom Bar for Mobile */}
-                        <div className="mobile-only" style={{
-                            position: 'fixed', bottom: 0, left: 0, right: 0,
-                            padding: '1rem 1.25rem', backgroundColor: 'white',
-                            borderTop: '1px solid var(--border-color)',
-                            boxShadow: '0 -4px 10px rgba(0,0,0,0.05)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            gap: '1rem', zIndex: 1000,
-                            paddingBottom: 'calc(1rem + var(--safe-bottom))'
-                        }}>
-                            <div>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-gray)', margin: 0, fontWeight: '600' }}>Final Amount</p>
-                                <p style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>Rs. {grandTotal.toLocaleString()}</p>
-                            </div>
-                            <button
-                                onClick={handleSubmit}
-                                disabled={saving || grandTotal === 0}
-                                className="btn btn-primary"
-                                style={{ flex: 1, padding: '0.875rem', borderRadius: '12px', fontWeight: '800', fontSize: '1rem' }}
-                            >
-                                {saving ? 'Processing…' : 'Confirm Order'}
-                            </button>
-                        </div>
                     </>
                 )}
             </div>

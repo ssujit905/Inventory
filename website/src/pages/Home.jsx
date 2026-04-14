@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { ArrowRight, ShoppingBag, Zap, ShieldCheck, Truck, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
@@ -7,6 +8,44 @@ import ProductCard from '../components/ProductCard';
 const Home = () => {
     const { products, loading } = useProducts();
     const { settings } = useSettings();
+    const [currentIndex, setCurrentIndex] = useState(1);
+    const [isTransitioning, setIsTransitioning] = useState(true);
+
+    const slides = [
+        { id: 'clone-last', image: settings.hero_slider_3_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_discount_1776096397147.png' },
+        { id: 1, image: settings.hero_slider_1_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_info_1776096290574.png' },
+        { id: 2, image: settings.hero_slider_2_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_sale_1776096347242.png' },
+        { id: 3, image: settings.hero_slider_3_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_discount_1776096397147.png' },
+        { id: 'clone-first', image: settings.hero_slider_1_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_info_1776096290574.png' }
+    ];
+
+    // Auto-rotate slider
+    useEffect(() => {
+        const timer = setInterval(() => {
+            handleNext();
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [currentIndex]);
+
+    const handleNext = () => {
+        setIsTransitioning(true);
+        setCurrentIndex(prev => prev + 1);
+    };
+
+    const handleTransitionEnd = () => {
+        if (currentIndex >= slides.length - 1) {
+            setIsTransitioning(false);
+            setCurrentIndex(1);
+        } else if (currentIndex <= 0) {
+            setIsTransitioning(false);
+            setCurrentIndex(slides.length - 2);
+        }
+    };
+
+    const goToSlide = (slideIndex) => {
+        setIsTransitioning(true);
+        setCurrentIndex(slideIndex + 1);
+    };
     
     // Split products for the staggered discovery masonry on mobile
     const leftColumn = products.filter((_, idx) => idx % 2 === 0);
@@ -15,66 +54,90 @@ const Home = () => {
     return (
         <div style={{ backgroundColor: '#fff' }}>
             {/* ─── Premium Hero Section ─── */}
-            <section className="hero-section glass" style={{
-                backgroundColor: 'var(--primary-blue)',
-                padding: '2.5rem 0',
-                backgroundImage: 'radial-gradient(circle at top right, #1e3a8a, var(--primary-blue))',
-                color: 'white',
+            {/* ─── Premium Hero Slider Section ─── */}
+            <section className="hero-slider" style={{
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                padding: '1rem 0',
+                background: '#f8fafc'
             }}>
-                <div className="container" style={{ position: 'relative', zIndex: 2 }}>
-                    <div className="hero-content" style={{ textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
-                        <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '6px 16px',
-                            backgroundColor: 'rgba(255,255,255,0.1)',
-                            borderRadius: '100px',
-                            fontSize: '0.75rem',
-                            fontWeight: '800',
-                            marginBottom: '1.5rem',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            color: '#fff',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em'
+                <div className="container" style={{ padding: '0 0.5rem' }}>
+                    <div style={{ position: 'relative', height: 'auto' }}>
+                        {/* Slider Content */}
+                        <div style={{ 
+                            borderRadius: '1.25rem',
+                            overflow: 'hidden',
+                            position: 'relative',
+                            aspectRatio: window.innerWidth > 768 ? '2.8/1' : '16/9',
+                            maxHeight: '550px',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.1)'
                         }}>
-                            <Star size={14} fill="#fbbf24" color="#fbbf24" /> {settings.hero_badge || 'Premium Quality'}
+                            <div 
+                                onTransitionEnd={handleTransitionEnd}
+                                style={{
+                                    display: 'flex',
+                                    transition: isTransitioning ? 'transform 0.8s cubic-bezier(0.65, 0, 0.35, 1)' : 'none',
+                                    transform: `translateX(-${currentIndex * 100}%)`,
+                                    height: '100%',
+                                    width: '100%'
+                                }}
+                            >
+                                {slides.map((slide, idx) => (
+                                    <div 
+                                        key={`${slide.id}-${idx}`}
+                                        style={{
+                                            flex: '0 0 100%',
+                                            height: '100%',
+                                            width: '100%'
+                                        }}
+                                    >
+                                        <img 
+                                            src={slide.image} 
+                                            alt="Hero Banner" 
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        
-                        <h1 className="hero-title" style={{ marginBottom: '1.25rem' }}>
-                            {settings.hero_title}
-                        </h1>
-                        
-                        <p className="hero-subtitle" style={{
-                            fontSize: '1rem',
-                            opacity: '0.9',
-                            marginBottom: '2rem',
-                            lineHeight: '1.6',
-                            fontWeight: '500'
+
+                        {/* Navigation Dots - 7px Precision */}
+                        <div style={{
+                            display: 'flex', 
+                            justifyContent: 'center', 
+                            gap: '10px',
+                            marginTop: '1rem'
                         }}>
-                            {settings.hero_subtitle}
-                        </p>
-                        
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                            <Link to="/shop" className="btn btn-primary" style={{ padding: '0.75rem 2rem' }}>
-                                Start Shopping <ArrowRight size={18} style={{ marginLeft: '8px' }} />
-                            </Link>
+                            {[0, 1, 2].map(i => {
+                                const activeDot = (currentIndex === 0 ? 2 : (currentIndex === 4 ? 0 : currentIndex - 1));
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => goToSlide(i)}
+                                        style={{
+                                            width: activeDot === i ? '24px' : '7px',
+                                            height: '7px',
+                                            padding: 0,
+                                            margin: 0,
+                                            minWidth: 0,
+                                            minHeight: 0,
+                                            borderRadius: '10px',
+                                            background: activeDot === i ? 'var(--primary-red)' : '#cbd5e1',
+                                            border: 'none',
+                                            outline: 'none',
+                                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            cursor: 'pointer',
+                                            display: 'block'
+                                        }}
+                                    />
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
-
-                {/* Abstract Background Decoration */}
-                <div style={{ 
-                    position: 'absolute', top: '-10%', right: '-5%', width: '300px', height: '300px', 
-                    background: 'rgba(59, 130, 246, 0.2)', borderRadius: '50%', filter: 'blur(80px)' 
-                }} />
-                <div style={{ 
-                    position: 'absolute', bottom: '-20%', left: '-5%', width: '250px', height: '250px', 
-                    background: 'rgba(239, 68, 68, 0.15)', borderRadius: '50%', filter: 'blur(60px)' 
-                }} />
             </section>
+
+            {/* ─── Trust Indicators ─── */}
 
             {/* ─── Trust Indicators ─── */}
             <div className="trust-bar" style={{ 
@@ -137,11 +200,11 @@ const Home = () => {
                     {loading ? (
                         <div className="grid-cols-2" style={{ display: 'grid', gap: '1rem' }}>
                             {[...Array(6)].map((_, i) => (
-                                <div key={i} className="card" style={{ boxShadow: 'none' }}>
-                                    <div style={{ aspectRatio: '1/1', backgroundColor: '#f1f5f9', animation: 'pulse 1.5s infinite' }} />
+                                <div key={i} className="card" style={{ border: 'none', boxShadow: 'none' }}>
+                                    <div className="skeleton skeleton-img" />
                                     <div style={{ padding: '1rem' }}>
-                                        <div style={{ height: '14px', background: '#f1f5f9', borderRadius: '4px', width: '80%', marginBottom: '8px' }} />
-                                        <div style={{ height: '18px', background: '#f1f5f9', borderRadius: '4px', width: '40%' }} />
+                                        <div className="skeleton skeleton-text" style={{ width: '80%' }} />
+                                        <div className="skeleton skeleton-text" style={{ width: '40%' }} />
                                     </div>
                                 </div>
                             ))}
@@ -178,6 +241,13 @@ const Home = () => {
             </section>
 
             <style>{`
+                @keyframes float {
+                    0% { transform: translate(0, 0) scale(1); }
+                    33% { transform: translate(30px, -50px) scale(1.1); }
+                    66% { transform: translate(-20px, 20px) scale(0.9); }
+                    100% { transform: translate(0, 0) scale(1); }
+                }
+
                 @keyframes pulse {
                     0% { opacity: 1; }
                     50% { opacity: 0.6; }
@@ -186,9 +256,8 @@ const Home = () => {
                 
                 @media (min-width: 769px) {
                     .hero-section { padding: 7rem 0 !important; }
-                    .hero-content { maxWidth: 800px !important; }
-                    .hero-title { fontSize: 4.5rem !important; }
-                    .hero-subtitle { fontSize: 1.25rem !important; }
+                    .hero-grid { grid-template-columns: minmax(300px, 600px) 1fr !important; }
+                    .hero-visual { display: flex !important; }
                     .discovery-masonry {
                         grid-template-columns: repeat(4, 1fr) !important;
                         gap: 2rem !important;
@@ -198,8 +267,19 @@ const Home = () => {
                     }
                 }
 
+                @media (max-width: 768px) {
+                    .hero-grid { grid-template-columns: 1fr !important; }
+                    .glass-card { padding: 1.5rem !important; margin: 0 1rem; }
+                    .hero-section { 
+                        background-position: center !important;
+                        text-align: center !important;
+                    }
+                    .glass-card { text-align: center !important; }
+                    .glass-card div { justify-content: center !important; }
+                }
+
                 @media (max-width: 480px) {
-                    .hero-title { fontSize: 2.25rem !important; }
+                    .hero-title { fontSize: 2.5rem !important; }
                     .trust-bar { padding: 1rem 0 !important; }
                     .trust-bar .container { gap: 1rem !important; justify-content: space-around !important; }
                 }
