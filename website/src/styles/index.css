@@ -5,10 +5,10 @@
     --primary-blue: #0f172a;
     --accent-blue: #3b82f6;
     --bg-white: #ffffff;
-    --bg-gray: #f8fafc;
+    --bg-gray: #f0f2f5;
     --text-dark: #0f172a;
     --text-gray: #64748b;
-    --border-color: #f1f5f9;
+    --border-color: #e2e8f0;
     --font-main: 'Plus Jakarta Sans', sans-serif;
     
     --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
@@ -47,7 +47,7 @@ html {
 
 body {
     font-family: var(--font-main);
-    background-color: #fff;
+    background-color: var(--bg-gray);
     color: var(--text-dark);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;

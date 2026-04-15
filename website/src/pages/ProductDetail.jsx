@@ -1,5 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
+import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
 import {
     ShoppingCart,
@@ -51,8 +52,20 @@ const ProductDetail = () => {
         [variants, selectedColor]
     );
 
+    const { settings } = useSettings();
+    const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
+    const discountPercent = Number(settings.flash_sale_discount || 0);
+    const isProductInFlashSale = flashSaleConfig.some(item => item.id.toString() === id?.toString());
+
     const currentVariant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
-    const activePrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);
+    const rawPrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);
+    
+    // Apply Flash Sale discount if active
+    const activePrice = isProductInFlashSale 
+        ? Math.floor(rawPrice - (rawPrice * (discountPercent / 100)))
+        : rawPrice;
+    
+    const originalPrice = isProductInFlashSale ? rawPrice : (product?.original_price || null);
 
     useEffect(() => {
         const fetchProductData = async () => {

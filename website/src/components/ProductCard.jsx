@@ -11,7 +11,7 @@ const ProductCard = ({ product }) => {
     return (
         <div style={{
             backgroundColor: 'white',
-            borderRadius: '0.25rem', // Sharper corners for a commercial look
+            borderRadius: '0.75rem', // Increased rounding for a softer, premium look
             overflow: 'hidden',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
             transition: 'all 0.2s ease',
@@ -19,15 +19,20 @@ const ProductCard = ({ product }) => {
             flexDirection: 'column',
             height: '100%',
             position: 'relative',
-            border: '1px solid transparent'
+            border: '1px solid transparent',
+            borderBottom: '3px solid #000'
         }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                e.currentTarget.style.borderColor = 'var(--primary-red)';
+                e.currentTarget.style.borderTopColor = 'var(--primary-red)';
+                e.currentTarget.style.borderLeftColor = 'var(--primary-red)';
+                e.currentTarget.style.borderRightColor = 'var(--primary-red)';
             }}
             onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.borderTopColor = 'transparent';
+                e.currentTarget.style.borderLeftColor = 'transparent';
+                e.currentTarget.style.borderRightColor = 'transparent';
             }}
         >
             <Link to={`/product/${product.id}`} style={{ display: 'block', position: 'relative' }}>
@@ -87,7 +92,7 @@ const ProductCard = ({ product }) => {
                 </Link>
 
                 {/* Trust Badges */}
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'nowrap', overflow: 'hidden' }}>
                     {product.show_shopinepal !== false && (
                         <span style={{
                             fontSize: '0.65rem',

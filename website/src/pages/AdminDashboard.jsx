@@ -12,9 +12,11 @@ import {
     Trash2,
     LogOut,
     Eye,
-    X
+    X,
+    Settings
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useSettings } from '../context/SettingsContext';
 
 const AdminDashboard = () => {
     const { user, logout } = useAuth();
@@ -47,6 +49,14 @@ const AdminDashboard = () => {
         });
     };
 
+    const { settings, saveSetting } = useSettings();
+    const [currentTab, setCurrentTab] = useState('products'); // 'products' or 'settings'
+
+    const handleToggleFlashSale = async () => {
+        const newValue = settings.flash_sale_enabled === 'true' ? 'false' : 'true';
+        await saveSetting('flash_sale_enabled', newValue);
+    };
+
     const stats = [
         { label: 'Total Products', value: products.length, icon: <Package size={20} />, color: '#3b82f6' },
         { label: 'Total Sales', value: 'Rs. 54,200', icon: <TrendingUp size={20} />, color: '#22c55e' },
@@ -66,20 +76,25 @@ const AdminDashboard = () => {
 
                 <nav style={{ flex: 1 }}>
                     <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <li style={{ padding: '0.75rem 1rem', backgroundColor: '#1e293b', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                        <li 
+                            style={{ 
+                                padding: '0.75rem 1rem', 
+                                backgroundColor: '#1e293b', 
+                                borderRadius: '0.5rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '10px', 
+                                cursor: 'pointer',
+                                color: 'white'
+                            }}
+                        >
                             <LayoutDashboard size={20} /> <span>Dashboard</span>
-                        </li>
-                        <li style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#94a3b8', cursor: 'pointer' }}>
-                            <Package size={20} /> <span>Products</span>
-                        </li>
-                        <li style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#94a3b8', cursor: 'pointer' }}>
-                            <ShoppingBag size={20} /> <span>Orders</span>
                         </li>
                     </ul>
                 </nav>
 
                 <button
-                    onClick={handleLogout}
+                    onClick={logout}
                     style={{ marginTop: 'auto', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid #334155', backgroundColor: 'transparent', color: 'white', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
                 >
                     <LogOut size={20} /> <span>Logout</span>
@@ -101,6 +116,45 @@ const AdminDashboard = () => {
                         <Plus size={20} /> Add New Product
                     </button>
                 </header>
+
+                {/* Website Configuration Panel (Flash Sale) */}
+                <div style={{ backgroundColor: '#fff', padding: '1.25rem', borderRadius: '1rem', marginBottom: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <div style={{ backgroundColor: '#fff7ed', padding: '10px', borderRadius: '12px' }}>
+                                <Settings size={24} color="#f97316" />
+                            </div>
+                            <div>
+                                <h3 style={{ fontSize: '1rem', fontWeight: '700', margin: 0 }}>Flash Sale Mode</h3>
+                                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>Instantly show/hide the Flash Sale section on the website home page.</p>
+                            </div>
+                        </div>
+                        <div 
+                            onClick={handleToggleFlashSale}
+                            style={{ 
+                                width: '52px', 
+                                height: '28px', 
+                                backgroundColor: settings.flash_sale_enabled === 'true' ? '#22c55e' : '#cbd5e1',
+                                borderRadius: '24px',
+                                position: 'relative',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s'
+                            }}
+                        >
+                            <div style={{ 
+                                width: '22px', 
+                                height: '22px', 
+                                backgroundColor: 'white', 
+                                borderRadius: '50%',
+                                position: 'absolute',
+                                top: '3px',
+                                left: settings.flash_sale_enabled === 'true' ? '27px' : '3px',
+                                transition: 'all 0.3s',
+                                boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+                            }} />
+                        </div>
+                    </div>
+                </div>
 
                 {/* Stats Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>

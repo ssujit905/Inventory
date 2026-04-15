@@ -22,8 +22,19 @@ export const SettingsProvider = ({ children }) => {
         fetchSettings();
     }, []);
 
+    const saveSetting = async (key, value) => {
+        const { error } = await supabase
+            .from('website_settings')
+            .upsert({ key, value }, { onConflict: 'key' });
+        
+        if (!error) {
+            setSettings(prev => ({ ...prev, [key]: value }));
+        }
+        return { error };
+    };
+
     return (
-        <SettingsContext.Provider value={{ settings, settingsLoading }}>
+        <SettingsContext.Provider value={{ settings, settingsLoading, saveSetting }}>
             {children}
         </SettingsContext.Provider>
     );

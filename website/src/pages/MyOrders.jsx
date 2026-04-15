@@ -22,7 +22,7 @@ const MyOrders = () => {
     const [orders, setOrders] = useState([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
     const [branches, setBranches] = useState([]);
-    const [ratedProductIds, setRatedProductIds] = useState(new Set());
+    const [ratedOrderIds, setRatedOrderIds] = useState(new Set());
     const [requestedReturnStatuses, setRequestedReturnStatuses] = useState({});
     const [selectedOrder, setSelectedOrder] = useState(null);
     
@@ -111,10 +111,10 @@ const MyOrders = () => {
 
             const { data: ratingsData } = await supabase
                 .from('website_product_ratings')
-                .select('product_id')
+                .select('order_id')
                 .eq('customer_phone', customer.phone);
             
-            if (ratingsData) setRatedProductIds(new Set(ratingsData.map(r => r.product_id)));
+            if (ratingsData) setRatedOrderIds(new Set(ratingsData.map(r => r.order_id).filter(Boolean)));
 
             const { data: returnsData } = await supabase
                 .from('website_order_returns')
@@ -217,6 +217,7 @@ const MyOrders = () => {
         setIsRating(true);
         try {
             await supabase.from('website_product_ratings').insert({
+                order_id: rateData.orderId,
                 product_id: rateData.productId,
                 customer_phone: customer.phone,
                 customer_name: customer.name,
@@ -227,7 +228,7 @@ const MyOrders = () => {
             await supabase.rpc('add_shopy_coins', { p_phone: customer.phone, p_coins: 25 });
             await refreshCustomer();
 
-            setRatedProductIds(prev => new Set([...prev, rateData.productId]));
+            setRatedOrderIds(prev => new Set([...prev, rateData.orderId]));
             setShowRateModal(false);
             alert("Thanks for your review! You've just earned 25 Shopy Coins! 🪙");
         } finally {
@@ -299,20 +300,48 @@ const MyOrders = () => {
     return (
         <div className="section" style={{ background: '#f8fafc', minHeight: '90vh' }}>
             <div className="container">
-                <div style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                        <h1 style={{ fontSize: 'clamp(1.5rem, 5vw, 2.25rem)', fontWeight: '900', color: 'var(--primary-blue)' }}>My Orders</h1>
-                        <p style={{ color: 'var(--text-gray)', fontWeight: '600' }}>Logged in as {customer.name}</p>
+                {/* ── Account Header ── */}
+                <div style={{
+                    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                    borderRadius: '1.25rem',
+                    padding: '1.5rem',
+                    marginBottom: '1.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    color: 'white'
+                }}>
+                    {/* Avatar */}
+                    <div style={{
+                        width: '56px', height: '56px', borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #ee4d2d, #ff7337)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '1.4rem', fontWeight: '900', flexShrink: 0,
+                        boxShadow: '0 4px 12px rgba(238,77,45,0.4)'
+                    }}>
+                        {(customer.name || 'U')[0].toUpperCase()}
                     </div>
-                    {customer && (
-                        <div style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', padding: '0.6rem 1.2rem', borderRadius: '1.25rem', color: 'white', fontWeight: '900', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.5rem', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>🪙</span>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', lineHeight: '1', opacity: 0.9 }}>Shopy Coins</span>
-                                <span style={{ fontSize: '1.1rem', lineHeight: '1.2' }}>{customer.shopy_coins || 0}</span>
-                            </div>
-                        </div>
-                    )}
+
+                    {/* Name & Phone */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: '900', fontSize: '1.05rem', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customer.name}</p>
+                        <p style={{ fontSize: '0.8rem', margin: '2px 0 0', opacity: 0.7, fontWeight: '500' }}>+977 {customer.phone}</p>
+                    </div>
+
+                    {/* Coins */}
+                    <div style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '0.75rem',
+                        padding: '0.6rem 1rem',
+                        textAlign: 'center',
+                        flexShrink: 0
+                    }}>
+                        <p style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.7, margin: 0, fontWeight: '700' }}>Coins</p>
+                        <p style={{ fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            🪙 {customer.shopy_coins || 0}
+                        </p>
+                    </div>
                 </div>
 
                 <div className="status-tabs-container" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '1rem', scrollbarWidth: 'none' }}>
@@ -392,15 +421,15 @@ const MyOrders = () => {
                                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
                                             {/* Rate button on the left */}
                                             {(() => {
-                                                const firstUnrated = order.items?.find(item => !ratedProductIds.has(item.product_id));
-                                                const allRated = order.items?.every(item => ratedProductIds.has(item.product_id));
-                                                return allRated ? (
+                                                const alreadyRated = ratedOrderIds.has(order.id);
+                                                const firstItem = order.items?.[0];
+                                                return alreadyRated ? (
                                                     <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <CheckCircle2 size={14} strokeWidth={3} /> Rated
                                                     </span>
                                                 ) : (
                                                     <button
-                                                        onClick={() => { setRateData({ orderId: order.id, productId: firstUnrated?.product_id, productTitle: firstUnrated?.product_title }); setShowRateModal(true); setRateValue(5); setRateComment(''); }}
+                                                        onClick={() => { setRateData({ orderId: order.id, productId: firstItem?.product_id, productTitle: firstItem?.product_title }); setShowRateModal(true); setRateValue(5); setRateComment(''); }}
                                                         className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem', background: '#f8fafc', color: 'var(--primary-blue)', border: '1px solid var(--border-color)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <Star size={13} /> Rate
                                                     </button>

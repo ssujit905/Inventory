@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle } from 'lucide-react';
+import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
-    const { customer, login } = useCustomer();
+    const { customer, login, refreshCustomer } = useCustomer();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -105,9 +105,10 @@ const Checkout = () => {
         setFormData(f => ({ ...f, city: cityName }));
     };
 
-    // Fix hydration race — let cart load from localStorage first
+    // Fix hydration race & Sync live coin balance on mount
     useEffect(() => {
         const timer = setTimeout(() => setCartReady(true), 100);
+        refreshCustomer();
         return () => clearTimeout(timer);
     }, []);
 
@@ -174,6 +175,14 @@ const Checkout = () => {
             setCheckoutError(null);
             if (rpcError) {
                 console.error("Atomic Purchase Error:", rpcError.message);
+                
+                // If coins are out of sync, refresh immediately
+                if (rpcError.message?.includes('COINS')) {
+                    refreshCustomer();
+                    setCheckoutError("Your coin balance has changed. We've updated your available points.");
+                    return;
+                }
+
                 if (rpcError.message?.includes('STOCK')) {
                     const itemName = rpcError.message.split(': ')[1] || 'An item in your cart';
                     setCheckoutError(`Oops! We just ran out of stock for "${itemName}". Please remove it from your cart or adjust the quantity to continue.`);
@@ -185,7 +194,10 @@ const Checkout = () => {
             if (result && result.order_number) {
                 setOrderNumber(result.order_number);
                 setIsOrdered(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
                 if (!isBuyNow) clearSelectedItems();
+                // Refresh client-side coin balance immediately
+                refreshCustomer();
             } else {
                 throw new Error("Order creation succeeded but no order number was returned.");
             }
@@ -327,25 +339,19 @@ const Checkout = () => {
                     /* ─── CHECKOUT FORM ─── */
                     <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                            <button
+                            <div 
                                 onClick={() => navigate(-1)}
-                                type="button"
-                                style={{ 
-                                    width: '40px', 
-                                    height: '40px', 
-                                    borderRadius: '12px', 
-                                    border: '1.5px solid #e2e8f0', 
-                                    background: 'white', 
-                                    cursor: 'pointer', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                                    color: 'var(--primary-blue)'
+                                style={{
+                                    width: '44px', height: '44px', borderRadius: '50%',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)', color: '#0f172a',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                    border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                    cursor: 'pointer',
+                                    WebkitTapHighlightColor: 'transparent'
                                 }}
                             >
-                                <span style={{ fontSize: '1.5rem', fontWeight: '400', lineHeight: 0, marginTop: '-2px' }}>‹</span>
-                            </button>
+                                <ArrowLeft size={22} color="#0f172a" strokeWidth={2.2} />
+                            </div>
                             <h2 className="section-title" style={{ margin: 0 }}>Checkout</h2>
                         </div>
 

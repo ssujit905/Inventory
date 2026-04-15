@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowRight, ShoppingBag, Zap, ShieldCheck, Truck, Star } from 'lucide-react';
+import { ArrowRight, ShoppingBag, Zap, ShieldCheck, Truck, Star, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
 import { useSettings } from '../context/SettingsContext';
@@ -18,6 +18,46 @@ const Home = () => {
         { id: 3, image: settings.hero_slider_3_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_discount_1776096397147.png' },
         { id: 'clone-first', image: settings.hero_slider_1_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_info_1776096290574.png' }
     ];
+
+    // Flash Sale Timer & Product Logic
+    const [timeLeft, setTimeLeft] = useState({ hours: '00', minutes: '00', seconds: '00' });
+    const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
+    const flashSaleEndTime = settings.flash_sale_end; // Should be YYYY-MM-DD HH:MM:SS
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            if (!flashSaleEndTime) return;
+            const now = new Date();
+            const end = new Date(flashSaleEndTime.replace(' ', 'T')); // Handle ISO string conversion
+            const diff = end - now;
+            
+            if (diff > 0) {
+                const hours = Math.floor(diff / (1000 * 60 * 60)).toString().padStart(2, '0');
+                const minutes = Math.floor((diff / 1000 / 60) % 60).toString().padStart(2, '0');
+                const seconds = Math.floor((diff / 1000) % 60).toString().padStart(2, '0');
+                setTimeLeft({ hours, minutes, seconds, total: diff });
+            } else {
+                setTimeLeft({ hours: '00', minutes: '00', seconds: '00', total: 0 });
+            }
+        };
+
+        calculateTimeLeft();
+        const timer = setInterval(calculateTimeLeft, 1000);
+        return () => clearInterval(timer);
+    }, [flashSaleEndTime]);
+
+    // Merge flash sale products with full product details
+    const flashSaleProducts = flashSaleConfig.map(saleItem => {
+        const product = products.find(p => p.id === saleItem.id);
+        if (!product) return null;
+        const discount = Number(settings.flash_sale_discount || 0);
+        const salePrice = Math.floor(product.price - (product.price * (discount / 100)));
+        return {
+            ...product,
+            original_price: product.price, // Use current base price as "Original"
+            price: salePrice               // Use calculated sale price
+        };
+    }).filter(p => p !== null);
 
     // Auto-rotate slider
     useEffect(() => {
@@ -52,7 +92,7 @@ const Home = () => {
     const rightColumn = products.filter((_, idx) => idx % 2 !== 0);
 
     return (
-        <div style={{ backgroundColor: '#fff' }}>
+        <div style={{ backgroundColor: 'transparent' }}>
             {/* ─── Premium Hero Section ─── */}
             {/* ─── Premium Hero Slider Section ─── */}
             <section className="hero-slider" style={{
@@ -138,6 +178,162 @@ const Home = () => {
             </section>
 
             {/* ─── Trust Indicators ─── */}
+
+            {/* ── FLASH SALE SECTION (Shopee Style) ── */}
+            {(settings.flash_sale_enabled === 'true' && flashSaleProducts.length > 0) ? (
+                <div style={{ backgroundColor: '#fff', borderBottom: '1px solid var(--border-color)', borderTop: '1px solid var(--border-color)', marginTop: '1rem', marginBottom: '1rem' }}>
+                    <div>
+                        {/* Flash Sale Header (Title Left, Timer Right) */}
+                        <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            background: 'linear-gradient(90deg, #ee4d2d 0%, #ff7337 100%)',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '0',
+                            color: 'white'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Zap size={window.innerWidth < 480 ? 20 : 24} fill="white" />
+                                <span style={{ 
+                                    fontWeight: '900', 
+                                    fontSize: window.innerWidth < 480 ? '1rem' : '1.2rem', 
+                                    letterSpacing: '0.5px', 
+                                    textTransform: 'uppercase' 
+                                }}>Flash Sale</span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {window.innerWidth > 480 && (
+                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', opacity: 0.9 }}>Ends In</span>
+                                )}
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    {[
+                                        { val: timeLeft.hours, label: 'h' },
+                                        { val: timeLeft.minutes, label: 'm' },
+                                        { val: timeLeft.seconds, label: 's' }
+                                    ].map((t, i) => (
+                                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                            <div style={{ 
+                                                backgroundColor: '#000', 
+                                                color: '#fff', 
+                                                padding: '4px 6px', 
+                                                borderRadius: '4px', 
+                                                minWidth: window.innerWidth < 480 ? '24px' : '28px', 
+                                                textAlign: 'center',
+                                                fontWeight: '900',
+                                                fontSize: window.innerWidth < 480 ? '0.8rem' : '0.9rem'
+                                            }}>
+                                                {String(t.val).padStart(2, '0')}
+                                            </div>
+                                            {i < 2 && <span style={{ fontWeight: '900', color: 'white' }}>:</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Horizontal Scrollable Flash Sale Product List */}
+                        <div style={{ 
+                            display: 'flex', 
+                            gap: '12px',
+                            padding: '12px 1rem',
+                            backgroundColor: 'white',
+                            borderRadius: '0',
+                            overflowX: 'auto',
+                            scrollSnapType: 'x mandatory',
+                            scrollbarWidth: 'none',
+                            WebkitOverflowScrolling: 'touch'
+                        }}>
+                            <style>{`div::-webkit-scrollbar { display: none; }`}</style>
+                            {flashSaleProducts.map(product => {
+                               const discount = Number(settings.flash_sale_discount || 0);
+                               return (
+                                <Link key={product.id} to={`/product/${product.id}`} style={{ 
+                                    textDecoration: 'none', 
+                                    color: 'inherit', 
+                                    position: 'relative',
+                                    flex: '0 0 145px', // Fixed width for scroll items
+                                    scrollSnapAlign: 'start'
+                                }}>
+                                    <div style={{ 
+                                        backgroundColor: 'white', 
+                                        borderRadius: '0.75rem', 
+                                        overflow: 'hidden', 
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                                        borderBottom: '3px solid #000'
+                                    }}>
+                                        {/* Discount Badge */}
+                                        <div style={{ 
+                                            position: 'absolute', 
+                                            top: 0, 
+                                            right: 0, 
+                                            backgroundColor: '#ffd424', 
+                                            color: '#ee4d2d',
+                                            padding: '4px 6px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: '800',
+                                            zIndex: 10
+                                        }}>
+                                            {discount}% OFF
+                                        </div>
+
+                                        <img src={product.image} alt={product.title} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                        
+                                        <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#ee4d2d', marginBottom: '2px' }}>
+                                                    Rs.{Number(product.price).toLocaleString()}
+                                                </div>
+                                                <div style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#999' }}>
+                                                    Rs.{Number(product.original_price).toLocaleString()}
+                                                </div>
+                                            </div>
+
+                                            {/* Shopee-style Sold Progress Bar */}
+                                            <div style={{ marginTop: '8px' }}>
+                                                <div style={{ 
+                                                    height: '12px', 
+                                                    backgroundColor: '#ffbdab', 
+                                                    borderRadius: '10px', 
+                                                    position: 'relative',
+                                                    overflow: 'hidden',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}>
+                                                    <div style={{ 
+                                                        position: 'absolute', 
+                                                        left: 0, 
+                                                        top: 0, 
+                                                        height: '100%', 
+                                                        width: '75%', 
+                                                        backgroundColor: '#ee4d2d',
+                                                        borderRadius: '10px'
+                                                    }}></div>
+                                                    <span style={{ 
+                                                        fontSize: '8px', 
+                                                        color: 'white', 
+                                                        fontWeight: '900', 
+                                                        zIndex: 1,
+                                                        textTransform: 'uppercase'
+                                                    }}>SALE</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                               )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div style={{ padding: '1rem', textAlign: 'center', width: '100%', color: '#94a3b8', fontSize: '0.8rem', backgroundColor: '#fff' }}>Check back later for flash deals!</div>
+            )}
 
             {/* ─── Trust Indicators ─── */}
             <div className="trust-bar" style={{ 
