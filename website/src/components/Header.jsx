@@ -123,32 +123,50 @@ const Header = () => {
                             onClick={() => setIsSearchOpen(!isSearchOpen)}
                             style={{ 
                                 color: isSearchOpen ? 'var(--primary-red)' : 'var(--text-dark)', 
-                                padding: '8px', 
+                                width: '42px',
+                                height: '42px',
                                 borderRadius: '12px', 
                                 display: 'flex', 
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 background: isSearchOpen ? 'var(--primary-red-50)' : '#f8fafc',
                                 border: '1px solid var(--border-color)',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                minHeight: 'unset',
+                                padding: 0
                             }}
                         >
-                            {isSearchOpen ? <X size={22} strokeWidth={2.2} /> : <Search size={22} strokeWidth={2.2} />}
+                            {isSearchOpen ? <X size={20} strokeWidth={2.5} /> : <Search size={20} strokeWidth={2.5} />}
                         </button>
                     )}
 
-                    <Link id="cart-icon" to="/cart" style={{ position: 'relative', color: 'var(--text-dark)', padding: '8px', borderRadius: '12px', display: 'flex', transition: 'all 0.2s', background: '#f8fafc', border: '1px solid var(--border-color)' }}>
-                        <ShoppingCart size={22} strokeWidth={2.2} />
+                    <Link id="cart-icon" to="/cart" style={{ 
+                        position: 'relative', 
+                        color: 'var(--text-dark)', 
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px', 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s', 
+                        background: '#f8fafc', 
+                        border: '1px solid var(--border-color)',
+                        padding: 0
+                    }}>
+                        <ShoppingCart size={20} strokeWidth={2.5} />
                         {cartCount > 0 && (
                             <span style={{
                                 position: 'absolute',
-                                top: '-6px',
-                                right: '-6px',
+                                top: '-4px',
+                                right: '-4px',
                                 backgroundColor: 'var(--primary-red)',
                                 color: 'white',
                                 fontSize: '0.65rem',
                                 fontWeight: '900',
-                                height: '20px',
-                                width: '20px',
+                                height: '18px',
+                                width: '18px',
                                 borderRadius: '50%',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -161,26 +179,31 @@ const Header = () => {
                         )}
                     </Link>
                     {customer && (
-                        <button 
-                            className="desktop-only hover-scale"
-                            onClick={() => {
-                                customerLogout();
-                                navigate('/');
-                            }}
-                            title="Sign Out"
-                            style={{ 
-                                color: '#ef4444', 
-                                padding: '8px', 
-                                borderRadius: '12px', 
-                                display: 'flex', 
-                                transition: 'all 0.2s', 
-                                background: '#fef2f2', 
-                                border: '1px solid #fecaca',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <LogOut size={22} strokeWidth={2.2} />
-                        </button>
+                            <button 
+                                className="desktop-only hover-scale"
+                                onClick={() => {
+                                    customerLogout();
+                                    navigate('/');
+                                }}
+                                title="Sign Out"
+                                style={{ 
+                                    color: '#ef4444', 
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '12px', 
+                                    display: 'flex', 
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s', 
+                                    background: '#fef2f2', 
+                                    border: '1px solid #fecaca',
+                                    cursor: 'pointer',
+                                    minHeight: 'unset',
+                                    padding: 0
+                                }}
+                            >
+                                <LogOut size={20} strokeWidth={2.5} />
+                            </button>
                     )}
                 </div>
             </div>

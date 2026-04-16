@@ -77,7 +77,7 @@ BEGIN
 END;
 $$;
 
--- 4. MASTER CANCELLATION (Restores stock via Transaction)
+-- 4. MASTER CANCELLATION (Restores stock to EXACT ORIGINAL LOTS)
 CREATE OR REPLACE FUNCTION handle_website_order_cancellation(
     p_order_id BIGINT,
     p_reason TEXT
@@ -86,7 +86,7 @@ RETURNS VOID
 LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_sale_id UUID;
-    v_item RECORD;
+    v_trans RECORD;
 BEGIN
     SELECT sale_id INTO v_sale_id FROM website_orders WHERE id = p_order_id;
     UPDATE website_orders SET status = 'cancelled', notes = p_reason, updated_at = NOW() WHERE id = p_order_id;
@@ -94,13 +94,16 @@ BEGIN
     IF v_sale_id IS NOT NULL THEN
         UPDATE sales SET parcel_status = 'cancelled' WHERE id = v_sale_id;
         
-        FOR v_item IN SELECT product_id, quantity FROM sale_items WHERE sale_id = v_sale_id LOOP
-            UPDATE product_lots 
-            SET quantity_remaining = quantity_remaining + v_item.quantity 
-            WHERE id = (SELECT id FROM product_lots WHERE product_id = v_item.product_id ORDER BY received_date ASC LIMIT 1);
+        -- Restore stock to the EXACT lots from which they were deducted
+        FOR v_trans IN SELECT product_id, lot_id, ABS(quantity_changed) as qty FROM transactions WHERE sale_id = v_sale_id AND type = 'sale' LOOP
+            -- Return stock to the physical lot column
+            IF v_trans.lot_id IS NOT NULL THEN
+                UPDATE product_lots SET quantity_remaining = quantity_remaining + v_trans.qty WHERE id = v_trans.lot_id;
+            END IF;
             
-            INSERT INTO transactions (product_id, sale_id, type, quantity_changed, performed_by)
-            VALUES (v_item.product_id, v_sale_id, 'cancel', v_item.quantity, (SELECT id FROM profiles LIMIT 1));
+            -- Log the cancellation transaction
+            INSERT INTO transactions (product_id, lot_id, sale_id, type, quantity_changed, performed_by)
+            VALUES (v_trans.product_id, v_trans.lot_id, v_sale_id, 'cancel', v_trans.qty, (SELECT id FROM profiles LIMIT 1));
         END LOOP;
     END IF;
 END;

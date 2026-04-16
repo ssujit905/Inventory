@@ -584,10 +584,22 @@ export default function WebsiteProductsPage() {
                                         <div key={i} className={`flex flex-col gap-2 p-2 rounded-2xl border ${img.is_primary ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800'}`}>
                                             <div className="relative aspect-square rounded-xl overflow-hidden group">
                                                 <img src={img.preview || img.image_url} alt="" className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                                {/* Always-visible delete button in top-right corner */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))}
+                                                    className="absolute top-1 right-1 z-10 p-1 bg-rose-500 text-white rounded-lg shadow-md hover:bg-rose-600 transition-colors"
+                                                    title="Remove image"
+                                                >
+                                                    <X size={12} strokeWidth={3} />
+                                                </button>
+                                                {/* Hover overlay for Set Primary */}
+                                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                     <button type="button" onClick={() => setPrimaryImage(i)} className="p-1.5 bg-white/90 rounded-lg text-gray-700 hover:text-amber-500" title="Set primary"><Star size={14} className={img.is_primary ? 'fill-amber-500 text-amber-500' : ''} /></button>
-                                                    <button type="button" onClick={() => removeImage(i)} className="p-1.5 bg-white/90 rounded-lg text-rose-500" title="Remove"><Trash2 size={14} /></button>
                                                 </div>
+                                                {img.is_primary && (
+                                                    <div className="absolute bottom-1 left-1 px-2 py-0.5 bg-primary text-white text-[9px] font-black rounded-full">PRIMARY</div>
+                                                )}
                                             </div>
                                             <input 
                                                 value={img.label} 

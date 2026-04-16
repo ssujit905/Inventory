@@ -406,15 +406,21 @@ export default function SalesPage() {
                 let remainingToDeduct = item.quantity;
                 for (const lot of processedLots) {
                     if (remainingToDeduct <= 0) break;
-                    const deduction = Math.min(lot.calculatedRemaining, remainingToDeduct);
+                    
+                    // IMPORTANT: We use the locally updated calculatedRemaining
+                    const availableForThisLot = lot.calculatedRemaining;
+                    if (availableForThisLot <= 0) continue;
+
+                    const deduction = Math.min(availableForThisLot, remainingToDeduct);
                     deductionsToMake.push({
                         lotId: lot.id,
                         productId: lot.product_id,
                         deduction,
-                        // We still update the physical quantity_remaining column for backward compatibility 
-                        // and potential DB-level checks, though our logic is now transaction-based.
-                        currentPhysical: lot.calculatedRemaining
+                        currentPhysical: availableForThisLot
                     });
+                    
+                    // Decrement local counter so the NEXT item in the SAME order knows Lot 1 is depleted
+                    lot.calculatedRemaining -= deduction;
                     remainingToDeduct -= deduction;
                 }
             }

@@ -45,8 +45,6 @@ export default function InventoryPage() {
                 .from('product_lots')
                 .select(`
                     id,
-                    lot_number,
-                    quantity_remaining,
                     product_id,
                     products (name, sku, min_stock_alert),
                     transactions (
@@ -58,45 +56,55 @@ export default function InventoryPage() {
 
             if (lotsError) throw lotsError;
 
-            const processedData: InventoryLot[] = (lotsData || []).map((lot: any) => {
+            // 1. Process individual lots first
+            const individualLots = (lotsData || []).map((lot: any) => {
                 const transactions = lot.transactions || [];
-
-                const stock_in = transactions
-                    .filter((t: any) => t.type === 'in')
-                    .reduce((sum: number, t: any) => sum + t.quantity_changed, 0);
-
-                const sold = transactions
-                    .filter((t: any) => {
-                        if (t.type !== 'sale') return false;
-                        if (t.sales) {
-                            return ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status);
-                        }
-                        return true;
-                    })
-                    .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
-
-                const returned = transactions
-                    .filter((t: any) => t.type === 'sale' && t.sales?.parcel_status === 'returned')
-                    .reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
-
-                const remaining = stock_in - sold;
-                const minStock = lot.products?.min_stock_alert || 5;
-
-                let status: InventoryLot['status'] = 'Healthy';
-                if (remaining <= 0) status = 'Out of Stock';
-                else if (remaining <= minStock) status = 'Low Stock';
-
+                const stock_in = transactions.filter((t: any) => t.type === 'in').reduce((sum: number, t: any) => sum + t.quantity_changed, 0);
+                const sold = transactions.filter((t: any) => {
+                    if (t.type !== 'sale') return false;
+                    return t.sales ? ['processing', 'sent', 'delivered'].includes(t.sales.parcel_status) : true;
+                }).reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
+                const returned = transactions.filter((t: any) => t.type === 'sale' && t.sales?.parcel_status === 'returned').reduce((sum: number, t: any) => sum + Math.abs(t.quantity_changed), 0);
+                
                 return {
-                    id: lot.id,
-                    lot_number: lot.lot_number,
                     sku: lot.products?.sku || 'N/A',
-                    product_name: lot.products?.name || 'Unknown Product',
+                    name: lot.products?.name || 'Unknown',
                     stock_in,
                     sold,
                     returned,
-                    remaining,
-                    status
+                    min_stock: lot.products?.min_stock_alert || 5
                 };
+            });
+
+            // 2. Group by SKU to show Unique Products only
+            const grouped: Record<string, InventoryLot> = {};
+            individualLots.forEach(lot => {
+                if (!grouped[lot.sku]) {
+                    grouped[lot.sku] = {
+                        id: lot.sku,
+                        lot_number: '-', // Not used anymore
+                        sku: lot.sku,
+                        product_name: lot.name,
+                        stock_in: 0,
+                        sold: 0,
+                        returned: 0,
+                        remaining: 0,
+                        status: 'Healthy'
+                    };
+                }
+                grouped[lot.sku].stock_in += lot.stock_in;
+                grouped[lot.sku].sold += lot.sold;
+                grouped[lot.sku].returned += lot.returned;
+            });
+
+            // 3. Finalize stats and status
+            const processedData = Object.values(grouped).map(item => {
+                const remaining = item.stock_in - item.sold;
+                let status: InventoryLot['status'] = 'Healthy';
+                if (remaining <= 0) status = 'Out of Stock';
+                else if (remaining <= 5) status = 'Low Stock'; // Standard threshold
+
+                return { ...item, remaining, status };
             });
 
             setInventory(processedData);
@@ -166,7 +174,6 @@ export default function InventoryPage() {
                                     <thead>
                                         <tr className="bg-gray-50/50 dark:bg-gray-800/30 border-b border-gray-100 dark:border-gray-800 text-[10px] uppercase tracking-widest font-bold text-gray-400">
                                             <th className="px-6 py-4">Product Info</th>
-                                            <th className="px-6 py-4">Batch #</th>
                                             <th className="px-6 py-4 text-center">In</th>
                                             <th className="px-6 py-4 text-center">Sold</th>
                                             <th className="px-6 py-4 text-center">Ret</th>
@@ -177,7 +184,7 @@ export default function InventoryPage() {
                                     <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                                         {filteredInventory.length === 0 ? (
                                             <tr>
-                                                <td colSpan={7} className="px-6 py-20 text-center">
+                                                <td colSpan={6} className="px-6 py-20 text-center">
                                                     <div className="flex flex-col items-center gap-3 opacity-30">
                                                         <Package size={40} strokeWidth={1.5} />
                                                         <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
@@ -196,12 +203,6 @@ export default function InventoryPage() {
                                                                 <p className="font-semibold text-gray-900 dark:text-gray-100">{item.product_name}</p>
                                                                 <p className="text-[10px] text-gray-400 font-medium">{item.sku}</p>
                                                             </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2 text-gray-500 font-medium">
-                                                            <Hash size={12} strokeWidth={1.5} />
-                                                            <span>{item.lot_number}</span>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-center font-bold text-gray-700 dark:text-gray-300">{item.stock_in}</td>

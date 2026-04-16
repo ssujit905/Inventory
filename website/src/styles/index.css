@@ -179,6 +179,14 @@ input:focus, textarea:focus {
     animation: spin 1s linear infinite;
 }
 
+.hover-scale {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-scale:hover {
+    transform: scale(1.1);
+}
+
 /* Premium Card Style */
 .card {
     background: white;
