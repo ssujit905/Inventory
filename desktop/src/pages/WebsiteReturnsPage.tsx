@@ -10,21 +10,21 @@ import {
 
 interface ReturnRequest {
     id: number;
-    order_id: number;
-    order_number: string;
+    order_id?: number | null;
+    order_number?: string | null;
     customer_phone: string;
-    type: 'return' | 'exchange';
+    type: 'return' | 'exchange' | 'message';
     message: string;
-    media: { url: string; type: string }[];
+    media?: { url: string; type: string }[] | null;
     status: 'pending' | 'approved' | 'rejected' | 'completed';
     created_at: string;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    pending: { label: 'New Request', color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Clock size={12} /> },
-    approved: { label: 'Approved', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Check size={12} /> },
+    pending: { label: 'New', color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Clock size={12} /> },
+    approved: { label: 'Processed', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Check size={12} /> },
     rejected: { label: 'Rejected', color: 'bg-rose-50 text-rose-600 border-rose-200', icon: <X size={12} /> },
-    completed: { label: 'Resolved', color: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <Check size={12} /> },
+    completed: { label: 'Completed', color: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <Check size={12} /> },
 };
 
 export default function WebsiteReturnsPage() {
@@ -33,6 +33,7 @@ export default function WebsiteReturnsPage() {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
 
     useEffect(() => {
         fetchRequests();
@@ -82,9 +83,13 @@ export default function WebsiteReturnsPage() {
         showToast(`Request ${status}!`);
     };
 
+    const filteredRequests = activeTab === 'all' 
+        ? requests 
+        : requests.filter(r => r.type === activeTab);
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            {/* Global Toast Notification — Always at the top-right! */}
+            {/* Global Toast Notification */}
             {toast && (
                 <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                     <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
@@ -98,31 +103,54 @@ export default function WebsiteReturnsPage() {
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <RotateCcw size={22} className="text-primary" /> Return & Exchange Requests
+                            <RotateCcw size={22} className="text-primary" /> Customer Requests
                         </h1>
-                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Manage return and exchange claims from customers</p>
+                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Manage return, exchange, and contact messages</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">{requests.length}</p>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest">Total Requests</p>
+                        <p className="text-2xl font-black text-gray-900 dark:text-gray-100">{filteredRequests.length}</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-widest">{activeTab === 'all' ? 'Total' : activeTab} Requests</p>
                     </div>
+                </div>
+
+                {/* Tabs Menu */}
+                <div className="flex items-center gap-2 p-1.5 bg-gray-100 dark:bg-gray-800/50 rounded-2xl w-fit">
+                    {(['all', 'return', 'exchange', 'message'] as const).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                                activeTab === tab 
+                                    ? 'bg-white dark:bg-gray-700 text-primary shadow-sm' 
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
                 </div>
 
                 {loading ? (
                     <div className="flex h-64 items-center justify-center">
                         <Loader2 size={32} className="animate-spin text-primary" />
                     </div>
-                ) : requests.length === 0 ? (
+                ) : filteredRequests.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 gap-4">
                         <RotateCcw size={48} className="text-gray-200 dark:text-gray-700" />
-                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No requests found</p>
+                        <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No {activeTab === 'all' ? '' : activeTab} requests found</p>
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {requests.map(request => {
+                        {filteredRequests.map(request => {
                             const cfg = STATUS_CONFIG[request.status] || STATUS_CONFIG.pending;
                             const isExpanded = expandedId === request.id;
                             
+                            const typeColors = {
+                                return: 'bg-rose-50 text-rose-600 border-rose-100',
+                                exchange: 'bg-blue-50 text-blue-600 border-blue-100',
+                                message: 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                            };
+
                             return (
                                 <div key={request.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm hover:shadow-md transition-all">
                                     <div 
@@ -131,8 +159,10 @@ export default function WebsiteReturnsPage() {
                                     >
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-xs font-black text-gray-500 dark:text-gray-400 font-mono">#{request.order_number}</span>
-                                                <span className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase ${request.type === 'return' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                                {request.order_number && (
+                                                    <span className="text-xs font-black text-gray-500 dark:text-gray-400 font-mono">#{request.order_number}</span>
+                                                )}
+                                                <span className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase ${typeColors[request.type]}`}>
                                                     {request.type}
                                                 </span>
                                                 <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black ${cfg.color}`}>
@@ -143,16 +173,16 @@ export default function WebsiteReturnsPage() {
                                             <p className="text-xs text-gray-400">{format(new Date(request.created_at), 'MMM d, yyyy · h:mm a')}</p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {request.media?.length > 0 && (
+                                            {(request.media || []).length > 0 && (
                                                 <div className="flex -space-x-2">
-                                                    {request.media.slice(0, 3).map((m, i) => (
+                                                    {request.media!.slice(0, 3).map((m, i) => (
                                                         <div key={i} className="w-8 h-8 rounded-lg border-2 border-white dark:border-gray-900 overflow-hidden bg-gray-100">
                                                             <img src={m.url} className="w-full h-full object-cover" />
                                                         </div>
                                                     ))}
-                                                    {request.media.length > 3 && (
+                                                    {request.media!.length > 3 && (
                                                         <div className="w-8 h-8 rounded-lg border-2 border-white dark:border-gray-900 bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-500">
-                                                            +{request.media.length - 3}
+                                                            +{request.media!.length - 3}
                                                         </div>
                                                     )}
                                                 </div>
@@ -163,21 +193,20 @@ export default function WebsiteReturnsPage() {
 
                                     {isExpanded && (
                                         <div className="border-t border-gray-100 dark:border-gray-800 p-5 space-y-6">
-                                            {/* Content */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                 <div className="space-y-4">
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                                            <MessageSquare size={12} /> Reason for {request.type}
+                                                            <MessageSquare size={12} /> {request.type === 'message' ? 'Contact Message' : `Reason for ${request.type}`}
                                                         </p>
-                                                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-medium">
+                                                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-medium whitespace-pre-wrap">
                                                             {request.message}
                                                         </div>
                                                     </div>
                                                     
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                                            <Phone size={12} /> Customer Contact
+                                                            <Phone size={12} /> Sender Phone
                                                         </p>
                                                         <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
                                                             <span className="font-bold text-gray-700 dark:text-gray-200">{request.customer_phone}</span>
@@ -190,11 +219,11 @@ export default function WebsiteReturnsPage() {
 
                                                 <div className="space-y-4">
                                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                                        <ImageIcon size={12} /> Evidence Photos
+                                                        <ImageIcon size={12} /> Evidence / Context
                                                     </p>
-                                                    {request.media?.length > 0 ? (
+                                                    {(request.media || []).length > 0 ? (
                                                         <div className="grid grid-cols-3 gap-2">
-                                                            {request.media.map((m, i) => (
+                                                            {request.media!.map((m, i) => (
                                                                 <a key={i} href={m.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-gray-100 border border-gray-200 dark:border-gray-700 group relative">
                                                                     <img src={m.url} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                                                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -205,31 +234,30 @@ export default function WebsiteReturnsPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="h-24 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border-2 border-dashed border-gray-100 dark:border-gray-800 flex items-center justify-center text-gray-400 text-xs font-bold">
-                                                            No photos uploaded
+                                                            {request.type === 'message' ? 'No attachments' : 'No photos uploaded'}
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
 
-                                            {/* Action Bar */}
                                             <div className="pt-6 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2">
                                                 <button 
                                                     onClick={() => updateStatus(request.id, 'approved')}
                                                     className="flex-1 min-w-[120px] bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                                                 >
-                                                    <Check size={14} /> Approve Request
+                                                    <Check size={14} /> {request.type === 'message' ? 'Mark Processed' : 'Approve Request'}
                                                 </button>
                                                 <button 
                                                     onClick={() => updateStatus(request.id, 'completed')}
                                                     className="flex-1 min-w-[120px] bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
                                                 >
-                                                    <Check size={14} /> Mark Resolved
+                                                    <Check size={14} /> {request.type === 'message' ? 'Resolved' : 'Mark Resolved'}
                                                 </button>
                                                 <button 
                                                     onClick={() => updateStatus(request.id, 'rejected')}
                                                     className="flex-1 min-w-[120px] bg-gray-100 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
                                                 >
-                                                    <X size={14} /> Reject Request
+                                                    <X size={14} /> Dismiss
                                                 </button>
                                             </div>
                                         </div>

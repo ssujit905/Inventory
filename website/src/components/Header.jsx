@@ -72,13 +72,14 @@ const Header = () => {
                         gap: '10px',
                         textDecoration: 'none',
                         minWidth: 'fit-content'
-                    }} className="header-logo">
+                    }} className={`header-logo ${isMyOrdersPage ? 'header-logo-left' : ''}`}>
                         <img src="/logo.png" alt="" style={{ height: '28px', width: 'auto' }} onError={(e) => e.target.style.display = 'none'} />
                         <span style={{
                             fontSize: '1.4rem',
                             fontWeight: '800',
                             color: 'var(--primary-blue)',
-                            letterSpacing: '-0.03em'
+                            letterSpacing: '-0.03em',
+                            whiteSpace: 'nowrap'
                         }}>
                             {storeName.slice(0, Math.ceil(storeName.length / 2))}
                             <span style={{ color: 'var(--primary-red)' }}>{storeName.slice(Math.ceil(storeName.length / 2))}</span>
@@ -115,16 +116,16 @@ const Header = () => {
                 </div>
 
                 {/* Right Side: Action Icons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+                <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
                     {/* Desktop Search Toggle */}
                     {!hideSearch && (
                         <button 
-                            className="desktop-only"
+                            className="desktop-only hover-scale"
                             onClick={() => setIsSearchOpen(!isSearchOpen)}
                             style={{ 
                                 color: isSearchOpen ? 'var(--primary-red)' : 'var(--text-dark)', 
-                                width: '42px',
-                                height: '42px',
+                                width: '44px',
+                                height: '44px',
                                 borderRadius: '12px', 
                                 display: 'flex', 
                                 alignItems: 'center',
@@ -137,15 +138,41 @@ const Header = () => {
                                 padding: 0
                             }}
                         >
-                            {isSearchOpen ? <X size={20} strokeWidth={2.5} /> : <Search size={20} strokeWidth={2.5} />}
+                            {isSearchOpen ? <X size={22} strokeWidth={2} /> : <Search size={22} strokeWidth={2} />}
                         </button>
                     )}
 
-                    <Link id="cart-icon" to="/cart" style={{ 
+                    {/* Settings Icon — only when customer is logged in on the account page */}
+                    {customer && isMyOrdersPage && (
+                        <button
+                            className="hover-scale"
+                            onClick={() => window.dispatchEvent(new CustomEvent('open-change-pin-modal'))}
+                            title="Account Settings"
+                            style={{
+                                color: 'var(--primary-blue)',
+                                width: '44px',
+                                height: '44px',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                background: 'rgba(59, 130, 246, 0.08)',
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                cursor: 'pointer',
+                                minHeight: 'unset',
+                                padding: 0
+                            }}
+                        >
+                            <SettingsIcon size={22} strokeWidth={2} />
+                        </button>
+                    )}
+
+                    <Link id="cart-icon" to="/cart" className="hover-scale" style={{ 
                         position: 'relative', 
                         color: 'var(--text-dark)', 
-                        width: '42px',
-                        height: '42px',
+                        width: '44px',
+                        height: '44px',
                         borderRadius: '12px', 
                         display: 'flex', 
                         alignItems: 'center',
@@ -155,7 +182,7 @@ const Header = () => {
                         border: '1px solid var(--border-color)',
                         padding: 0
                     }}>
-                        <ShoppingCart size={20} strokeWidth={2.5} />
+                        <ShoppingCart size={22} strokeWidth={2} />
                         {cartCount > 0 && (
                             <span style={{
                                 position: 'absolute',
@@ -188,8 +215,8 @@ const Header = () => {
                                 title="Sign Out"
                                 style={{ 
                                     color: '#ef4444', 
-                                    width: '42px',
-                                    height: '42px',
+                                    width: '44px',
+                                    height: '44px',
                                     borderRadius: '12px', 
                                     display: 'flex', 
                                     alignItems: 'center',
@@ -202,7 +229,7 @@ const Header = () => {
                                     padding: 0
                                 }}
                             >
-                                <LogOut size={20} strokeWidth={2.5} />
+                                <LogOut size={22} strokeWidth={2} />
                             </button>
                     )}
                 </div>
@@ -305,6 +332,25 @@ const Header = () => {
                         position: absolute;
                         left: 50%;
                         transform: translateX(-50%);
+                        max-width: 200px;
+                    }
+                    /* On Account page, shift logo left to give right-side icons more room */
+                    .header-logo.header-logo-left {
+                        position: static !important;
+                        transform: none !important;
+                        margin-left: 0.5rem;
+                    }
+                    /* Scale down the action icons somewhat on small screens to prevent overlap */
+                    .header-actions {
+                        gap: 2px !important;
+                    }
+                    .header-actions button, .header-actions a {
+                        width: 36px !important;
+                        height: 36px !important;
+                    }
+                    .header-actions svg {
+                        width: 18px !important;
+                        height: 18px !important;
                     }
                 }
             `}</style>

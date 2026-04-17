@@ -42,7 +42,7 @@ function App() {
       {/* Floating WhatsApp Support Button */}
       {!isProductDetail && (
         <a 
-          href={`https://wa.me/${supportPhone}?text=Hi Shopy Nepal, I need some help!`}
+          href={`https://wa.me/${supportPhone.replace(/\D/g, '')}?text=${encodeURIComponent('Hi Shopy Nepal, I need some help!')}`}
           target="_blank"
           rel="noopener noreferrer"
           style={{

@@ -1,8 +1,13 @@
-import { Mail, Phone, MapPin, Send, Plus, Minus, MessageCircle, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Send, Plus, Minus, MessageCircle, ChevronDown, ChevronRight, HelpCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 const Contact = () => {
     const [openFaq, setOpenFaq] = useState(0);
+    const [formData, setFormData] = useState({ name: '', email: '', phone: '', message: '' });
+    const [loading, setLoading] = useState(false);
+    const [success, setSuccess] = useState(false);
+    const [error, setError] = useState('');
 
     const faqs = [
         {
@@ -22,6 +27,29 @@ const Contact = () => {
             a: "You can track your order status in real-time from the 'My Account' section after logging in. You'll also receive SMS updates."
         }
     ];
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        try {
+            const { error: err } = await supabase.from('website_order_returns').insert({
+                order_number: 'CONTACT',
+                customer_phone: formData.phone,
+                type: 'message',
+                message: `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage: ${formData.message}`,
+                status: 'pending'
+            });
+            if (err) throw err;
+            setSuccess(true);
+            setFormData({ name: '', email: '', phone: '', message: '' });
+            setTimeout(() => setSuccess(false), 5000);
+        } catch (err) {
+            setError(err.message || 'Failed to send message. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="support-page" style={{ background: '#f8fafc', minHeight: '100vh', padding: '0 0 5rem' }}>
@@ -129,23 +157,47 @@ const Contact = () => {
                         boxShadow: '0 20px 40px rgba(0,0,0,0.03)'
                     }}>
                         <h2 style={{ fontSize: '1.5rem', fontWeight: '900', marginBottom: '2rem', color: '#0f172a' }}>Send a Message</h2>
-                        <form style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                            <div className="form-group">
-                                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Full Name</label>
-                                <input required style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600' }} placeholder="Suman Thapa" />
+                        
+                        {success ? (
+                            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+                                <CheckCircle2 size={64} color="#22c55e" style={{ marginBottom: '1.5rem' }} />
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '900', color: '#0f172a', marginBottom: '0.5rem' }}>Message Sent!</h3>
+                                <p style={{ color: '#64748b', fontWeight: '600' }}>We have received your message and will get back to you soon.</p>
+                                <button 
+                                    onClick={() => setSuccess(false)}
+                                    className="btn btn-primary" 
+                                    style={{ marginTop: '2rem', padding: '0.75rem 2rem', borderRadius: '1rem', fontWeight: '800' }}
+                                >
+                                    Send Another
+                                </button>
                             </div>
-                            <div className="form-group">
-                                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Email Address</label>
-                                <input required type="email" style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600' }} placeholder="suman@mail.com" />
-                            </div>
-                            <div className="form-group">
-                                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Message</label>
-                                <textarea required style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1.25rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600', minHeight: '140px', resize: 'none' }} placeholder="How can we help?"></textarea>
-                            </div>
-                            <button type="submit" className="btn btn-primary" style={{ padding: '1.15rem', borderRadius: '1.25rem', fontWeight: '900', fontSize: '1.1rem' }}>
-                                Send Message <Send size={20} style={{ marginLeft: '8px' }} />
-                            </button>
-                        </form>
+                        ) : (
+                            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                <div className="form-group">
+                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Full Name</label>
+                                    <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600' }} placeholder="Suman Thapa" />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Phone Number</label>
+                                    <input required type="tel" maxLength={10} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g, '')})} style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600' }} placeholder="98XXXXXXXX" />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Email Address</label>
+                                    <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600' }} placeholder="suman@mail.com" />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '800', color: '#475569', marginBottom: '0.5rem' }}>Message</label>
+                                    <textarea required value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})} style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '1.25rem', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600', minHeight: '140px', resize: 'none' }} placeholder="How can we help?"></textarea>
+                                </div>
+                                
+                                {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: '700', textAlign: 'center' }}>{error}</p>}
+                                
+                                <button disabled={loading} type="submit" className="btn btn-primary" style={{ padding: '1.15rem', borderRadius: '1.25rem', fontWeight: '900', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    {loading ? <Loader2 className="animate-spin" size={20} /> : 'Send Message'} 
+                                    {!loading && <Send size={20} />}
+                                </button>
+                            </form>
+                        )}
                     </div>
                 </div>
             </div>

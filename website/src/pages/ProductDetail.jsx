@@ -675,9 +675,19 @@ const ProductDetail = () => {
                 boxShadow: '0 -4px 10px rgba(0,0,0,0.03)'
             }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <div style={{ width: '44px', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <Link 
+                        to="/contact"
+                        style={{ 
+                            width: '44px', height: '100%', display: 'flex', flexDirection: 'column', 
+                            alignItems: 'center', justifyContent: 'center', background: '#f8fafc', 
+                            borderRadius: '12px', border: '1px solid var(--border-color)',
+                            transition: 'all 0.2s ease',
+                            cursor: 'pointer'
+                        }}
+                        className="hover-scale"
+                    >
                         <MessageCircle size={20} color="var(--primary-red)" />
-                    </div>
+                    </Link>
                     <button
                         onClick={product.is_sold_out ? null : handleAddToCartTrigger}
                         style={{ 

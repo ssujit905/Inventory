@@ -17,7 +17,7 @@ const MyOrders = () => {
     
     const queryTab = new URLSearchParams(location.search).get('tab');
     const [activeTab, setActiveTab] = useState(queryTab || 'orders');
-    const [activeStatus, setActiveStatus] = useState('All');
+    const [activeStatus, setActiveStatus] = useState('Processing');
     const [isRegistering, setIsRegistering] = useState(false);
     const [orders, setOrders] = useState([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
@@ -61,6 +61,74 @@ const MyOrders = () => {
     const [returnFiles, setReturnFiles] = useState([]);
     const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
     const [returnSuccess, setReturnSuccess] = useState(false);
+
+    // Change PIN State
+    const [showChangePinModal, setShowChangePinModal] = useState(false);
+    const [currentPin, setCurrentPin] = useState('');
+    const [newPin, setNewPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
+    const [pinLoading, setPinLoading] = useState(false);
+    const [pinMsg, setPinMsg] = useState({ text: '', type: '' });
+
+    // Listen for header Settings icon click to open the Change PIN modal
+    useEffect(() => {
+        const openModal = () => {
+            setShowChangePinModal(true);
+            setPinMsg({ text: '', type: '' });
+            setCurrentPin('');
+            setNewPin('');
+            setConfirmPin('');
+        };
+        window.addEventListener('open-change-pin-modal', openModal);
+        return () => window.removeEventListener('open-change-pin-modal', openModal);
+    }, []);
+
+
+    const handleChangePin = async (e) => {
+        e.preventDefault();
+        setPinMsg({ text: '', type: '' });
+        if (newPin !== confirmPin) {
+            setPinMsg({ text: 'New PINs do not match!', type: 'error' });
+            return;
+        }
+        if (newPin.length !== 4) {
+            setPinMsg({ text: 'PIN must be exactly 4 digits.', type: 'error' });
+            return;
+        }
+        if (!customer || !customer.phone) {
+            setPinMsg({ text: 'Session error. Please login again.', type: 'error' });
+            return;
+        }
+
+        setPinLoading(true);
+        try {
+            // Verify current PIN
+            const { data, error } = await supabase
+                .from('website_customers')
+                .select('phone')
+                .eq('phone', String(customer.phone))
+                .eq('pin_hash', String(currentPin))
+                .single();
+
+            if (error || !data) {
+                setPinMsg({ text: 'Current PIN is incorrect.', type: 'error' });
+                return;
+            }
+            // Update PIN
+            const { error: updateError } = await supabase
+                .from('website_customers')
+                .update({ pin_hash: String(newPin) })
+                .eq('phone', String(customer.phone));
+            if (updateError) throw updateError;
+            setPinMsg({ text: 'PIN changed successfully!', type: 'success' });
+            setCurrentPin(''); setNewPin(''); setConfirmPin('');
+            setTimeout(() => { setShowChangePinModal(false); setPinMsg({ text: '', type: '' }); }, 2000);
+        } catch (err) {
+            setPinMsg({ text: 'Failed to change PIN. Please try again.', type: 'error' });
+        } finally {
+            setPinLoading(false);
+        }
+    };
 
     // Share Order Function
     const handleShare = async (order) => {
@@ -295,29 +363,41 @@ const MyOrders = () => {
     };
 
     const filteredOrders = activeStatus === 'All' ? orders : orders.filter(o => o.status?.toLowerCase() === activeStatus.toLowerCase());
-    const statuses = ['All', 'Processing', 'Sent', 'Delivered', 'Returned', 'Cancelled'];
+    const statuses = ['Processing', 'Sent', 'Delivered', 'Returned', 'Cancelled'];
 
     return (
         <div className="section" style={{ background: '#f8fafc', minHeight: '90vh' }}>
+            <style>{`
+                @media (max-width: 768px) {
+                    .account-header-card {
+                        margin-left: -1.25rem !important;
+                        margin-right: -1.25rem !important;
+                        border-radius: 0 !important;
+                        margin-top: -1rem !important; /* Move it slightly up so it's closer to the header */
+                    }
+                }
+            `}</style>
             <div className="container">
                 {/* ── Account Header ── */}
-                <div style={{
-                    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                <div className="account-header-card" style={{
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                     borderRadius: '1.25rem',
                     padding: '1.5rem',
                     marginBottom: '1.5rem',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '1rem',
-                    color: 'white'
+                    color: 'white',
+                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.2)'
                 }}>
                     {/* Avatar */}
                     <div style={{
                         width: '56px', height: '56px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #ee4d2d, #ff7337)',
+                        background: '#ffffff',
+                        color: 'var(--primary-red)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '1.4rem', fontWeight: '900', flexShrink: 0,
-                        boxShadow: '0 4px 12px rgba(238,77,45,0.4)'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                     }}>
                         {(customer.name || 'U')[0].toUpperCase()}
                     </div>
@@ -330,19 +410,21 @@ const MyOrders = () => {
 
                     {/* Coins */}
                     <div style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.15)',
+                        background: 'var(--primary-blue)',
+                        border: '1px solid rgba(255,255,255,0.1)',
                         borderRadius: '0.75rem',
                         padding: '0.6rem 1rem',
                         textAlign: 'center',
-                        flexShrink: 0
+                        flexShrink: 0,
+                        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)'
                     }}>
-                        <p style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.7, margin: 0, fontWeight: '700' }}>Coins</p>
-                        <p style={{ fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Coins</p>
+                        <p style={{ color: 'white', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             🪙 {customer.shopy_coins || 0}
                         </p>
                     </div>
                 </div>
+
 
                 <div className="status-tabs-container" style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '1rem', scrollbarWidth: 'none' }}>
                     {statuses.map(s => {
@@ -541,6 +623,56 @@ const MyOrders = () => {
                                 </button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Change PIN Modal */}
+            {showChangePinModal && (
+                <div 
+                    className="modal-overlay" 
+                    onClick={() => setShowChangePinModal(false)}
+                    style={{ zIndex: 10000 }}
+                >
+                    <div 
+                        className="modal-content" 
+                        onClick={e => e.stopPropagation()}
+                        style={{ padding: '2rem', maxWidth: '380px', width: '90%', borderRadius: '1.5rem', position: 'relative' }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ fontWeight: '900', fontSize: '1.2rem', margin: 0 }}>🔒 Change PIN</h2>
+                            <button 
+                                onClick={() => setShowChangePinModal(false)} 
+                                style={{ background: '#f1f5f9', borderRadius: '50%', padding: '4px', minHeight: '32px', minWidth: '32px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                <X size={20} color="var(--text-gray)" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleChangePin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Current PIN</label>
+                                <input required type="password" maxLength={4} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} placeholder="Current 4-digit PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>New PIN</label>
+                                <input required type="password" maxLength={4} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} placeholder="New 4-digit PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Confirm New PIN</label>
+                                <input required type="password" maxLength={4} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} placeholder="Confirm new PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                                {confirmPin && confirmPin !== newPin && (
+                                    <p style={{ color: '#ef4444', fontSize: '0.75rem', fontWeight: '700', marginTop: '0.3rem' }}>PINs do not match</p>
+                                )}
+                            </div>
+                            {pinMsg.text && (
+                                <p style={{ color: pinMsg.type === 'success' ? '#16a34a' : '#ef4444', fontSize: '0.85rem', fontWeight: '800', textAlign: 'center', padding: '0.75rem', background: pinMsg.type === 'success' ? '#dcfce7' : '#fee2e2', borderRadius: '10px' }}>
+                                    {pinMsg.type === 'success' ? '✅ ' : '❌ '}{pinMsg.text}
+                                </p>
+                            )}
+                            <button type="submit" disabled={pinLoading} className="btn btn-primary" style={{ width: '100%', padding: '1rem', borderRadius: '12px', fontWeight: '900', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                {pinLoading ? <Loader2 className="animate-spin" size={20} /> : '🔐 Update PIN'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}
