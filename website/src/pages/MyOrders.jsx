@@ -637,7 +637,7 @@ const MyOrders = () => {
                     <div 
                         className="modal-content" 
                         onClick={e => e.stopPropagation()}
-                        style={{ padding: '2rem', maxWidth: '380px', width: '90%', borderRadius: '1.5rem', position: 'relative' }}
+                        style={{ margin: 'auto', padding: '2rem', maxWidth: '380px', width: '90%', borderRadius: '1.5rem', position: 'relative' }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                             <h2 style={{ fontWeight: '900', fontSize: '1.2rem', margin: 0 }}>🔒 Change PIN</h2>
