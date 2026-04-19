@@ -64,6 +64,8 @@ export default function WebsiteProductsPage() {
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
+    const [videoProgress, setVideoProgress] = useState<number | null>(null);
+    const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const emptyForm = {
@@ -226,13 +228,14 @@ export default function WebsiteProductsPage() {
 
             // --- FIRST UPLOAD VIDEO IF A NEW ONE IS SELECTED ---
             if (form.video_file) {
+                setVideoProgress(0); // Dedicated state start
                 const ext = form.video_file.name.split('.').pop();
                 const path = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
                 const { error: vidErr } = await supabaseWithTimeout(
                     supabase.storage.from('website-images').upload(path, form.video_file, {
                         onUploadProgress: (progress) => {
                             const pct = Math.round((progress.loaded / progress.total) * 100);
-                            setForm(f => ({ ...f, video_progress: pct }));
+                            setVideoProgress(pct);
                         }
                     }),
                     300000 // 5 mins for video
@@ -240,6 +243,7 @@ export default function WebsiteProductsPage() {
                 if (vidErr) throw vidErr;
                 const { data: vidData } = supabase.storage.from('website-images').getPublicUrl(path);
                 productData.video_url = vidData.publicUrl;
+                setVideoProgress(100);
             }
 
             let productId = editingProduct?.id;
@@ -323,9 +327,11 @@ export default function WebsiteProductsPage() {
                 for (let i = 0; i < updatedImagesForState.length; i++) {
                     const img = updatedImagesForState[i];
                     if (img.file) {
+                        setImageProgress({ current: i + 1, total: updatedImagesForState.filter(im => im.file).length, pct: 0 });
                         try {
                             const url = await uploadImage(img.file, (pct) => {
-                                // Update local state for progress bar
+                                setImageProgress(prev => prev ? { ...prev, pct } : null);
+                                // Update local state for individual progress bar as well
                                 setForm(prev => ({
                                     ...prev,
                                     images: prev.images.map((im, idx) => 
@@ -372,6 +378,8 @@ export default function WebsiteProductsPage() {
             showToast(err.message || 'Save failed', 'error');
         } finally {
             setSaving(false);
+            setVideoProgress(null);
+            setImageProgress(null);
         }
     };
 
@@ -487,7 +495,34 @@ export default function WebsiteProductsPage() {
 
             {showForm && (
                 <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-8 px-4">
-                    <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl">
+                    <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl relative overflow-hidden">
+                        {/* Global Progress Tracking Header */}
+                        {(videoProgress !== null || imageProgress !== null) && (
+                            <div className="absolute top-0 left-0 right-0 z-[60] bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 animate-in slide-in-from-top duration-300">
+                                <div className="flex-1">
+                                    <div className="flex justify-between items-end mb-2">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Live Upload Status</span>
+                                            <span className="text-xs font-black text-gray-900 uppercase">
+                                                {videoProgress !== null ? 'Phase 1: Uploading Video' : `Phase 2: Photos (${imageProgress?.current}/${imageProgress?.total})`}
+                                            </span>
+                                        </div>
+                                        <span className="text-xl font-black text-primary">
+                                            {videoProgress !== null ? videoProgress : imageProgress?.pct}%
+                                        </span>
+                                    </div>
+                                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-primary transition-all duration-300 shadow-[0_0_15px_rgba(239,68,68,0.4)]"
+                                            style={{ width: `${videoProgress !== null ? videoProgress : imageProgress?.pct}%` }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary animate-pulse">
+                                    <Upload size={16} strokeWidth={3} />
+                                </div>
+                            </div>
+                        )}
                         <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
                             <h2 className="text-lg font-black text-gray-900 dark:text-gray-100">{editingProduct ? 'Edit Product' : 'Add Website Product'}</h2>
                             <button onClick={() => setShowForm(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl"><X size={20} /></button>
@@ -766,16 +801,21 @@ export default function WebsiteProductsPage() {
                                                             <video src={form.video_url} className="w-full h-full object-cover" controls />
                                                         )}
                                                         
-                                                        {/* Video Progress Overlay */}
-                                                        {form.video_progress !== undefined && form.video_progress < 100 && (
-                                                            <div className="absolute inset-0 z-30 bg-black/70 flex flex-col items-center justify-center p-4">
-                                                                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-2">
+                                                        {/* Video Progress Overlay - Now using dedicated state */}
+                                                        {videoProgress !== null && videoProgress <= 100 && (
+                                                            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4">
+                                                                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-3 max-w-[140px]">
                                                                     <div 
-                                                                        className="h-full bg-primary transition-all duration-300"
-                                                                        style={{ width: `${form.video_progress}%` }}
+                                                                        className="h-full bg-primary transition-all duration-300 shadow-[0_0_15px_rgba(239,68,68,0.6)]"
+                                                                        style={{ width: `${videoProgress}%` }}
                                                                     />
                                                                 </div>
-                                                                <span className="text-xs font-black text-white uppercase tracking-widest leading-none">Uploading Video {form.video_progress}%</span>
+                                                                <div className="flex flex-col items-center">
+                                                                    <span className="text-[11px] font-black text-white uppercase tracking-[0.3em] mb-2 animate-pulse">Uploading Video</span>
+                                                                    <div className="text-3xl font-black text-white drop-shadow-lg">
+                                                                        {videoProgress}<span className="text-primary text-xl">%</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>

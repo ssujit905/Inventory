@@ -122,18 +122,28 @@ const ProductDetail = () => {
         }
     };
 
+    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+    
+    const combinedMedia = useMemo(() => {
+        const items = [];
+        if (product?.video_url) {
+            items.push({ type: 'video', url: product.video_url });
+        }
+        if (product?.website_product_images) {
+            product.website_product_images.forEach(img => {
+                items.push({ type: 'image', ...img });
+            });
+        }
+        return items;
+    }, [product?.video_url, product?.website_product_images]);
+
     const images = product?.website_product_images || [];
-    const variations = product?.variations || [];
-    const averageRating = ratings.length > 0
-        ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
-        : 0;
-    
-    const [isVideoActive, setIsVideoActive] = useState(false);
-    
+    const activeMedia = combinedMedia[activeImageIndex];
+
     // Group images to identify unique variations (based on labels, normalized)
     const normalizeLabel = (label) => (label || '').trim().toLowerCase();
     const variationImages = images.filter((img, index, self) => 
-        img.label && self.findIndex(t => normalizeLabel(t.label) === normalizeLabel(img.label)) === index
+        img.label && self.findIndex(t => t.label && normalizeLabel(t.label) === normalizeLabel(img.label)) === index
     );
     
     // If no labeled images exist, use the first image as the default variation
@@ -174,11 +184,13 @@ const ProductDetail = () => {
     };
 
     const handleNext = () => {
-        setActiveImageIndex(prev => (prev + 1) % images.length);
+        setIsVideoPlaying(false);
+        setActiveImageIndex(prev => (prev + 1) % combinedMedia.length);
     };
 
     const handlePrev = () => {
-        setActiveImageIndex(prev => (prev - 1 + images.length) % images.length);
+        setIsVideoPlaying(false);
+        setActiveImageIndex(prev => (prev - 1 + combinedMedia.length) % combinedMedia.length);
     };
 
     const handleTouchStart = (e) => {
@@ -217,7 +229,7 @@ const ProductDetail = () => {
             selectedColor,
             selectedSize,
             quantity: quantity,
-            image: images[activeImageIndex]?.image_url || product.image
+            image: combinedMedia.find(m => m.type === 'image')?.image_url || product.image
         };
         
         if (pickerAction === 'buy') {
@@ -379,35 +391,81 @@ const ProductDetail = () => {
                             </div>
                         </div>
 
-                        {/* Main Image Swiper Section */}
+                        {/* Main Media Swiper Section */}
                         <div 
                             className="main-image-container swiper-container" 
-                            style={{ width: '100%', aspectRatio: '1/1', position: 'relative', cursor: images.length > 1 ? 'grab' : 'default' }}
+                            style={{ 
+                                width: '100%', 
+                                minHeight: '300px',
+                                maxHeight: '80vh',
+                                position: 'relative', 
+                                cursor: combinedMedia.length > 1 ? 'grab' : 'default', 
+                                backgroundColor: '#000',
+                                overflow: 'hidden',
+                                borderRadius: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
                             onTouchStart={handleTouchStart}
                             onTouchEnd={handleTouchEnd}
                         >
-                            {product.video_url && isVideoActive ? (
-                                <div style={{ width: '100%', height: '100%', backgroundColor: 'black' }}>
+                            <style>{`
+                                @keyframes pulse-play {
+                                    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+                                    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); }
+                                    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+                                }
+                                .play-pulse {
+                                    animation: pulse-play 2s infinite;
+                                }
+                                .glass-effect {
+                                    backdrop-filter: blur(8px);
+                                    -webkit-backdrop-filter: blur(8px);
+                                }
+                            `}</style>
+
+                            {activeMedia?.type === 'video' ? (
+                                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                     <video 
-                                        src={product.video_url} 
+                                        src={activeMedia.url} 
                                         className="w-full h-full object-contain" 
-                                        autoPlay 
+                                        autoPlay={false}
                                         loop 
-                                        muted 
+                                        muted={!isVideoPlaying} 
                                         playsInline 
-                                        controls
+                                        controls={isVideoPlaying}
+                                        id="product-gallery-video"
                                     />
-                                    <button 
-                                        onClick={() => setIsVideoActive(false)}
-                                        style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 101, backgroundColor: 'rgba(255,255,255,0.9)', padding: '8px', borderRadius: '50%' }}
-                                    >
-                                        <X size={20} />
-                                    </button>
+                                    {!isVideoPlaying && (
+                                        <div 
+                                            onClick={() => {
+                                                setIsVideoPlaying(true);
+                                                const vid = document.getElementById('product-gallery-video');
+                                                if (vid) vid.play().catch(e => console.warn("Video play failed:", e));
+                                            }}
+                                            style={{ 
+                                                position: 'absolute', inset: 0, 
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                backgroundColor: 'rgba(0,0,0,0.3)', cursor: 'pointer', zIndex: 10
+                                            }}
+                                        >
+                                            <div style={{ 
+                                                width: '72px', height: '72px', borderRadius: '50%', 
+                                                backgroundColor: 'rgba(255,255,255,0.95)', display: 'flex', 
+                                                alignItems: 'center', justifyContent: 'center', paddingLeft: '6px',
+                                                boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                                                border: '1px solid rgba(255,255,255,0.4)'
+                                            }} className="play-pulse glass-effect">
+                                                <Play size={34} fill="var(--primary-red)" color="var(--primary-red)" />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <img
-                                    key={activeImageIndex} // Key ensures smooth re-render logic if needed
-                                    src={images[activeImageIndex]?.image_url}
+                                    key={activeImageIndex}
+                                    src={activeMedia?.image_url}
                                     alt={product.title}
                                     onClick={() => setIsFullscreenOpen(true)}
                                     style={{ 
@@ -418,60 +476,35 @@ const ProductDetail = () => {
                                 />
                             )}
 
-                            {product.video_url && !isVideoActive && (
-                                <button 
-                                    onClick={() => setIsVideoActive(true)}
-                                    style={{
-                                        position: 'absolute',
-                                        bottom: '20px',
-                                        left: '20px',
-                                        zIndex: 10,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        backgroundColor: 'var(--primary-red)',
-                                        color: 'white',
-                                        padding: '8px 16px',
-                                        borderRadius: '30px',
-                                        fontSize: '0.8rem',
-                                        fontWeight: '900',
-                                        boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.05em'
-                                    }}
-                                >
-                                    <Play size={16} fill="white" /> Watch video
-                                </button>
-                            )}
-
                             {/* Desktop Nav Arrows */}
-                            {images.length > 1 && (
+                            {combinedMedia.length > 1 && (
                                 <>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); handlePrev(); }}
                                         className="image-nav-btn"
-                                        style={{ left: '10px' }}
+                                        style={{ left: '10px', zIndex: 20 }}
                                     >
                                         <ChevronLeft size={36} strokeWidth={2.5} />
                                     </button>
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); handleNext(); }}
                                         className="image-nav-btn"
-                                        style={{ right: '10px' }}
+                                        style={{ right: '10px', zIndex: 20 }}
                                     >
                                         <ChevronRight size={36} strokeWidth={2.5} />
                                     </button>
                                 </>
                             )}
 
-                            {/* Dynamic Photo Counter */}
-                            {images.length > 0 && (
+                            {/* Dynamic Photo/Video Counter */}
+                            {combinedMedia.length > 0 && (
                                 <div style={{
                                     position: 'absolute', bottom: '15px', right: '15px',
-                                    backgroundColor: 'rgba(0,0,0,0.5)', color: 'white',
-                                    padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem'
+                                    backgroundColor: 'rgba(0,0,0,0.6)', color: 'white',
+                                    padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem',
+                                    fontWeight: '900', zIndex: 20, backdropFilter: 'blur(4px)'
                                 }}>
-                                    {activeImageIndex + 1} / {images.length}
+                                    {activeImageIndex + 1} / {combinedMedia.length}
                                 </div>
                             )}
                         </div>
@@ -483,18 +516,18 @@ const ProductDetail = () => {
                     {/* Product Variation Thumbnails - Clickable */}
                     <div style={{ backgroundColor: 'white', padding: '15px', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <p style={{ fontSize: '0.8rem', color: '#666' }}>{images.length} Photos Available</p>
-                            {images[activeImageIndex]?.label && (
+                            <p style={{ fontSize: '0.8rem', color: '#666' }}>{combinedMedia.length} Media Avail.</p>
+                            {combinedMedia[activeImageIndex]?.label && (
                                 <span style={{ fontSize: '0.8rem', color: 'var(--primary-red)', fontWeight: '800', textTransform: 'uppercase' }}>
-                                    {images[activeImageIndex].label}
+                                    {combinedMedia[activeImageIndex].label}
                                 </span>
                             )}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
-                            {images.map((img, i) => (
+                            {combinedMedia.map((item, i) => (
                                 <div
                                     key={i}
-                                    onClick={() => setActiveImageIndex(i)}
+                                    onClick={() => { setActiveImageIndex(i); setIsVideoPlaying(false); }}
                                     style={{
                                         width: '50px',
                                         height: '50px',
@@ -503,10 +536,17 @@ const ProductDetail = () => {
                                         overflow: 'hidden',
                                         flexShrink: 0,
                                         cursor: 'pointer',
-                                        transition: 'all 0.2s ease'
+                                        transition: 'all 0.2s ease',
+                                        position: 'relative'
                                     }}
                                 >
-                                    <img src={img.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: activeImageIndex === i ? 1 : 0.7 }} />
+                                    {item.type === 'video' ? (
+                                        <div style={{ width: '100%', height: '100%', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Play size={16} fill="white" color="white" />
+                                        </div>
+                                    ) : (
+                                        <img src={item.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: activeImageIndex === i ? 1 : 0.7 }} />
+                                    )}
                                 </div>
                             ))}
                         </div>
