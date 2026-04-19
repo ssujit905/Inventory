@@ -4,7 +4,7 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
-    Package, Loader2, Check, AlertTriangle, Globe
+    Package, Loader2, Check, AlertTriangle, Globe, Video
 } from 'lucide-react';
 
 interface ProductVariant {
@@ -46,6 +46,7 @@ interface WebsiteProduct {
     sizes: string;
     sold_count: number;
     created_at: string;
+    video_url?: string | null;
     website_product_images: ProductImage[];
 }
 
@@ -71,7 +72,10 @@ export default function WebsiteProductsPage() {
         is_active: true, is_featured: false, show_shopinepal: true, 
         is_cod: true, is_prepaid: false, is_prebook: false,
         sizes: '',
-        images: [] as ProductImage[]
+        images: [] as ProductImage[],
+        video_url: '',
+        video_file: undefined as File | undefined,
+        video_progress: undefined as number | undefined
     };
     const [form, setForm] = useState(emptyForm);
 
@@ -149,7 +153,8 @@ export default function WebsiteProductsPage() {
             is_prepaid: p.is_prepaid,
             is_prebook: p.is_prebook,
             sizes: p.sizes || '',
-            images: p.website_product_images.map(img => ({ ...img }))
+            images: p.website_product_images.map(img => ({ ...img })),
+            video_url: p.video_url || ''
         });
         setVariants([]);
         fetchVariants(p.id);
@@ -200,7 +205,7 @@ export default function WebsiteProductsPage() {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
             const computedBasePrice = prices.length > 0 ? Math.min(...prices) : 0;
 
-            const productData = {
+            const productData: any = {
                 title: form.title.trim(),
                 description: form.description.trim(),
                 price: computedBasePrice,
@@ -215,8 +220,27 @@ export default function WebsiteProductsPage() {
                 is_prepaid: form.is_prepaid,
                 is_prebook: form.is_prebook,
                 sizes: form.sizes.trim(),
+                video_url: form.video_url,
                 updated_at: new Date().toISOString()
             };
+
+            // --- FIRST UPLOAD VIDEO IF A NEW ONE IS SELECTED ---
+            if (form.video_file) {
+                const ext = form.video_file.name.split('.').pop();
+                const path = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+                const { error: vidErr } = await supabaseWithTimeout(
+                    supabase.storage.from('website-images').upload(path, form.video_file, {
+                        onUploadProgress: (progress) => {
+                            const pct = Math.round((progress.loaded / progress.total) * 100);
+                            setForm(f => ({ ...f, video_progress: pct }));
+                        }
+                    }),
+                    300000 // 5 mins for video
+                );
+                if (vidErr) throw vidErr;
+                const { data: vidData } = supabase.storage.from('website-images').getPublicUrl(path);
+                productData.video_url = vidData.publicUrl;
+            }
 
             let productId = editingProduct?.id;
 
@@ -671,56 +695,117 @@ export default function WebsiteProductsPage() {
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Product Images</label>
-                                <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && handleImageFiles(e.target.files)} />
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                    {form.images.map((img, i) => (
-                                        <div key={i} className={`flex flex-col gap-2 p-2 rounded-2xl border ${img.is_primary ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800'}`}>
-                                            <div className="relative aspect-square rounded-xl overflow-hidden group">
-                                                <img src={img.preview || img.image_url} alt="" className="w-full h-full object-cover" />
-                                                
-                                                {/* Progress Overlay */}
-                                                {(img as any).uploadProgress !== undefined && (img as any).uploadProgress < 100 && (
-                                                    <div className="absolute inset-0 z-20 bg-black/60 flex flex-col items-center justify-center p-4">
-                                                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-2">
-                                                            <div 
-                                                                className="h-full bg-primary transition-all duration-300"
-                                                                style={{ width: `${(img as any).uploadProgress}%` }}
-                                                            />
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Product Images</label>
+                                    <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && handleImageFiles(e.target.files)} />
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                        {form.images.map((img, i) => (
+                                            <div key={i} className={`flex flex-col gap-2 p-2 rounded-2xl border ${img.is_primary ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800'}`}>
+                                                <div className="relative aspect-square rounded-xl overflow-hidden group">
+                                                    <img src={img.preview || img.image_url} alt="" className="w-full h-full object-cover" />
+                                                    
+                                                    {/* Progress Overlay */}
+                                                    {(img as any).uploadProgress !== undefined && (img as any).uploadProgress < 100 && (
+                                                        <div className="absolute inset-0 z-20 bg-black/60 flex flex-col items-center justify-center p-4">
+                                                            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-2">
+                                                                <div 
+                                                                    className="h-full bg-primary transition-all duration-300"
+                                                                    style={{ width: `${(img as any).uploadProgress}%` }}
+                                                                />
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-white uppercase tracking-tighter">Uploading {(img as any).uploadProgress}%</span>
                                                         </div>
-                                                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">Uploading {(img as any).uploadProgress}%</span>
+                                                    )}
+                                                    {/* Always-visible delete button in top-right corner */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))}
+                                                        className="absolute top-1 right-1 z-10 p-1 bg-rose-500 text-white rounded-lg shadow-md hover:bg-rose-600 transition-colors"
+                                                        title="Remove image"
+                                                    >
+                                                        <X size={12} strokeWidth={3} />
+                                                    </button>
+                                                    {/* Hover overlay for Set Primary */}
+                                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <button type="button" onClick={() => setPrimaryImage(i)} className="p-1.5 bg-white/90 rounded-lg text-gray-700 hover:text-amber-500" title="Set primary"><Star size={14} className={img.is_primary ? 'fill-amber-500 text-amber-500' : ''} /></button>
                                                     </div>
-                                                )}
-                                                {/* Always-visible delete button in top-right corner */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, idx) => idx !== i) }))}
-                                                    className="absolute top-1 right-1 z-10 p-1 bg-rose-500 text-white rounded-lg shadow-md hover:bg-rose-600 transition-colors"
-                                                    title="Remove image"
-                                                >
-                                                    <X size={12} strokeWidth={3} />
-                                                </button>
-                                                {/* Hover overlay for Set Primary */}
-                                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <button type="button" onClick={() => setPrimaryImage(i)} className="p-1.5 bg-white/90 rounded-lg text-gray-700 hover:text-amber-500" title="Set primary"><Star size={14} className={img.is_primary ? 'fill-amber-500 text-amber-500' : ''} /></button>
+                                                    {img.is_primary && (
+                                                        <div className="absolute bottom-1 left-1 px-2 py-0.5 bg-primary text-white text-[9px] font-black rounded-full">PRIMARY</div>
+                                                    )}
                                                 </div>
-                                                {img.is_primary && (
-                                                    <div className="absolute bottom-1 left-1 px-2 py-0.5 bg-primary text-white text-[9px] font-black rounded-full">PRIMARY</div>
-                                                )}
+                                                <input 
+                                                    value={img.label} 
+                                                    onChange={e => setForm(f => ({ ...f, images: f.images.map((im, idx) => idx === i ? { ...im, label: e.target.value } : im) }))}
+                                                    placeholder="Label (e.g. Black)"
+                                                    className="w-full h-8 px-2 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                />
                                             </div>
-                                            <input 
-                                                value={img.label} 
-                                                onChange={e => setForm(f => ({ ...f, images: f.images.map((im, idx) => idx === i ? { ...im, label: e.target.value } : im) }))}
-                                                placeholder="Label (e.g. Black)"
-                                                className="w-full h-8 px-2 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                                            />
+                                        ))}
+                                        <button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary transition-all">
+                                            <Upload size={24} />
+                                            <span className="text-[11px] font-black uppercase">Add Photo</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Video Section */}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Product Video (Optional)</label>
+                                    <div className="relative group">
+                                        <div className={`aspect-square rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 text-center ${form.video_url || form.video_file ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800 hover:border-primary/40'}`}>
+                                            {(form.video_file || form.video_url) ? (
+                                                <div className="space-y-4 w-full">
+                                                    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+                                                        {form.video_file ? (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
+                                                                <Video size={32} className="text-primary mb-2" />
+                                                                <p className="text-[10px] text-white font-black uppercase">{form.video_file.name}</p>
+                                                            </div>
+                                                        ) : (
+                                                            <video src={form.video_url} className="w-full h-full object-cover" controls />
+                                                        )}
+                                                        
+                                                        {/* Video Progress Overlay */}
+                                                        {form.video_progress !== undefined && form.video_progress < 100 && (
+                                                            <div className="absolute inset-0 z-30 bg-black/70 flex flex-col items-center justify-center p-4">
+                                                                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-2">
+                                                                    <div 
+                                                                        className="h-full bg-primary transition-all duration-300"
+                                                                        style={{ width: `${form.video_progress}%` }}
+                                                                    />
+                                                                </div>
+                                                                <span className="text-xs font-black text-white uppercase tracking-widest leading-none">Uploading Video {form.video_progress}%</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setForm(f => ({ ...f, video_url: '', video_file: undefined, video_progress: undefined }))}
+                                                        className="w-full py-2 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                                                    >
+                                                        Remove Video
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <label className="cursor-pointer flex flex-col items-center gap-2">
+                                                    <input 
+                                                        type="file" 
+                                                        accept="video/*" 
+                                                        className="hidden" 
+                                                        onChange={e => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) setForm(f => ({ ...f, video_file: file }));
+                                                        }} 
+                                                    />
+                                                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary mb-2">
+                                                        <Video size={24} />
+                                                    </div>
+                                                    <span className="text-[11px] font-black uppercase text-primary">Upload Video</span>
+                                                    <p className="text-[9px] text-gray-400 font-bold uppercase">MP4, MOV up to 50MB Recommendation</p>
+                                                </label>
+                                            )}
                                         </div>
-                                    ))}
-                                    <button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary transition-all">
-                                        <Upload size={24} />
-                                        <span className="text-[11px] font-black uppercase">Add Photo</span>
-                                    </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

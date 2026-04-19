@@ -128,6 +128,8 @@ const ProductDetail = () => {
         ? (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length).toFixed(1)
         : 0;
     
+    const [isVideoActive, setIsVideoActive] = useState(false);
+    
     // Group images to identify unique variations (based on labels, normalized)
     const normalizeLabel = (label) => (label || '').trim().toLowerCase();
     const variationImages = images.filter((img, index, self) => 
@@ -384,17 +386,63 @@ const ProductDetail = () => {
                             onTouchStart={handleTouchStart}
                             onTouchEnd={handleTouchEnd}
                         >
-                            <img
-                                key={activeImageIndex} // Key ensures smooth re-render logic if needed
-                                src={images[activeImageIndex]?.image_url}
-                                alt={product.title}
-                                onClick={() => setIsFullscreenOpen(true)}
-                                style={{ 
-                                    width: '100%', height: '100%', objectFit: 'cover',
-                                    animation: 'fadeIn 0.3s ease-in-out',
-                                    cursor: 'pointer'
-                                }}
-                            />
+                            {product.video_url && isVideoActive ? (
+                                <div style={{ width: '100%', height: '100%', backgroundColor: 'black' }}>
+                                    <video 
+                                        src={product.video_url} 
+                                        className="w-full h-full object-contain" 
+                                        autoPlay 
+                                        loop 
+                                        muted 
+                                        playsInline 
+                                        controls
+                                    />
+                                    <button 
+                                        onClick={() => setIsVideoActive(false)}
+                                        style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 101, backgroundColor: 'rgba(255,255,255,0.9)', padding: '8px', borderRadius: '50%' }}
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <img
+                                    key={activeImageIndex} // Key ensures smooth re-render logic if needed
+                                    src={images[activeImageIndex]?.image_url}
+                                    alt={product.title}
+                                    onClick={() => setIsFullscreenOpen(true)}
+                                    style={{ 
+                                        width: '100%', height: '100%', objectFit: 'cover',
+                                        animation: 'fadeIn 0.3s ease-in-out',
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                            )}
+
+                            {product.video_url && !isVideoActive && (
+                                <button 
+                                    onClick={() => setIsVideoActive(true)}
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '20px',
+                                        left: '20px',
+                                        zIndex: 10,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        backgroundColor: 'var(--primary-red)',
+                                        color: 'white',
+                                        padding: '8px 16px',
+                                        borderRadius: '30px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: '900',
+                                        boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.05em'
+                                    }}
+                                >
+                                    <Play size={16} fill="white" /> Watch video
+                                </button>
+                            )}
 
                             {/* Desktop Nav Arrows */}
                             {images.length > 1 && (
