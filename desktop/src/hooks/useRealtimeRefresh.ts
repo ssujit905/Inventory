@@ -69,15 +69,21 @@ export function useRealtimeRefresh(
             void runRefresh();
         }, pollMs);
 
-        const handleFocus = () => {
+        const handleFocus = async () => {
             // Force reset locks in case a fetch Promise hung infinitely during computer sleep
             inFlightRef.current = false;
             queuedRef.current = false;
+            
+            // Re-verify session to wake up the Supabase client
+            await supabase.auth.getSession();
             
             // Force an immediate data re-validation when the user returns to the app
             void runRefresh();
         };
         window.addEventListener('focus', handleFocus);
+        window.addEventListener('visibilitychange', () => {
+             if (document.visibilityState === 'visible') handleFocus();
+        });
 
         // Native Electron IPC fallback for strict focus detection
         const ipcWindow = window as any;

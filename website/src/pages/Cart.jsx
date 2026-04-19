@@ -104,7 +104,7 @@ const Cart = () => {
                                             {(item.selectedSize || item.variationLabel || item.selectedColor) && (
                                                 <div style={{ fontSize: '0.7rem', color: '#64748b', background: '#f8fafc', padding: '2px 6px', borderRadius: '2px', display: 'inline-block', marginTop: '4px', border: '1px solid #e2e8f0' }}>
                                                     {item.selectedSize && `Size: ${item.selectedSize} `}
-                                                    {item.selectedColor && `Color: ${item.selectedColor} `}
+                                                    {item.selectedColor && `Variant: ${item.selectedColor} `}
                                                     {item.variationLabel && `${(item.selectedSize || item.selectedColor) ? '| ' : ''}${item.variationLabel}`}
                                                 </div>
                                             )}

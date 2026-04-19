@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -138,53 +138,61 @@ export default function StockInPage() {
 
         try {
             let productId;
-            const { data: existingProd } = await supabase
-                .from('products')
-                .select('id')
-                .eq('sku', sku)
-                .maybeSingle();
+            const { data: existingProd } = await supabaseWithTimeout(
+                supabase
+                    .from('products')
+                    .select('id')
+                    .eq('sku', sku)
+                    .maybeSingle()
+            );
 
             if (existingProd) {
                 productId = existingProd.id;
             } else {
-                const { data: prodData, error: prodError } = await supabase
-                    .from('products')
-                    .insert([{
-                        name: sku,
-                        sku: sku,
-                        description: details,
-                        image_url: imageUrl,
-                        min_stock_alert: 10
-                    }])
-                    .select()
-                    .single();
+                const { data: prodData, error: prodError } = await supabaseWithTimeout(
+                    supabase
+                        .from('products')
+                        .insert([{
+                            name: sku,
+                            sku: sku,
+                            description: details,
+                            image_url: imageUrl,
+                            min_stock_alert: 10
+                        }])
+                        .select()
+                        .single()
+                );
 
                 if (prodError) throw prodError;
                 productId = prodData.id;
             }
 
-            const { data: lotData, error: lotError } = await supabase
-                .from('product_lots')
-                .insert([{
-                    product_id: productId,
-                    lot_number: lotNumber,
-                    received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
-                    quantity_remaining: quantity,
-                    cost_price: isAdmin ? costPrice : 0,
-                    created_by: user.id
-                }])
-                .select()
-                .single();
+            const { data: lotData, error: lotError } = await supabaseWithTimeout(
+                supabase
+                    .from('product_lots')
+                    .insert([{
+                        product_id: productId,
+                        lot_number: lotNumber,
+                        received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
+                        quantity_remaining: quantity,
+                        cost_price: isAdmin ? costPrice : 0,
+                        created_by: user.id
+                    }])
+                    .select()
+                    .single()
+            );
 
             if (lotError) throw lotError;
 
-            const { error: transError } = await supabase.from('transactions').insert([{
-                product_id: productId,
-                lot_id: lotData.id,
-                type: 'in',
-                quantity_changed: quantity,
-                performed_by: user.id
-            }]);
+            const { error: transError } = await supabaseWithTimeout(
+                supabase.from('transactions').insert([{
+                    product_id: productId,
+                    lot_id: lotData.id,
+                    type: 'in',
+                    quantity_changed: quantity,
+                    performed_by: user.id
+                }])
+            );
 
             if (transError) throw transError;
 

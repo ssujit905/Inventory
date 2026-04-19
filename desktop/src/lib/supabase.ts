@@ -19,3 +19,18 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
 if (typeof window !== 'undefined') {
     (window as any).supabase = supabase;
 }
+
+/**
+ * Helper to ensure a Supabase request doesn't hang infinitely (e.g. after PC sleep)
+ * Default timeout is 15 seconds.
+ */
+export async function supabaseWithTimeout<T>(
+    request: Promise<T>,
+    timeoutMs: number = 15000
+): Promise<T> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timed out. Please check your internet connection or try again.')), timeoutMs);
+    });
+
+    return Promise.race([request, timeoutPromise]);
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
@@ -285,14 +285,16 @@ export default function SalesPage() {
                 }
             }
 
-            const { error } = await supabase
-                .from('sales')
-                .update({
-                    parcel_status: newStatus,
-                    sold_amount: newStatus === 'delivered' ? Number(soldAmountInput || 0) : selectedSale.sold_amount,
-                    return_cost: newStatus === 'returned' ? Number(returnCostInput || 0) : selectedSale.return_cost
-                })
-                .eq('id', selectedSale.id);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('sales')
+                    .update({
+                        parcel_status: newStatus,
+                        sold_amount: newStatus === 'delivered' ? Number(soldAmountInput || 0) : selectedSale.sold_amount,
+                        return_cost: newStatus === 'returned' ? Number(returnCostInput || 0) : selectedSale.return_cost
+                    })
+                    .eq('id', selectedSale.id)
+            );
 
             if (error) throw error;
 
@@ -367,11 +369,13 @@ export default function SalesPage() {
             const deductionsToMake: any[] = [];
 
             for (const item of orderItems) {
-                const { data: lots, error: lotError } = await supabase
-                    .from('product_lots')
-                    .select('id, product_id, received_date, transactions (type, quantity_changed, sales (parcel_status))')
-                    .eq('product_id', item.productId)
-                    .order('received_date', { ascending: true });
+                const { data: lots, error: lotError } = await supabaseWithTimeout(
+                    supabase
+                        .from('product_lots')
+                        .select('id, product_id, received_date, transactions (type, quantity_changed, sales (parcel_status))')
+                        .eq('product_id', item.productId)
+                        .order('received_date', { ascending: true })
+                );
 
                 if (lotError) throw lotError;
 
@@ -445,11 +449,13 @@ export default function SalesPage() {
             let newSale: any = null;
             let saleError: any = null;
 
-            ({ data: newSale, error: saleError } = await supabase
-                .from('sales')
-                .insert([{ ...salePayloadBase, package: packageDetails.trim() || null }])
-                .select('id')
-                .single());
+            ({ data: newSale, error: saleError } = await supabaseWithTimeout(
+                supabase
+                    .from('sales')
+                    .insert([{ ...salePayloadBase, package: packageDetails.trim() || null }])
+                    .select('id')
+                    .single()
+            ));
 
             // Backward compatibility: if DB doesn't have `package` column yet, retry without it.
             if (saleError && /column.*package|schema cache|invalid input syntax/i.test(String(saleError.message || ''))) {

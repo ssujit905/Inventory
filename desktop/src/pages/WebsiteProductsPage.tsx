@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
     Package, Loader2, Check, AlertTriangle, Globe
@@ -92,7 +92,7 @@ export default function WebsiteProductsPage() {
         else setProducts(data || []);
 
         // Also fetch inventory items for mapping
-        const { data: inv } = await supabase.from('products').select('id, name, sku');
+        const { data: inv } = await supabase.from('products').select('id, name, sku, description, image_url');
         setInventoryItems(inv || []);
 
         setLoading(false);
@@ -202,10 +202,14 @@ export default function WebsiteProductsPage() {
             let productId = editingProduct?.id;
 
             if (editingProduct) {
-                const { error } = await supabase.from('website_products').update(productData).eq('id', editingProduct.id);
+                const { error } = await supabaseWithTimeout(
+                    supabase.from('website_products').update(productData).eq('id', editingProduct.id)
+                );
                 if (error) throw error;
             } else {
-                const { data, error } = await supabase.from('website_products').insert(productData).select().single();
+                const { data, error } = await supabaseWithTimeout(
+                    supabase.from('website_products').insert(productData).select().single()
+                );
                 if (error) throw error;
                 productId = data.id;
             }
@@ -215,11 +219,23 @@ export default function WebsiteProductsPage() {
                 // Remove deleted ones (best effort)
                 if (editingProduct) {
                     const existingIds = variants.filter(v => v.id).map(v => v.id);
-                    let delQuery = supabase.from('website_variants').delete().eq('product_id', productId);
-                    if (existingIds.length > 0) {
-                        delQuery = delQuery.not('id', 'in', `(${existingIds.join(',')})`);
+                    if (existingIds.length > 0 || variants.length === 0) {
+                        try {
+                            // We use a safe deletion approach: try to delete, but don't crash if it's linked to an order
+                            const { error: delErr } = await supabase.from('website_variants')
+                                .delete()
+                                .eq('product_id', productId)
+                                .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '0'})`);
+                            
+                            if (delErr && delErr.code === '23503') {
+                                console.warn('Some variants could not be deleted as they are linked to existing orders. They will remain in the database but are effectively detached.');
+                            } else if (delErr) {
+                                console.error('Deletion error:', delErr);
+                            }
+                        } catch (e) {
+                            console.warn('Silent failure on delete', e);
+                        }
                     }
-                    await delQuery; // errors ignored for rows blocked by foreign order constraints
                 }
                 // Clean Upsert by separating Inserts and Updates to bypass PostgREST null mapping bugs
                 if (variants.length > 0) {
@@ -236,19 +252,23 @@ export default function WebsiteProductsPage() {
 
                     // 1. Explicitly Insert New Variants
                     if (toInsert.length > 0) {
-                        const { error: insErr } = await supabase.from('website_variants').insert(toInsert);
+                        const { error: insErr } = await supabaseWithTimeout(
+                            supabase.from('website_variants').insert(toInsert)
+                        );
                         if (insErr) throw insErr;
                     }
 
                     // 2. Explicitly Update Existing Variants by ID
                     for (const v of toUpdate) {
-                        const { error: updErr } = await supabase.from('website_variants').update({
-                            color: v.color,
-                            size: v.size,
-                            sku: v.sku,
-                            price: v.price ? parseFloat(v.price.toString()) : null,
-                            inventory_product_id: v.inventory_product_id
-                        }).eq('id', v.id);
+                        const { error: updErr } = await supabaseWithTimeout(
+                            supabase.from('website_variants').update({
+                                color: v.color,
+                                size: v.size,
+                                sku: v.sku,
+                                price: v.price ? parseFloat(v.price.toString()) : null,
+                                inventory_product_id: v.inventory_product_id
+                            }).eq('id', v.id)
+                        );
                         if (updErr) throw updErr;
                     }
                 }
@@ -415,6 +435,46 @@ export default function WebsiteProductsPage() {
                         </div>
 
                         <div className="p-6 space-y-6">
+                            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 mb-6">
+                                <label className="block text-[10px] font-black text-primary uppercase tracking-widest mb-2">⚡ Quick Import from Inventory</label>
+                                <div className="flex gap-2">
+                                    <select 
+                                        className="flex-1 h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                        onChange={(e) => {
+                                            const id = e.target.value;
+                                            if (!id) return;
+                                            const item = inventoryItems.find(p => p.id.toString() === id);
+                                            if (item) {
+                                                setForm(f => ({
+                                                    ...f,
+                                                    title: item.name || '',
+                                                    description: item.description || '',
+                                                    // If it has an image in inventory, we can't easily download and re-upload here 
+                                                    // but we could at least show it or add it as a URL if the system supports it.
+                                                }));
+                                                // Auto-add variant
+                                                setVariants(v => [...v, {
+                                                    product_id: editingProduct?.id || 0,
+                                                    color: 'Standard',
+                                                    size: 'Universal',
+                                                    sku: item.sku,
+                                                    inventory_product_id: item.id.toString(),
+                                                    price: ''
+                                                }]);
+                                                showToast('Imported ' + item.sku);
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                    >
+                                        <option value="">-- Select Inventory Item to Auto-Fill --</option>
+                                        {inventoryItems.map(inv => (
+                                            <option key={inv.id} value={inv.id}>{inv.sku} - {inv.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <p className="text-[9px] text-gray-400 mt-2 italic font-medium">This will auto-populate the Title, Description, and Link the SKU for you.</p>
+                            </div>
+
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Product Title *</label>
@@ -480,17 +540,17 @@ export default function WebsiteProductsPage() {
                                         <div className="flex gap-4">
                                             <button 
                                                 type="button"
-                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Standard', size: 'Universal', sku: 'SKU-' + Math.floor(Math.random()*1000), price: '', inventory_product_id: '' }])}
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Standard', size: 'Universal', sku: 'SKU-' + Date.now().toString().slice(-4) + Math.random().toString(36).substring(2, 5).toUpperCase(), price: '', inventory_product_id: '' }])}
                                                 className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-widest"
                                             >
                                                 <Check size={12} strokeWidth={3} /> Standard (No Size)
                                             </button>
                                             <button 
                                                 type="button"
-                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: 'SKU-' + Math.floor(Math.random()*1000), price: '', inventory_product_id: '' }])}
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: 'SKU-' + Date.now().toString().slice(-4) + Math.random().toString(36).substring(2, 5).toUpperCase(), price: '', inventory_product_id: '' }])}
                                                 className="text-[10px] font-black text-primary hover:text-primary/80 flex items-center gap-1 uppercase tracking-widest"
                                             >
-                                                <Plus size={12} strokeWidth={3} /> Custom Size/Color
+                                                <Plus size={12} strokeWidth={3} /> Custom Size/Variant
                                             </button>
                                         </div>
                                     </div>
@@ -499,11 +559,11 @@ export default function WebsiteProductsPage() {
                                         {variants.map((v, idx) => (
                                             <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
                                                 <div className="col-span-2">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Color</label>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Variant Name</label>
                                                     <input 
                                                         value={v.color} 
                                                         onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, color: e.target.value } : vi))}
-                                                        placeholder="Red" 
+                                                        placeholder="e.g. Red" 
                                                         className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
                                                     />
                                                 </div>

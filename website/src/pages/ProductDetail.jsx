@@ -748,7 +748,7 @@ const ProductDetail = () => {
                             
                             {/* COLOR SELECTION */}
                             <div style={{ marginBottom: '25px' }}>
-                                <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Select Color</p>
+                                <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Select Variant</p>
                                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                     {uniqueColors.map((color) => {
                                         const isSelected = selectedColor === color;
