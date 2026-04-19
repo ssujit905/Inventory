@@ -84,15 +84,23 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('website_products')
-            .select(`*, website_product_images(*)`)
-            .order('created_at', { ascending: false });
-        if (error) showToast(error.message, 'error');
-        else setProducts(data || []);
+        const { data, error } = await supabaseWithTimeout(
+            supabase
+                .from('website_products')
+                .select(`*, website_product_images(*)`)
+                .order('created_at', { ascending: false })
+        );
+        if (error) {
+            showToast(error.message, 'error');
+        } else {
+            setProducts(data || []);
+        }
 
         // Also fetch inventory items for mapping
-        const { data: inv } = await supabase.from('products').select('id, name, sku, description, image_url');
+        const { data: inv, error: invErr } = await supabaseWithTimeout(
+            supabase.from('products').select('id, name, sku, description, image_url')
+        );
+        if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
 
         setLoading(false);
@@ -168,7 +176,11 @@ export default function WebsiteProductsPage() {
     const uploadImage = async (file: File): Promise<string> => {
         const ext = file.name.split('.').pop();
         const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage.from('website-images').upload(path, file);
+        // Give images more time (60s) but still have a limit
+        const { error } = await supabaseWithTimeout(
+            supabase.storage.from('website-images').upload(path, file),
+            60000 
+        );
         if (error) throw error;
         const { data } = supabase.storage.from('website-images').getPublicUrl(path);
         return data.publicUrl;
@@ -216,28 +228,21 @@ export default function WebsiteProductsPage() {
 
             // --- SAVE VARIANTS ---
             if (productId) {
-                // Remove deleted ones (best effort)
                 if (editingProduct) {
                     const existingIds = variants.filter(v => v.id).map(v => v.id);
                     if (existingIds.length > 0 || variants.length === 0) {
                         try {
-                            // We use a safe deletion approach: try to delete, but don't crash if it's linked to an order
-                            const { error: delErr } = await supabase.from('website_variants')
-                                .delete()
-                                .eq('product_id', productId)
-                                .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '0'})`);
-                            
-                            if (delErr && delErr.code === '23503') {
-                                console.warn('Some variants could not be deleted as they are linked to existing orders. They will remain in the database but are effectively detached.');
-                            } else if (delErr) {
-                                console.error('Deletion error:', delErr);
-                            }
-                        } catch (e) {
-                            console.warn('Silent failure on delete', e);
-                        }
+                            const { error: delErr } = await supabaseWithTimeout(
+                                supabase.from('website_variants')
+                                    .delete()
+                                    .eq('product_id', productId)
+                                    .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '0'})`)
+                            );
+                            if (delErr && delErr.code !== '23503') console.error('Delete Variants error:', delErr);
+                        } catch (e) { console.warn('Variant cleanup skipped due to dependency'); }
                     }
                 }
-                // Clean Upsert by separating Inserts and Updates to bypass PostgREST null mapping bugs
+
                 if (variants.length > 0) {
                     const toInsert = variants.filter(v => !v.id).map(v => ({
                         product_id: productId,
@@ -250,7 +255,6 @@ export default function WebsiteProductsPage() {
 
                     const toUpdate = variants.filter(v => !!v.id);
 
-                    // 1. Explicitly Insert New Variants
                     if (toInsert.length > 0) {
                         const { error: insErr } = await supabaseWithTimeout(
                             supabase.from('website_variants').insert(toInsert)
@@ -258,7 +262,6 @@ export default function WebsiteProductsPage() {
                         if (insErr) throw insErr;
                     }
 
-                    // 2. Explicitly Update Existing Variants by ID
                     for (const v of toUpdate) {
                         const { error: updErr } = await supabaseWithTimeout(
                             supabase.from('website_variants').update({
@@ -274,44 +277,52 @@ export default function WebsiteProductsPage() {
                 }
             }
 
+            // --- SAVE IMAGES (SEQUENTIAL NOW TO PREVENT FREEZE) ---
+            if (productId) {
+                if (editingProduct) {
+                    const { error: imgDelErr } = await supabaseWithTimeout(
+                        supabase.from('website_product_images').delete().eq('product_id', productId)
+                    );
+                    if (imgDelErr) throw imgDelErr;
+                }
+
+                const uploadedImages: any[] = [];
+                for (const img of form.images) {
+                    if (img.file) {
+                        const url = await uploadImage(img.file);
+                        uploadedImages.push({ 
+                            image_url: url, 
+                            label: img.label || '', 
+                            is_primary: img.is_primary, 
+                            sort_order: img.sort_order 
+                        });
+                    } else if (img.image_url) {
+                        uploadedImages.push({ 
+                            image_url: img.image_url, 
+                            label: img.label || '', 
+                            is_primary: img.is_primary, 
+                            sort_order: img.sort_order 
+                        });
+                    }
+                }
+
+                if (uploadedImages.length > 0) {
+                    const { error: imgInsErr } = await supabaseWithTimeout(
+                        supabase.from('website_product_images').insert(
+                            uploadedImages.map(img => ({ ...img, product_id: productId }))
+                        )
+                    );
+                    if (imgInsErr) throw imgInsErr;
+                }
+            }
+
             showToast(editingProduct ? 'Product and Variants updated!' : 'Product added!');
             setShowForm(false);
-            setSaving(false);
             fetchProducts();
-
-            (async () => {
-                try {
-                    if (editingProduct) {
-                        await supabase.from('website_product_images').delete().eq('product_id', productId);
-                    }
-
-                    const uploadedImages: any[] = [];
-                    for (const img of form.images) {
-                        if (img.file) {
-                            try {
-                                const url = await uploadImage(img.file);
-                                uploadedImages.push({ image_url: url, label: img.label || '', is_primary: img.is_primary, sort_order: img.sort_order });
-                            } catch (imgErr: any) {
-                                console.error('Image upload failed', imgErr);
-                            }
-                        } else if (img.image_url) {
-                            uploadedImages.push({ image_url: img.image_url, label: img.label || '', is_primary: img.is_primary, sort_order: img.sort_order });
-                        }
-                    }
-
-                    if (uploadedImages.length > 0) {
-                        await supabase.from('website_product_images').insert(
-                            uploadedImages.map(img => ({ ...img, product_id: productId }))
-                        );
-                    }
-                    fetchProducts();
-                } catch (e) {
-                    console.error('Final sync error', e);
-                }
-            })();
-
         } catch (err: any) {
+            console.error('Save failed:', err);
             showToast(err.message || 'Save failed', 'error');
+        } finally {
             setSaving(false);
         }
     };

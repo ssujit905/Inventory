@@ -123,23 +123,25 @@ export default function SalesPage() {
 
     const fetchSales = async () => {
         try {
-            const { data, error } = await supabase
-                .from('sales')
-                .select(`
-                    *,
-                    sale_items (
-                        id,
-                        quantity,
-                        sold_amount,
-                        product:products(sku)
-                    ),
-                    website_orders!sale_id(
-                        id,
-                        website_order_items(sku, quantity)
-                    )
-                `)
-                .order('created_at', { ascending: false })
-                .limit(100);
+            const { data, error } = await supabaseWithTimeout(
+                supabase
+                    .from('sales')
+                    .select(`
+                        *,
+                        sale_items (
+                            id,
+                            quantity,
+                            sold_amount,
+                            product:products(sku)
+                        ),
+                        website_orders!sale_id(
+                            id,
+                            website_order_items(sku, quantity)
+                        )
+                    `)
+                    .order('created_at', { ascending: false })
+                    .limit(100)
+            );
 
             if (error) {
                 console.error('Fetch error:', error);
@@ -397,9 +399,9 @@ export default function SalesPage() {
                         ...lot,
                         calculatedRemaining: Math.max(0, stockIn - sold)
                     };
-                }).filter(l => l.calculatedRemaining > 0);
+                }).filter((l: any) => l.calculatedRemaining > 0);
 
-                const totalStock = processedLots.reduce((sum, l) => sum + l.calculatedRemaining, 0);
+                const totalStock = processedLots.reduce((sum: number, l: any) => sum + l.calculatedRemaining, 0);
                 const productSku = baseAvailableProducts.find(p => p.id === item.productId)?.sku || 'Unknown';
 
                 if (totalStock < item.quantity) {

@@ -292,7 +292,7 @@ export default function WebsiteSettingsPage() {
                                                 </label>
                                             </div>
                                         </div>
-                                    ) : field.textarea ? (
+                                    ) : (field as any).textarea ? (
                                         <textarea
                                             value={settings[field.key] || ''}
                                             onChange={e => update(field.key, e.target.value)}
@@ -300,7 +300,7 @@ export default function WebsiteSettingsPage() {
                                             rows={3}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none"
                                         />
-                                    ) : field.type === 'datetime' ? (
+                                    ) : (field as any).type === 'datetime' ? (
                                         <input
                                             type="datetime-local"
                                             value={settings[field.key]?.replace(' ', 'T') || ''}
@@ -308,7 +308,7 @@ export default function WebsiteSettingsPage() {
                                             placeholder={field.placeholder}
                                             className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold"
                                         />
-                                    ) : field.type === 'toggle' ? (
+                                    ) : (field as any).type === 'toggle' ? (
                                         <div 
                                             onClick={() => update(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
                                             className="flex items-center gap-3 cursor-pointer"
