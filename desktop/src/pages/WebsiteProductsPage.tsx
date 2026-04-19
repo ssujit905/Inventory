@@ -173,14 +173,21 @@ export default function WebsiteProductsPage() {
         });
     };
 
-    const uploadImage = async (file: File): Promise<string> => {
+    const uploadImage = async (file: File, onProgress?: (pct: number) => void): Promise<string> => {
         const ext = file.name.split('.').pop();
         const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        // Give images more time (60s) but still have a limit
+        
+        // Supabase v2 supports onUploadProgress in the options
         const { error } = await supabaseWithTimeout(
-            supabase.storage.from('website-images').upload(path, file),
-            60000 
+            supabase.storage.from('website-images').upload(path, file, {
+                onUploadProgress: (progress) => {
+                    const pct = Math.round((progress.loaded / progress.total) * 100);
+                    if (onProgress) onProgress(pct);
+                }
+            }),
+            120000 // Give large images up to 2 mins
         );
+        
         if (error) throw error;
         const { data } = supabase.storage.from('website-images').getPublicUrl(path);
         return data.publicUrl;
@@ -287,15 +294,32 @@ export default function WebsiteProductsPage() {
                 }
 
                 const uploadedImages: any[] = [];
-                for (const img of form.images) {
+                const updatedImagesForState = [...form.images];
+
+                for (let i = 0; i < updatedImagesForState.length; i++) {
+                    const img = updatedImagesForState[i];
                     if (img.file) {
-                        const url = await uploadImage(img.file);
-                        uploadedImages.push({ 
-                            image_url: url, 
-                            label: img.label || '', 
-                            is_primary: img.is_primary, 
-                            sort_order: img.sort_order 
-                        });
+                        try {
+                            const url = await uploadImage(img.file, (pct) => {
+                                // Update local state for progress bar
+                                setForm(prev => ({
+                                    ...prev,
+                                    images: prev.images.map((im, idx) => 
+                                        idx === i ? { ...im, uploadProgress: pct } : im
+                                    )
+                                }));
+                            });
+                            uploadedImages.push({ 
+                                image_url: url, 
+                                label: img.label || '', 
+                                is_primary: img.is_primary, 
+                                sort_order: img.sort_order 
+                            });
+                        } catch (err: any) {
+                            console.error('Image upload item error:', err);
+                            // We keep going for other images but fail overall
+                            throw new Error(`Failed to upload ${img.file.name}: ${err.message}`);
+                        }
                     } else if (img.image_url) {
                         uploadedImages.push({ 
                             image_url: img.image_url, 
@@ -655,6 +679,19 @@ export default function WebsiteProductsPage() {
                                         <div key={i} className={`flex flex-col gap-2 p-2 rounded-2xl border ${img.is_primary ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800'}`}>
                                             <div className="relative aspect-square rounded-xl overflow-hidden group">
                                                 <img src={img.preview || img.image_url} alt="" className="w-full h-full object-cover" />
+                                                
+                                                {/* Progress Overlay */}
+                                                {(img as any).uploadProgress !== undefined && (img as any).uploadProgress < 100 && (
+                                                    <div className="absolute inset-0 z-20 bg-black/60 flex flex-col items-center justify-center p-4">
+                                                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-2">
+                                                            <div 
+                                                                className="h-full bg-primary transition-all duration-300"
+                                                                style={{ width: `${(img as any).uploadProgress}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-[10px] font-black text-white uppercase tracking-tighter">Uploading {(img as any).uploadProgress}%</span>
+                                                    </div>
+                                                )}
                                                 {/* Always-visible delete button in top-right corner */}
                                                 <button
                                                     type="button"
