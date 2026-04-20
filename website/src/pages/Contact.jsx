@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 
 const Contact = () => {
     const [openFaq, setOpenFaq] = useState(0);
-    const [formData, setFormData] = useState({ name: '', email: '', phone: '', message: '' });
+    const [formData, setFormData] = useState({ name: '', email: '', phone: '', message: '', _honeypot: '' });
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
@@ -40,6 +40,14 @@ const Contact = () => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        // Honeypot bot protection
+        if (formData._honeypot) {
+            console.log("Bot detected!");
+            setSuccess(true); // Pretend it worked
+            setLoading(false);
+            return;
+        }
+
         try {
             const { error: err } = await supabase.from('website_order_returns').insert({
                 order_number: 'CONTACT',
@@ -199,6 +207,17 @@ const Contact = () => {
                                 </div>
                                 
                                 {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: '700', textAlign: 'center' }}>{error}</p>}
+                                
+                                {/* Honeypot field (hidden from humans) */}
+                                <input 
+                                   type="text" 
+                                   name="_honeypot" 
+                                   style={{ display: 'none' }} 
+                                   value={formData._honeypot} 
+                                   onChange={e => setFormData({...formData, _honeypot: e.target.value})} 
+                                   tabIndex="-1" 
+                                   autoComplete="off" 
+                                />
                                 
                                 <button disabled={loading} type="submit" className="btn btn-primary" style={{ padding: '1.15rem', borderRadius: '1.25rem', fontWeight: '900', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                     {loading ? <Loader2 className="animate-spin" size={20} /> : 'Send Message'} 

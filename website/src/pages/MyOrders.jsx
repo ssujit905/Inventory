@@ -102,24 +102,15 @@ const MyOrders = () => {
 
         setPinLoading(true);
         try {
-            // Verify current PIN
-            const { data, error } = await supabase
-                .from('website_customers')
-                .select('phone')
-                .eq('phone', String(customer.phone))
-                .eq('pin_hash', String(currentPin))
-                .single();
+            // Update PIN via RPC
+            const { data: success, error: updateError } = await supabase.rpc('change_customer_pin', {
+                p_phone: String(customer.phone),
+                p_old_pin: String(currentPin),
+                p_new_pin: String(newPin)
+            });
 
-            if (error || !data) {
-                setPinMsg({ text: 'Current PIN is incorrect.', type: 'error' });
-                return;
-            }
-            // Update PIN
-            const { error: updateError } = await supabase
-                .from('website_customers')
-                .update({ pin_hash: String(newPin) })
-                .eq('phone', String(customer.phone));
-            if (updateError) throw updateError;
+            if (updateError || !success) throw updateError || new Error('Failed to update');
+            
             setPinMsg({ text: 'PIN changed successfully!', type: 'success' });
             setCurrentPin(''); setNewPin(''); setConfirmPin('');
             setTimeout(() => { setShowChangePinModal(false); setPinMsg({ text: '', type: '' }); }, 2000);
@@ -168,32 +159,33 @@ const MyOrders = () => {
     const fetchOrders = async () => {
         setLoadingOrders(true);
         try {
-            const { data: ordersData, error: ordersError } = await supabase
-                .from('website_orders')
-                .select(`*, items:website_order_items(*)`)
-                .eq('phone', customer.phone)
-                .order('created_at', { ascending: false });
+            const { data: res, error: ordersError } = await supabase.rpc('get_customer_orders', {
+                p_phone: customer.phone,
+                p_pin: customer.pin_hash || customer.pin
+            });
 
-            if (ordersError) throw ordersError;
-            setOrders(ordersData || []);
+            if (ordersError || !res.success) throw ordersError || new Error(res.error);
+            setOrders(res.orders || []);
 
+            // Securely fetch returns via RPC
+            const { data: retRes, error: retError } = await supabase.rpc('get_customer_returns', {
+                p_phone: customer.phone,
+                p_pin: customer.pin_hash || customer.pin
+            });
+            
+            if (!retError && retRes.success) {
+                const statusMap = {};
+                retRes.returns.forEach(r => { statusMap[r.order_id] = r.status; });
+                setRequestedReturnStatuses(statusMap);
+            }
+
+            // Ratings (Selecting order IDs for "Rated" badges can stay public for now if we allow public select on that table)
             const { data: ratingsData } = await supabase
                 .from('website_product_ratings')
                 .select('order_id')
                 .eq('customer_phone', customer.phone);
             
             if (ratingsData) setRatedOrderIds(new Set(ratingsData.map(r => r.order_id).filter(Boolean)));
-
-            const { data: returnsData } = await supabase
-                .from('website_order_returns')
-                .select('order_id, status')
-                .eq('customer_phone', customer.phone);
-            
-            if (returnsData) {
-                const statusMap = {};
-                returnsData.forEach(r => { statusMap[r.order_id] = r.status; });
-                setRequestedReturnStatuses(statusMap);
-            }
         } catch (err) {
             console.error('Fetch dashboard error:', err);
         } finally {
@@ -284,21 +276,26 @@ const MyOrders = () => {
     const confirmRateProduct = async () => {
         setIsRating(true);
         try {
-            await supabase.from('website_product_ratings').insert({
-                order_id: rateData.orderId,
-                product_id: rateData.productId,
-                customer_phone: customer.phone,
-                customer_name: customer.name,
-                rating: rateValue,
-                comment: rateComment
+            const { data: success, error: rateError } = await supabase.rpc('submit_product_rating', {
+                p_phone: customer.phone,
+                p_pin: customer.pin_hash || customer.pin,
+                p_order_id: rateData.orderId,
+                p_product_id: rateData.productId,
+                p_rating: rateValue,
+                p_comment: rateComment
             });
-            // 🔥 Grant 25 Shopy Coins for reviewing!
-            await supabase.rpc('add_shopy_coins', { p_phone: customer.phone, p_coins: 25 });
+
+            if (rateError || !success) throw rateError || new Error('Rating failed');
+
+            // Refresh the local profile to see the new coins balance
             await refreshCustomer();
 
             setRatedOrderIds(prev => new Set([...prev, rateData.orderId]));
             setShowRateModal(false);
             alert("Thanks for your review! You've just earned 25 Shopy Coins! 🪙");
+        } catch (err) {
+            console.error('Rating error:', err);
+            alert('Failed to submit rating. Please try again.');
         } finally {
             setIsRating(false);
         }

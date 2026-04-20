@@ -15,20 +15,19 @@ export const CustomerProvider = ({ children }) => {
     const login = async (phone, pin) => {
         setLoading(true);
         try {
-            // Verify phone and pin (pin_hash is what we have)
-            // For now, if we saved PIN directly, but the schema said pin_hash.
-            // Let's assume we saved it as text for simplicity or check what we did.
-            
-            const { data, error } = await supabase
-                .from('website_customers')
-                .select('*')
-                .eq('phone', phone)
-                .eq('pin_hash', pin) // Assuming stored as plain text for now, should be hashed later
-                .single();
+            const { data, error } = await supabase.rpc('get_customer_profile', {
+                p_phone: phone,
+                p_pin: pin
+            });
 
-            if (error || !data) {
+            if (error || !data || data.length === 0) {
                 throw new Error('Invalid phone number or PIN');
             }
+
+            const customerData = data[0];
+            setCustomer(customerData);
+            localStorage.setItem('shopy_customer', JSON.stringify(customerData));
+            return { success: true };
 
             setCustomer(data);
             localStorage.setItem('shopy_customer', JSON.stringify(data));
@@ -85,17 +84,18 @@ export const CustomerProvider = ({ children }) => {
     const updateProfile = async (updates) => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('website_customers')
-                .update(updates)
-                .eq('phone', customer.phone)
-                .select()
-                .single();
+            const { data, error } = await supabase.rpc('update_customer_profile', {
+                p_phone: customer.phone,
+                p_pin: customer.pin_hash || customer.pin,
+                p_name: updates.name,
+                p_address: updates.address,
+                p_city: updates.city
+            });
 
-            if (error) throw error;
+            if (error || !data) throw error || new Error('Update failed');
 
-            setCustomer(data);
-            localStorage.setItem('shopy_customer', JSON.stringify(data));
+            // Refresh the local state
+            await refreshCustomer();
             return { success: true };
         } catch (error) {
             console.error('Update profile error:', error);
@@ -108,14 +108,20 @@ export const CustomerProvider = ({ children }) => {
     const refreshCustomer = async () => {
         if (!customer?.phone) return;
         try {
-            const { data, error } = await supabase
-                .from('website_customers')
-                .select('*')
-                .eq('phone', customer.phone)
-                .single();
-            if (!error && data) {
-                setCustomer(data);
-                localStorage.setItem('shopy_customer', JSON.stringify(data));
+            // Use the same secure gateway or a similar one. 
+            // Since we already HAVE the info in localStorage, we can use a simpler check or just re-login silently
+            const saved = localStorage.getItem('shopy_customer');
+            if (!saved) return;
+            const parsed = JSON.parse(saved);
+            
+            const { data, error } = await supabase.rpc('get_customer_profile', {
+                p_phone: customer.phone,
+                p_pin: parsed.pin_hash || parsed.pin // Depends on how it was saved
+            });
+
+            if (!error && data && data.length > 0) {
+                setCustomer(data[0]);
+                localStorage.setItem('shopy_customer', JSON.stringify(data[0]));
             }
         } catch (err) {
             console.error('Failed to refresh customer:', err);
