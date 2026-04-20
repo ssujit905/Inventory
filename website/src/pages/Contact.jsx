@@ -19,6 +19,14 @@ const Contact = () => {
             a: "We offer a strict 2-day (48 hours) return and exchange policy from the date of delivery. After 48 hours, requests cannot be processed."
         },
         {
+            q: "What is Shopy Coin?",
+            a: "Shopy Coin is our exclusive reward points system. 1 Shopy Coin is equal to Rs. 1. You can use these coins to get instant discounts on your future purchases."
+        },
+        {
+            q: "How can I get Shopy Coins?",
+            a: "You can earn Shopy Coins exclusively by writing ratings and reviews for products you've purchased. This helps our community make better choices and rewards you for your valuable feedback!"
+        },
+        {
             q: "Do you offer Cash on Delivery?",
             a: "Yes, we offer Cash on Delivery (COD) services across major cities in Nepal to ensure a secure and trusted shopping experience."
         },

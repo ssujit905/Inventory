@@ -242,9 +242,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         active={location.pathname === '/admin/website/returns'} 
                         badge={pendingReturnsCount > 0 ? pendingReturnsCount : undefined}
                     />
-                    {role === 'admin' && (
-                        <NavItem icon={<MapPin size={18} strokeWidth={1.5} />} label="Delivery" path="/admin/website/delivery" active={location.pathname === '/admin/website/delivery'} />
-                    )}
+                    <NavItem icon={<MapPin size={18} strokeWidth={1.5} />} label="Delivery" path="/admin/website/delivery" active={location.pathname === '/admin/website/delivery'} />
                     {role === 'admin' && (
                         <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />
                     )}

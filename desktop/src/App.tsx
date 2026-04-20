@@ -126,7 +126,7 @@ function App() {
           user && profile?.role === 'admin' ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/delivery" element={
-          user && profile?.role === 'admin' ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
+          user ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/returns" element={
           user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />

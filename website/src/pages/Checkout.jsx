@@ -395,11 +395,26 @@ const Checkout = () => {
                                             </div>
                                         </div>
 
+                                        {/* Shipping Coverage Notice */}
+                                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '1rem', padding: '1rem', marginTop: '0.5rem' }}>
+                                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                <AlertTriangle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                    <li style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: '800', lineHeight: '1.4' }}>
+                                                        • Please check the destination city and coverage area before ordering the product.
+                                                    </li>
+                                                    <li style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: '800', lineHeight: '1.4' }}>
+                                                        • If your destination is not in the list, we are currently unavailable. Please check this before making the purchase.
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+
                                         {/* City Dropdown — loaded from DB */}
                                         <div>
                                             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '700', marginBottom: '0.4rem' }}>
                                                 <MapPin size={14} style={{ display: 'inline', marginRight: '0.4rem' }} />
-                                                Destination City
+                                                Destination
                                             </label>
                                             {loadingBranches ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', color: '#94a3b8', fontSize: '0.875rem' }}>
@@ -431,7 +446,7 @@ const Checkout = () => {
                                         </div>
 
                                         <div>
-                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '700', marginBottom: '0.4rem' }}>Delivery Address</label>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '700', marginBottom: '0.4rem' }}>Your Address</label>
                                             <textarea
                                                 required
                                                 className="form-control"

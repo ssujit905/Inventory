@@ -60,6 +60,11 @@ export default function SalesPage() {
     const isAdmin = profile?.role === 'admin';
     const { query } = useSearchStore();
 
+    interface DeliveryBranch {
+        id: number;
+        city: string;
+    }
+
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -98,12 +103,12 @@ export default function SalesPage() {
     const [codAmount, setCodAmount] = useState<number>(0);
     const [adId, setAdId] = useState('');
 
-    // Multi-Product State
     const [orderItems, setOrderItems] = useState<{ productId: string, quantity: number }[]>([
         { productId: '', quantity: 1 }
     ]);
     const [baseAvailableProducts, setBaseAvailableProducts] = useState<ProductOption[]>([]);
     const [adsOptions, setAdsOptions] = useState<AdOption[]>([]);
+    const [deliveryBranches, setDeliveryBranches] = useState<DeliveryBranch[]>([]);
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -231,10 +236,19 @@ export default function SalesPage() {
         }
     };
 
+    const fetchDeliveryBranches = async () => {
+        const { data } = await supabase
+            .from('website_delivery_branches')
+            .select('id, city')
+            .order('city', { ascending: true });
+        if (data) setDeliveryBranches(data);
+    };
+
     useEffect(() => {
         if (isFormOpen) {
             fetchAvailableProducts();
             fetchAds();
+            fetchDeliveryBranches();
         }
     }, [isFormOpen]);
 
@@ -910,7 +924,19 @@ export default function SalesPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Destination Branch *</label>
-                                        <input required type="text" value={destinationBranch} onChange={e => setDestinationBranch(e.target.value)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold" placeholder="Region / Branch Name" />
+                                        <select
+                                            required
+                                            value={destinationBranch}
+                                            onChange={e => setDestinationBranch(e.target.value)}
+                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-sm text-gray-900 dark:text-gray-100"
+                                        >
+                                            <option value="">-- Select Destination --</option>
+                                            {deliveryBranches.map(branch => (
+                                                <option key={branch.id} value={branch.city}>
+                                                    {branch.city}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Parcel Status *</label>

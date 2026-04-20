@@ -42,9 +42,9 @@ const Footer = () => {
                     <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Shop Now</h3>
                     <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
                         <FooterLink to="/shop" label="All Products" />
-                        <FooterLink to="/shop?cat=New Arrivals" label="New Arrivals" />
-                        <FooterLink to="/shop?cat=Best Sellers" label="Best Sellers" />
-                        <FooterLink to="/contact" label="Store Locator" />
+                        <FooterLink to="/shop" label="New Arrivals" />
+                        <FooterLink to="/shop" label="Best Sellers" />
+                        <FooterLink to="/shop" label="Shop Online" />
                     </ul>
                 </div>
 

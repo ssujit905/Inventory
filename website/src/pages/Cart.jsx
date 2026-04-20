@@ -102,10 +102,17 @@ const Cart = () => {
                                                 <h3 style={{ fontSize: '0.85rem', fontWeight: '400', lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.title}</h3>
                                             </Link>
                                             {(item.selectedSize || item.variationLabel || item.selectedColor) && (
-                                                <div style={{ fontSize: '0.7rem', color: '#64748b', background: '#f8fafc', padding: '2px 6px', borderRadius: '2px', display: 'inline-block', marginTop: '4px', border: '1px solid #e2e8f0' }}>
-                                                    {item.selectedSize && `Size: ${item.selectedSize} `}
-                                                    {item.selectedColor && `Variant: ${item.selectedColor} `}
-                                                    {item.variationLabel && `${(item.selectedSize || item.selectedColor) ? '| ' : ''}${item.variationLabel}`}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '6px' }}>
+                                                    {item.selectedSize && (
+                                                        <div style={{ fontSize: '0.65rem', color: '#64748b', background: '#f8fafc', padding: '2px 6px', borderRadius: '2px', alignSelf: 'flex-start', border: '1px solid #e2e8f0', fontWeight: '800' }}>
+                                                            SIZE: {item.selectedSize}
+                                                        </div>
+                                                    )}
+                                                    {(item.selectedColor || item.variationLabel) && (
+                                                        <div style={{ fontSize: '0.65rem', color: '#64748b', background: '#f8fafc', padding: '2px 6px', borderRadius: '2px', alignSelf: 'flex-start', border: '1px solid #e2e8f0', fontWeight: '800' }}>
+                                                            VARIANT: {item.selectedColor || item.variationLabel}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
