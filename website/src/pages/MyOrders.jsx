@@ -292,7 +292,7 @@ const MyOrders = () => {
 
             setRatedOrderIds(prev => new Set([...prev, rateData.orderId]));
             setShowRateModal(false);
-            alert("Thanks for your review! You've just earned 25 Shopy Coins! 🪙");
+            alert("Thanks for your review! 25 Shopy Coins have been added to your pending balance and will be available after the return window closes! ⏳🪙");
         } catch (err) {
             console.error('Rating error:', err);
             alert('Failed to submit rating. Please try again.');
@@ -406,19 +406,38 @@ const MyOrders = () => {
                     </div>
 
                     {/* Coins */}
-                    <div style={{
-                        background: 'var(--primary-blue)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '0.75rem',
-                        padding: '0.6rem 1rem',
-                        textAlign: 'center',
-                        flexShrink: 0,
-                        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)'
-                    }}>
-                        <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Coins</p>
-                        <p style={{ color: 'white', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            🪙 {customer.shopy_coins || 0}
-                        </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{
+                            background: 'var(--primary-blue)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '0.75rem',
+                            padding: '0.6rem 1rem',
+                            textAlign: 'center',
+                            flexShrink: 0,
+                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)'
+                        }}>
+                            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Coins</p>
+                            <p style={{ color: 'white', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                🪙 {customer.shopy_coins || 0}
+                            </p>
+                        </div>
+
+                        {Number(customer.pending_coins) > 0 && (
+                            <div style={{
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '0.75rem',
+                                padding: '0.6rem 1rem',
+                                textAlign: 'center',
+                                flexShrink: 0,
+                                backdropFilter: 'blur(4px)'
+                            }}>
+                                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Pending</p>
+                                <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0' }}>
+                                    {customer.pending_coins}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 

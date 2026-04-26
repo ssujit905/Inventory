@@ -212,27 +212,6 @@ const Checkout = () => {
         if (pin.length < 4) return alert('Please enter a 4-digit PIN');
         setCreatingAccount(true);
         try {
-            // Check if account already exists
-            const { data: existing, error: checkError } = await supabase
-                .from('website_customers')
-                .select('*')
-                .eq('phone', formData.phone)
-                .maybeSingle();
-
-            if (checkError) throw checkError;
-
-            if (existing) {
-                // Number exists - try to log in
-                const success = await login(formData.phone, pin);
-                if (success) {
-                    setAccountCreated(true);
-                    // No need to alert, they are logged in now
-                } else {
-                    alert('This number is already registered. Please enter the correct PIN to link this order to your account.');
-                }
-                return;
-            }
-
             // No account found - create new one
             const { error: insertError } = await supabase.from('website_customers').insert({
                 phone: formData.phone,
@@ -242,7 +221,20 @@ const Checkout = () => {
                 city: formData.city
             });
             
-            if (insertError) throw insertError;
+            if (insertError) {
+                if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
+                    // Number exists - try to log in
+                    const success = await login(formData.phone, pin);
+                    if (success) {
+                        setAccountCreated(true);
+                        // No need to alert, they are logged in now
+                    } else {
+                        alert('This number is already registered. Please enter the correct PIN to link this order to your account.');
+                    }
+                    return;
+                }
+                throw insertError;
+            }
             
             await login(formData.phone, pin); // Log in the new user
             setAccountCreated(true);
@@ -481,7 +473,10 @@ const Checkout = () => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
                                     {checkoutItems.map(item => (
                                         <div key={item.cartKey || item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', gap: '0.5rem' }}>
-                                            <span style={{ flex: 1, color: '#334155' }}>{item.title} <span style={{ color: '#94a3b8' }}>×{item.quantity}</span></span>
+                                            <span style={{ flex: 1, color: '#334155' }}>
+                                                {item.title.length > 40 ? item.title.substring(0, 40) + '...' : item.title} 
+                                                <span style={{ color: '#94a3b8' }}> ×{item.quantity}</span>
+                                            </span>
                                             <span style={{ fontWeight: '700', flexShrink: 0 }}>Rs. {(item.price * item.quantity).toLocaleString()}</span>
                                         </div>
                                     ))}

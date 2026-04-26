@@ -147,23 +147,24 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     }, [location.pathname]);
 
     useEffect(() => {
+        const mounted = { current: true };
         const handleFocus = async () => {
-            console.log('App focused, recovering connection...');
-            
-            // Wake up Supabase session
             try {
                 await supabase.auth.getSession();
+                if (mounted.current) {
+                    fetchPendingCosts();
+                    fetchPendingWebItems();
+                }
             } catch (e) {
-                console.error('Session recovery failed', e);
+                // Ignore silent aborts or log minimally
             }
-
-            // Trigger local triggers
-            fetchPendingCosts();
-            fetchPendingWebItems();
         };
 
         window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
+        return () => {
+            mounted.current = false;
+            window.removeEventListener('focus', handleFocus);
+        };
     }, []);
 
     useEffect(() => {

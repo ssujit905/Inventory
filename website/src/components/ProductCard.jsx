@@ -17,7 +17,6 @@ const ProductCard = ({ product }) => {
             transition: 'all 0.2s ease',
             display: 'flex',
             flexDirection: 'column',
-            height: '100%',
             position: 'relative',
             border: '1px solid transparent',
             borderBottom: '3px solid #000'

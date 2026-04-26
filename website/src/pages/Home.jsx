@@ -47,7 +47,8 @@ const Home = () => {
     }, [flashSaleEndTime]);
 
     // Merge flash sale products with full product details
-    const flashSaleProducts = flashSaleConfig.map(saleItem => {
+    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true';
+    const flashSaleProducts = isFlashSaleEnabled ? flashSaleConfig.map(saleItem => {
         const product = products.find(p => p.id === saleItem.id);
         if (!product) return null;
         const discount = Number(settings.flash_sale_discount || 0);
@@ -57,7 +58,7 @@ const Home = () => {
             original_price: product.price, // Use current base price as "Original"
             price: salePrice               // Use calculated sale price
         };
-    }).filter(p => p !== null);
+    }).filter(p => p !== null) : [];
 
     // Auto-rotate slider
     useEffect(() => {

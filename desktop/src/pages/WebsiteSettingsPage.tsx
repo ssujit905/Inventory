@@ -102,6 +102,29 @@ export default function WebsiteSettingsPage() {
         setLoadingProducts(false);
     };
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('website_settings_draft');
+        if (savedDraft && !loading) {
+            try {
+                const { settings: dSettings, flashSaleProducts: dFlash } = JSON.parse(savedDraft);
+                if (dSettings) setSettings(prev => ({ ...prev, ...dSettings }));
+                if (dFlash) setFlashSaleProducts(dFlash);
+            } catch (e) { console.error('Settings draft restore failed'); }
+        }
+    }, [loading]);
+
+    useEffect(() => {
+        if (!loading && Object.keys(settings).length > 0) {
+            const draft = { settings, flashSaleProducts };
+            localStorage.setItem('website_settings_draft', JSON.stringify(draft));
+        }
+    }, [settings, flashSaleProducts, loading]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('website_settings_draft');
+    };
+
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
@@ -181,6 +204,7 @@ export default function WebsiteSettingsPage() {
             }));
             const { error } = await supabase.from('website_settings').upsert(upserts, { onConflict: 'key' });
             if (error) throw error;
+            clearDraft();
             showToast('Settings saved!');
         } catch (err: any) {
             showToast(err.message || 'Save failed', 'error');

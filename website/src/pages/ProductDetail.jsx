@@ -53,9 +53,10 @@ const ProductDetail = () => {
     );
 
     const { settings } = useSettings();
+    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true';
     const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
     const discountPercent = Number(settings.flash_sale_discount || 0);
-    const isProductInFlashSale = flashSaleConfig.some(item => item.id.toString() === id?.toString());
+    const isProductInFlashSale = isFlashSaleEnabled && flashSaleConfig.some(item => item.id.toString() === id?.toString());
 
     const currentVariant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
     const rawPrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);
@@ -84,9 +85,15 @@ const ProductDetail = () => {
                 const { data: v } = await supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id);
                 setVariants(v || []);
 
-                // Auto-select first color if none selected
-                if (v && v.length > 0 && !selectedColor) {
-                    setSelectedColor(v[0].color);
+                // Auto-select if single/standard variant
+                if (v && v.length > 0) {
+                    const firstColor = v[0].color;
+                    setSelectedColor(firstColor);
+                    // If there's only one size for this color (or it's Universal), auto-select it
+                    const sizesForColor = v.filter(vi => vi.color === firstColor);
+                    if (sizesForColor.length === 1) {
+                        setSelectedSize(sizesForColor[0].size);
+                    }
                 }
             } catch (err) {
                 console.error("Fetch error:", err);
@@ -121,6 +128,12 @@ const ProductDetail = () => {
             setLoadingRatings(false);
         }
     };
+
+    const averageRating = useMemo(() => {
+        if (ratings.length === 0) return 0;
+        const total = ratings.reduce((acc, curr) => acc + curr.rating, 0);
+        return (total / ratings.length).toFixed(1);
+    }, [ratings]);
 
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     
@@ -180,7 +193,11 @@ const ProductDetail = () => {
 
 
     const isSelectionComplete = () => {
-        return !!selectedColor && !!selectedSize;
+        // Complete if both are selected
+        if (selectedColor && selectedSize) return true;
+        // Also complete if the only variant is a standard/bundle one (auto-selected)
+        if (variants.length === 1) return true;
+        return false;
     };
 
     const handleNext = () => {
@@ -396,8 +413,7 @@ const ProductDetail = () => {
                             className="main-image-container swiper-container" 
                             style={{ 
                                 width: '100%', 
-                                minHeight: '300px',
-                                maxHeight: '80vh',
+                                aspectRatio: '1/1',
                                 position: 'relative', 
                                 cursor: combinedMedia.length > 1 ? 'grab' : 'default', 
                                 backgroundColor: '#000',
@@ -834,48 +850,54 @@ const ProductDetail = () => {
                         {/* Options Selection */}
                         <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingBottom: '80px' }}>
                             
-                            {/* COLOR SELECTION */}
-                            <div style={{ marginBottom: '25px' }}>
-                                <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Select Variant</p>
-                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                    {uniqueColors.map((color) => {
-                                        const isSelected = selectedColor === color;
-                                        const hasStock = variants.some(v => v.color === color && v.current_stock > 0);
-                                        return (
-                                            <div 
-                                                key={color} 
-                                                onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
-                                                style={{
-                                                    padding: '8px 20px',
-                                                    borderRadius: '12px',
-                                                    border: isSelected ? '2px solid var(--primary-red)' : '1px solid #e2e8f0',
-                                                    background: isSelected ? 'rgba(239, 68, 68, 0.05)' : (hasStock ? 'white' : '#f8fafc'),
-                                                    cursor: 'pointer',
-                                                    fontSize: '0.9rem',
-                                                    fontWeight: isSelected ? '900' : '600',
-                                                    color: isSelected ? 'var(--primary-red)' : (hasStock ? '#475569' : '#cbd5e1'),
-                                                    opacity: hasStock ? 1 : 0.6
-                                                }}
-                                            >
-                                                {color}
-                                            </div>
-                                        );
-                                    })}
+                            {/* COLOR / VARIANT SELECTION — hide if 'Standard' (auto-selected) */}
+                            {uniqueColors.some(c => c !== 'Standard' && c !== 'Combo') && (
+                                <div style={{ marginBottom: '25px' }}>
+                                    <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Select Variant</p>
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                        {uniqueColors.filter(c => c !== 'Standard' && c !== 'Combo').map((color) => {
+                                            const isSelected = selectedColor === color;
+                                            const hasStock = variants.some(v => v.color === color && v.current_stock > 0);
+                                            return (
+                                                <div 
+                                                    key={color} 
+                                                    onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
+                                                    style={{
+                                                        padding: '8px 20px',
+                                                        borderRadius: '12px',
+                                                        border: isSelected ? '2px solid var(--primary-red)' : '1px solid #e2e8f0',
+                                                        background: isSelected ? 'rgba(239, 68, 68, 0.05)' : (hasStock ? 'white' : '#f8fafc'),
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.9rem',
+                                                        fontWeight: isSelected ? '900' : '600',
+                                                        color: isSelected ? 'var(--primary-red)' : (hasStock ? '#475569' : '#cbd5e1'),
+                                                        opacity: hasStock ? 1 : 0.6
+                                                    }}
+                                                >
+                                                    {color}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
-                            {/* SIZE SELECTION (Filtered by Color) */}
-                            {selectedColor && (
+                            {/* SIZE SELECTION — hide if 'Universal' (auto-selected) or bundle */}
+                            {selectedColor && filteredSizes.some(v => v.size !== 'Universal' && v.size !== 'Package') && (
                                 <div style={{ marginBottom: '20px' }}>
                                     <p style={{ fontSize: '0.9rem', fontWeight: '900', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>2. Select Size</p>
                                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                                        {filteredSizes.map(v => {
+                                        {filteredSizes.filter(v => v.size !== 'Universal' && v.size !== 'Package').map(v => {
                                             const isSelected = selectedSize === v.size;
                                             const isOOS = v.current_stock <= 0;
                                             return (
                                                 <div 
                                                     key={v.variant_id} 
-                                                    onClick={() => !isOOS && setSelectedSize(v.size)}
+                                                    onClick={() => {
+                                                        if (!isOOS) {
+                                                            setSelectedSize(v.size);
+                                                        }
+                                                    }}
                                                     style={{
                                                         minWidth: '60px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                         border: isSelected ? '2px solid var(--primary-red)' : '1px solid #e2e8f0',

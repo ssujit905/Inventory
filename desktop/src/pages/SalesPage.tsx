@@ -113,6 +113,44 @@ export default function SalesPage() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('sale_entry_draft');
+        const savedFormOpen = localStorage.getItem('sale_entry_form_open');
+
+        if (savedFormOpen === 'true') setIsFormOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setOrderDate(d.orderDate || format(new Date(), 'yyyy-MM-dd'));
+                setDestinationBranch(d.destinationBranch || '');
+                setCustomerName(d.customerName || '');
+                setCustomerAddress(d.customerAddress || '');
+                setPhone1(d.phone1 || '');
+                setPhone2(d.phone2 || '');
+                setPackageDetails(d.packageDetails || '');
+                setCodAmount(d.codAmount || 0);
+                setAdId(d.adId || '');
+                if (d.orderItems) setOrderItems(d.orderItems);
+            } catch (e) { console.error('Sales draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            const draft = { orderDate, destinationBranch, customerName, customerAddress, phone1, phone2, packageDetails, codAmount, adId, orderItems };
+            localStorage.setItem('sale_entry_draft', JSON.stringify(draft));
+            localStorage.setItem('sale_entry_form_open', 'true');
+        } else {
+            localStorage.removeItem('sale_entry_form_open');
+        }
+    }, [orderDate, destinationBranch, customerName, customerAddress, phone1, phone2, packageDetails, codAmount, adId, orderItems, isFormOpen]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('sale_entry_draft');
+        localStorage.removeItem('sale_entry_form_open');
+    };
+
     useEffect(() => {
         fetchSales();
     }, []);
@@ -515,6 +553,7 @@ export default function SalesPage() {
             }
 
             setMessage({ type: 'success', text: 'Order created successfully!' });
+            clearDraft();
             fetchSales();
             setTimeout(() => setIsFormOpen(false), 1000);
 

@@ -365,8 +365,8 @@ export default function AdminDashboard() {
                                         Live Data
                                     </div>
                                 </div>
-                                <div className="h-[300px] w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                <div className="h-[300px] w-full min-w-0 min-h-[300px]">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                         <AreaChart data={chartData}>
                                             <defs>
                                                 <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
@@ -400,7 +400,7 @@ export default function AdminDashboard() {
                                         </div>
                                     ) : (
                                         <>
-                                            <ResponsiveContainer width="100%" height="100%">
+                                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                                 <PieChart>
                                                     <Pie
                                                         data={statusData}
@@ -451,8 +451,8 @@ export default function AdminDashboard() {
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Monthly sales vs returns comparison</p>
                                 </div>
                             </div>
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="h-[300px] w-full min-w-0 min-h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <BarChart data={monthlySalesCount}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} dy={10} />

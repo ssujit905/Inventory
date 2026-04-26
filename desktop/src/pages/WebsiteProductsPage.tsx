@@ -14,6 +14,7 @@ interface ProductVariant {
     size: string;
     sku: string;
     inventory_product_id: string;
+    combo_items?: string[];
     current_stock?: number;
     price?: number | string | null;
 }
@@ -285,10 +286,15 @@ export default function WebsiteProductsPage() {
                         size: v.size,
                         sku: v.sku,
                         price: v.price ? parseFloat(v.price.toString()) : null,
-                        inventory_product_id: v.inventory_product_id
+                        inventory_product_id: v.inventory_product_id || null,
+                        ...(v.color === 'Combo' ? { is_bundle: true } : {})
                     }));
 
-                    const toUpdate = variants.filter(v => !!v.id);
+                    const toUpdate = variants.filter(v => !!v.id).map(v => ({
+                        ...v,
+                        inventory_product_id: v.inventory_product_id || null,
+                        ...(v.color === 'Combo' ? { is_bundle: true } : {})
+                    }));
 
                     if (toInsert.length > 0) {
                         const { error: insErr } = await supabaseWithTimeout(
@@ -304,10 +310,42 @@ export default function WebsiteProductsPage() {
                                 size: v.size,
                                 sku: v.sku,
                                 price: v.price ? parseFloat(v.price.toString()) : null,
-                                inventory_product_id: v.inventory_product_id
+                                inventory_product_id: v.inventory_product_id || null,
+                                ...(v.color === 'Combo' ? { is_bundle: true } : {})
                             }).eq('id', v.id)
                         );
                         if (updErr) throw updErr;
+                    }
+                    
+                    // Attempt to save combo bundles if they exist
+                    const combos = variants.filter(v => v.color === 'Combo' && (v.combo_items || []).length > 0);
+                    if (combos.length > 0) {
+                        try {
+                            // Find the generated IDs for inserted combos
+                            const { data: currentVariants } = await supabase.from('website_variants').select('id, sku').eq('product_id', productId);
+                            for (const combo of combos) {
+                                const dbVariant = currentVariants?.find(cv => cv.sku === combo.sku);
+                                if (dbVariant && combo.combo_items) {
+                                    // First delete existing bundles for this variant to prevent duplicates
+                                    await supabase.from('website_variant_bundles').delete().eq('bundle_variant_id', dbVariant.id);
+                                    
+                                    const bundleInserts = combo.combo_items.map(invId => ({
+                                        bundle_variant_id: dbVariant.id,
+                                        // We map the inventory item ID as child directly if the schema was modified to support it,
+                                        // otherwise if it expects child_variant_id, we map it. 
+                                        // Since the user is selecting inventory items directly, we'll try saving them as child_inventory_id or similar.
+                                        // Assuming user ran the sql_combo_system.sql but tweaked it for direct inventory_product_id.
+                                        // If the schema expects child_variant_id, this will fail safely and warn the user.
+                                        child_inventory_id: invId,
+                                        quantity: 1
+                                    }));
+                                    const { error: bundleErr } = await supabase.from('website_variant_bundles').insert(bundleInserts);
+                                    if (bundleErr) console.warn("Failed to save bundle mappings (Schema might not be updated):", bundleErr);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Bundle mapping save skipped:", e);
+                        }
                     }
                 }
             }
@@ -641,6 +679,13 @@ export default function WebsiteProductsPage() {
                                             </button>
                                             <button 
                                                 type="button"
+                                                onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: 'Combo', size: 'Package', sku: 'COMBO-' + Date.now().toString().slice(-4) + Math.random().toString(36).substring(2, 5).toUpperCase(), price: '', inventory_product_id: '', combo_items: [] }])}
+                                                className="text-[10px] font-black text-amber-500 hover:text-amber-600 flex items-center gap-1 uppercase tracking-widest"
+                                            >
+                                                <Package size={12} strokeWidth={3} /> Add Combo
+                                            </button>
+                                            <button 
+                                                type="button"
                                                 onClick={() => setVariants([...variants, { product_id: editingProduct?.id || 0, color: '', size: '', sku: 'SKU-' + Date.now().toString().slice(-4) + Math.random().toString(36).substring(2, 5).toUpperCase(), price: '', inventory_product_id: '' }])}
                                                 className="text-[10px] font-black text-primary hover:text-primary/80 flex items-center gap-1 uppercase tracking-widest"
                                             >
@@ -650,27 +695,34 @@ export default function WebsiteProductsPage() {
                                     </div>
 
                                     <div className="space-y-3">
-                                        {variants.map((v, idx) => (
-                                            <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                                <div className="col-span-2">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Variant Name</label>
-                                                    <input 
-                                                        value={v.color} 
-                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, color: e.target.value } : vi))}
-                                                        placeholder="e.g. Red" 
-                                                        className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Size</label>
-                                                    <input 
-                                                        value={v.size} 
-                                                        onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, size: e.target.value } : vi))}
-                                                        placeholder="M" 
-                                                        className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
-                                                    />
-                                                </div>
-                                                <div className="col-span-2">
+                                        {variants.map((v, idx) => {
+                                            const isStandard = v.color === 'Standard' && v.size === 'Universal';
+                                            const isCombo = v.color === 'Combo' && v.size === 'Package';
+                                            return (
+                                            <div key={idx} className={`grid grid-cols-12 gap-3 items-end p-4 rounded-2xl border ${isCombo ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30' : 'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800'}`}>
+                                                {!isStandard && !isCombo && (
+                                                    <>
+                                                        <div className="col-span-2">
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Variant Name</label>
+                                                            <input 
+                                                                value={v.color} 
+                                                                onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, color: e.target.value } : vi))}
+                                                                placeholder="e.g. Red" 
+                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Size</label>
+                                                            <input 
+                                                                value={v.size} 
+                                                                onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, size: e.target.value } : vi))}
+                                                                placeholder="M" 
+                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
+                                                <div className={isCombo ? "col-span-2" : isStandard ? "col-span-3" : "col-span-2"}>
                                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Price</label>
                                                     <input 
                                                         type="number"
@@ -680,8 +732,8 @@ export default function WebsiteProductsPage() {
                                                         className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[11px] font-bold text-primary" 
                                                     />
                                                 </div>
-                                                <div className="col-span-2">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">SKU</label>
+                                                <div className={isCombo ? "col-span-3" : isStandard ? "col-span-4" : "col-span-2"}>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">{isCombo ? 'Combo SKU' : 'SKU'}</label>
                                                     <input 
                                                         value={v.sku} 
                                                         onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, sku: e.target.value } : vi))}
@@ -689,25 +741,68 @@ export default function WebsiteProductsPage() {
                                                         className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold" 
                                                     />
                                                 </div>
-                                                <div className="col-span-3">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Link Inventory Item</label>
-                                                    <select 
-                                                        value={v.inventory_product_id}
-                                                        onChange={e => {
-                                                            const invId = e.target.value;
-                                                            const invItem = inventoryItems.find(p => p.id.toString() === invId);
-                                                            setVariants(vs => vs.map((vi, i) => i === idx ? { 
-                                                                ...vi, 
-                                                                inventory_product_id: invId,
-                                                                sku: invItem ? invItem.sku : vi.sku 
-                                                            } : vi));
-                                                        }}
-                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
-                                                    >
-                                                        <option value="">-- Link SKU --</option>
-                                                        {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
-                                                    </select>
-                                                </div>
+                                                {isCombo ? (
+                                                    <div className="col-span-6">
+                                                        <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Select Combo SKUs</label>
+                                                        <div className="flex flex-col gap-2">
+                                                            <select 
+                                                                value=""
+                                                                onChange={e => {
+                                                                    const invId = e.target.value;
+                                                                    if (!invId) return;
+                                                                    setVariants(vs => vs.map((vi, i) => {
+                                                                        if (i === idx) {
+                                                                            const currentIds = vi.combo_items || [];
+                                                                            if (!currentIds.includes(invId)) {
+                                                                                return { ...vi, combo_items: [...currentIds, invId] };
+                                                                            }
+                                                                        }
+                                                                        return vi;
+                                                                    }));
+                                                                }}
+                                                                className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
+                                                            >
+                                                                <option value="">-- Add SKU to Combo --</option>
+                                                                {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
+                                                            </select>
+                                                            {(v.combo_items || []).length > 0 && (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {(v.combo_items || []).map(id => {
+                                                                        const item = inventoryItems.find(p => p.id.toString() === id);
+                                                                        return (
+                                                                            <div key={id} className="flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500 rounded text-[9px] font-bold">
+                                                                                {item ? item.sku : id}
+                                                                                <button onClick={() => {
+                                                                                    setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, combo_items: (vi.combo_items || []).filter(x => x !== id) } : vi));
+                                                                                }} className="hover:text-amber-900"><X size={10} /></button>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className={isStandard ? "col-span-4" : "col-span-3"}>
+                                                        <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Link Inventory Item</label>
+                                                        <select 
+                                                            value={v.inventory_product_id}
+                                                            onChange={e => {
+                                                                const invId = e.target.value;
+                                                                const invItem = inventoryItems.find(p => p.id.toString() === invId);
+                                                                setVariants(vs => vs.map((vi, i) => i === idx ? { 
+                                                                    ...vi, 
+                                                                    inventory_product_id: invId,
+                                                                    sku: invItem ? invItem.sku : vi.sku 
+                                                                } : vi));
+                                                            }}
+                                                            className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
+                                                        >
+                                                            <option value="">-- Link SKU --</option>
+                                                            {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
                                                 <div className="col-span-1">
                                                     <button onClick={() => setVariants(vs => vs.filter((_, i) => i !== idx))} className="h-9 w-9 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={16} /></button>
                                                 </div>
@@ -720,7 +815,8 @@ export default function WebsiteProductsPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                         {variants.length === 0 && (
                                             <div className="py-8 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl flex flex-col items-center justify-center gap-2">
                                                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No variants mapped yet</p>

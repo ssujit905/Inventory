@@ -69,16 +69,21 @@ export function useRealtimeRefresh(
             void runRefresh();
         }, pollMs);
 
+        const mounted = { current: true };
+
         const handleFocus = async () => {
             // Force reset locks in case a fetch Promise hung infinitely during computer sleep
             inFlightRef.current = false;
             queuedRef.current = false;
             
-            // Re-verify session to wake up the Supabase client
-            await supabase.auth.getSession();
-            
-            // Force an immediate data re-validation when the user returns to the app
-            void runRefresh();
+            try {
+                // Re-verify session to wake up the Supabase client
+                await supabase.auth.getSession();
+                // Force an immediate data re-validation when the user returns to the app
+                if (mounted.current) void runRefresh();
+            } catch (e) {
+                // Silent catch for expected aborts
+            }
         };
         window.addEventListener('focus', handleFocus);
         window.addEventListener('visibilitychange', () => {
@@ -87,19 +92,22 @@ export function useRealtimeRefresh(
 
         // Native Electron IPC fallback for strict focus detection
         const ipcWindow = window as any;
-        const _handleIpcFocus = () => handleFocus();
+        const _handleIpcFocus = () => {
+             if (mounted.current) handleFocus();
+        };
         if (ipcWindow.ipcRenderer) {
             ipcWindow.ipcRenderer.on('window-focus', _handleIpcFocus);
         }
 
         return () => {
+            mounted.current = false;
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
             clearInterval(interval);
             window.removeEventListener('focus', handleFocus);
             if (ipcWindow.ipcRenderer) {
                 ipcWindow.ipcRenderer.off('window-focus', _handleIpcFocus);
             }
-            supabase.removeChannel(channel);
+            void supabase.removeChannel(channel);
         };
     }, [channelName, tablesKey, enabled, debounceMs, pollMs]);
 }

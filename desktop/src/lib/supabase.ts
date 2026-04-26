@@ -21,16 +21,23 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Helper to ensure a Supabase request doesn't hang infinitely (e.g. after PC sleep)
- * Default timeout is 15 seconds.
+ * 🎯 RESOLVED TIMEOUT HELPER
+ * Returns { data, error } instead of throwing, to prevent Uncaught (in promise) AbortErrors.
  */
 export async function supabaseWithTimeout<T = any>(
-    request: Promise<T> | any,
-    timeoutMs: number = 15000
-): Promise<T> {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timed out. Please check your internet connection and try again.')), timeoutMs);
+    request: Promise<{ data: T | null; error: any }> | any,
+    timeoutMs: number = 30000
+): Promise<{ data: T | null; error: any }> {
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) => {
+        setTimeout(() => reject({ 
+            data: null, 
+            error: { message: 'NETWORK_TIMEOUT', status: 408 } 
+        }), timeoutMs);
     });
 
-    return Promise.race([request, timeoutPromise]) as Promise<T>;
+    try {
+        return await Promise.race([request, timeoutPromise]);
+    } catch (err: any) {
+        return { data: null, error: err.error || err };
+    }
 }
