@@ -10,6 +10,7 @@ type Profile = {
     id: string;
     full_name: string | null;
     role: 'admin' | 'staff';
+    permissions: 'read_only' | 'read_write';
     created_at: string;
 };
 
@@ -18,6 +19,7 @@ export default function StaffManagementPage() {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
+    const isReadOnly = currentUserProfile?.permissions === 'read_only';
 
     // Message State
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -28,6 +30,7 @@ export default function StaffManagementPage() {
     const [newEmail, setNewEmail] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
+    const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
     const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
@@ -111,7 +114,8 @@ export default function StaffManagementPage() {
                 options: {
                     data: {
                         full_name: newName,
-                        role: newRole
+                        role: newRole,
+                        permissions: newPermissions
                     }
                 }
             });
@@ -125,7 +129,8 @@ export default function StaffManagementPage() {
                 .insert({
                     id: authData.user.id,
                     full_name: newName,
-                    role: newRole
+                    role: newRole,
+                    permissions: newPermissions
                 });
 
             if (profileError) {
@@ -146,6 +151,7 @@ export default function StaffManagementPage() {
             setNewEmail('');
             setNewPassword('');
             setNewRole('staff');
+            setNewPermissions('read_only');
 
         } catch (error: any) {
             if (error.message?.includes('already registered')) {
@@ -175,12 +181,13 @@ export default function StaffManagementPage() {
                     </div>
 
                     <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        onClick={() => !isReadOnly && setIsAddModalOpen(true)}
+                        disabled={isReadOnly}
+                        className={`group relative flex items-center gap-3 px-8 py-4 font-black rounded-[2rem] shadow-2xl transition-all hover:scale-[1.02] active:scale-95 overflow-hidden ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-primary text-white shadow-primary/30'}`}
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        {!isReadOnly && <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>}
                         <UserPlus size={22} className="relative z-10" />
-                        <span className="relative z-10">Add New Personnel</span>
+                        <span className="relative z-10">{isReadOnly ? 'Read Only Mode' : 'Add New Personnel'}</span>
                     </button>
                 </div>
 
@@ -236,11 +243,19 @@ export default function StaffManagementPage() {
                                             </div>
                                         </td>
                                         <td className="px-10 py-8">
-                                            <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
-                                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                                : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                                }`}>
-                                                <Shield size={12} /> {p.role}
+                                            <div className="flex items-center gap-2">
+                                                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.role === 'admin'
+                                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                                    }`}>
+                                                    <Shield size={12} /> {p.role}
+                                                </div>
+                                                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${p.permissions === 'read_write'
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                                    : 'bg-orange-50 text-orange-700 border border-orange-100'
+                                                    }`}>
+                                                    {p.permissions === 'read_write' ? 'Read & Write' : 'Read Only'}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-10 py-8">
@@ -307,6 +322,21 @@ export default function StaffManagementPage() {
                                                 >
                                                     <option value="staff">Staff Personnel</option>
                                                     <option value="admin">System Admin</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
+                                            <div className="relative">
+                                                <UserCheck className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                <select
+                                                    required
+                                                    value={newPermissions}
+                                                    onChange={e => setNewPermissions(e.target.value as any)}
+                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none"
+                                                >
+                                                    <option value="read_only">Read Only Access</option>
+                                                    <option value="read_write">Read & Write Access</option>
                                                 </select>
                                             </div>
                                         </div>

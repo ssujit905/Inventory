@@ -18,6 +18,7 @@ type RecentTransaction = {
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
     const isAdmin = profile?.role === 'admin';
+    const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -200,7 +201,7 @@ export default function StockInPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-7xl mx-auto space-y-6 pb-12">
+            <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -209,11 +210,12 @@ export default function StockInPage() {
                         <p className="text-gray-400 font-medium text-xs">Record and verify inbound product shipments and costs.</p>
                     </div>
                     <button
-                        onClick={openEntryForm}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
+                        onClick={() => !isReadOnly && openEntryForm()}
+                        disabled={isReadOnly}
+                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 w-full sm:w-auto ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90'}`}
                     >
                         <Plus size={16} strokeWidth={2.5} />
-                        Receive Shipment
+                        {isReadOnly ? 'Read Only Mode' : 'Receive Shipment'}
                     </button>
                 </div>
 
@@ -292,7 +294,7 @@ export default function StockInPage() {
                                                 <div className="flex-1 px-3 py-2 text-right">
                                                     <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
                                                     <p className="text-[11px] font-black text-primary">
-                                                        ${totalValue.toLocaleString()}
+                                                        Rs. {totalValue.toLocaleString()}
                                                     </p>
                                                 </div>
                                             </>
@@ -316,13 +318,15 @@ export default function StockInPage() {
                                                 <span className={`h-1.5 w-1.5 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
                                                 {isPending ? 'Cost Pending' : 'Verified'}
                                             </span>
-                                            <button
-                                                onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:text-primary transition-all active:scale-95 shadow-sm"
-                                            >
-                                                <IndianRupee size={12} strokeWidth={2} />
-                                                Update Cost
-                                            </button>
+                                            {!isReadOnly && (
+                                                <button
+                                                    onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:text-primary transition-all active:scale-95 shadow-sm"
+                                                >
+                                                    <IndianRupee size={12} strokeWidth={2} />
+                                                    Update Cost
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>

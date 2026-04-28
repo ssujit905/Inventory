@@ -227,20 +227,26 @@ export default function ProfitPage() {
                 .map((t: any) => {
                     const qty = Math.abs(Number(t.quantity_changed || 0));
                     const costPrice = Number(t.lot?.cost_price || 0);
+                    const totalQtyInSale = saleTotals.get(t.sale_id) || 1; // Prevent division by zero
+                    
                     const adId = t.sale?.ad_id;
                     const budget = adId ? (adBudgetMap.get(adId) || 0) : 0;
                     const count = adId ? (adSaleIds.get(adId)?.size || 1) : 1;
-                    const adsSpent = adId ? budget / count : 0;
-                    const currentIndex = saleRowIndex.get(t.sale_id) || 0;
-                    saleRowIndex.set(t.sale_id, currentIndex + 1);
-                    const isFirstRow = currentIndex === 0;
-                    const adsSpentRow = isFirstRow ? adsSpent : 0;
-                    const packagingForSale = packagingBySale.get(t.sale_id) || 0;
-                    const packagingSpent = isFirstRow ? packagingForSale : 0;
+                    const totalAdsSpentForSale = adId ? budget / count : 0;
+                    const adsSpentRow = (qty / totalQtyInSale) * totalAdsSpentForSale;
+                    
+                    const totalPackagingForSale = packagingBySale.get(t.sale_id) || 0;
+                    const packagingSpent = (qty / totalQtyInSale) * totalPackagingForSale;
+                    
                     const status = t.sale?.parcel_status;
                     const saleDate = new Date(t.sale?.created_at || 0);
-                    const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
-                    const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
+                    
+                    const totalSoldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
+                    const soldAmount = (qty / totalQtyInSale) * totalSoldAmount;
+                    
+                    const totalReturnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const returnCost = (qty / totalQtyInSale) * totalReturnCost;
+                    
                     let profitLoss = 0;
                     if (status === 'returned') {
                         const totalLoss = returnCost + adsSpentRow + packagingSpent;
@@ -279,13 +285,39 @@ export default function ProfitPage() {
         }
     };
 
+    const totalRevenue = saleProfitRows.reduce((sum, r) => sum + r.sold_amount, 0);
+    const totalCOGS = saleProfitRows.reduce((sum, r) => sum + r.cost_total, 0);
+    const totalProfit = saleProfitRows.reduce((sum, r) => sum + r.profit_loss, 0);
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="space-y-8 pb-12">
+            <div className="max-w-7xl mx-auto space-y-8 pb-12">
                 <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Profit</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Lot-wise and Sale-wise Profit</p>
+                    <div className="space-y-1">
+                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Profit Analytics</h1>
+                        <p className="text-sm text-gray-400 font-bold mt-1 uppercase tracking-widest">Granular Profit & Loss Breakdown</p>
+                    </div>
+                </div>
+
+                {/* Summary Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white dark:bg-gray-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Revenue</p>
+                        <h4 className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
+                            Rs. {totalRevenue.toLocaleString()}
+                        </h4>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cost of Goods</p>
+                        <h4 className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
+                            Rs. {totalCOGS.toLocaleString()}
+                        </h4>
+                    </div>
+                    <div className={`bg-white dark:bg-gray-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm ring-1 ${totalProfit >= 0 ? 'ring-emerald-500/20' : 'ring-rose-500/20'}`}>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Net Profit</p>
+                        <h4 className={`text-2xl font-black tracking-tight ${totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            Rs. {totalProfit.toLocaleString()}
+                        </h4>
                     </div>
                 </div>
 
@@ -331,22 +363,22 @@ export default function ProfitPage() {
                                                     <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.qty_sold}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className={`p-4 text-sm font-black text-right ${row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        ${row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -395,25 +427,25 @@ export default function ProfitPage() {
                                                     <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.quantity}</td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        ${row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                     <td className={`p-4 text-sm font-black text-right ${row.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        ${row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                        Rs. {row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
                                                 </tr>
                                             ))}

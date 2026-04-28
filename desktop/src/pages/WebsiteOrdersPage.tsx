@@ -33,6 +33,8 @@ interface Order {
     notes: string;
     created_at: string;
     website_order_items: OrderItem[];
+    sale_id?: string | null;
+    sales?: { parcel_status: string } | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -53,6 +55,7 @@ export default function WebsiteOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [filterStatus, setFilterStatus] = useState('all');
+    const isReadOnly = profile?.permissions === 'read_only';
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
     // Push to Sales State
@@ -74,7 +77,11 @@ export default function WebsiteOrdersPage() {
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            try {
+                supabase.removeChannel(channel);
+            } catch (e) {
+                // Ignore
+            }
         };
     }, []);
 
@@ -231,7 +238,7 @@ export default function WebsiteOrdersPage() {
         setLoading(true);
         const { data, error } = await supabase
             .from('website_orders')
-            .select(`*, website_order_items(*)`)
+            .select(`*, website_order_items(*), sales:sales!sale_id(parcel_status)`)
             .order('created_at', { ascending: false });
         if (error) showToast(error.message, 'error');
         else setOrders(data || []);
@@ -256,11 +263,14 @@ export default function WebsiteOrdersPage() {
         showToast('Status updated!');
     };
 
-    const filtered = filterStatus === 'all' ? orders : orders.filter(o => o.status === filterStatus);
+    const filtered = filterStatus === 'all' 
+        ? orders 
+        : orders.filter(o => (o.sales?.parcel_status || o.status) === filterStatus);
 
     // Summary counts
     const counts = orders.reduce((acc, o) => {
-        acc[o.status] = (acc[o.status] || 0) + 1;
+        const s = o.sales?.parcel_status || o.status;
+        acc[s] = (acc[s] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
 
@@ -321,7 +331,8 @@ export default function WebsiteOrdersPage() {
                 ) : (
                     <div className="space-y-3">
                         {filtered.map(order => {
-                            const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
+                            const currentStatus = order.sales?.parcel_status || order.status;
+                            const cfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.pending;
                             const isExpanded = expandedId === order.id;
                             return (
                                 <div key={order.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm hover:shadow-md transition-all">
@@ -352,6 +363,22 @@ export default function WebsiteOrdersPage() {
                                     {/* Expanded Details */}
                                     {isExpanded && (
                                         <div className="border-t border-gray-100 dark:border-gray-800 p-5 space-y-5">
+                                            {/* Action Bar - If Pending */}
+                                            {order.status === 'pending' && (
+                                                <div className="pb-4 border-b border-gray-100 dark:border-gray-800 flex justify-end">
+                                                    <button 
+                                                        onClick={(e) => { 
+                                                            if (isReadOnly) return;
+                                                            e.stopPropagation(); 
+                                                            openPushModal(order); 
+                                                        }}
+                                                        disabled={isReadOnly}
+                                                        className={`px-6 py-3 text-xs font-black uppercase tracking-widest rounded-xl shadow-lg flex items-center gap-3 transition-all ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white shadow-primary/20 hover:scale-[1.02] active:scale-95'}`}
+                                                    >
+                                                        <ArrowUpCircle size={18} /> {isReadOnly ? 'Read Only Mode' : 'Process & Push to Sales'}
+                                                    </button>
+                                                </div>
+                                            )}
                                             {/* Customer Info */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div className="space-y-2">

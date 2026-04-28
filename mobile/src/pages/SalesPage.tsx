@@ -5,7 +5,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown, Globe } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -45,6 +45,7 @@ type Sale = {
     created_at: string;
     // We'll derive products from sale_items
     items?: SaleItem[];
+    website_orders?: any[];
 };
 
 type ProductOption = {
@@ -59,9 +60,15 @@ type AdOption = {
     amount: number;
 };
 
+interface DeliveryBranch {
+    id: number;
+    city: string;
+}
+
 export default function SalesPage() {
     const { user, profile } = useAuthStore();
     const isAdmin = profile?.role === 'admin';
+    const isReadOnly = profile?.permissions === 'read_only';
     const { query } = useSearchStore();
 
     // UI State
@@ -109,6 +116,7 @@ export default function SalesPage() {
     ]);
     const [baseAvailableProducts, setBaseAvailableProducts] = useState<ProductOption[]>([]);
     const [adsOptions, setAdsOptions] = useState<AdOption[]>([]);
+    const [deliveryBranches, setDeliveryBranches] = useState<DeliveryBranch[]>([]);
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -227,6 +235,7 @@ export default function SalesPage() {
         if (isFormOpen) {
             fetchAvailableProducts();
             fetchAds();
+            fetchDeliveryBranches();
         }
     }, [isFormOpen]);
 
@@ -254,6 +263,14 @@ export default function SalesPage() {
             .order('created_at', { ascending: false });
 
         if (data) setAdsOptions(data as AdOption[]);
+    };
+
+    const fetchDeliveryBranches = async () => {
+        const { data } = await supabase
+            .from('website_delivery_branches')
+            .select('id, city')
+            .order('city', { ascending: true });
+        if (data) setDeliveryBranches(data);
     };
 
     const handleStatusUpdate = async (newStatus: Sale['parcel_status']) => {
@@ -710,7 +727,7 @@ export default function SalesPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-7xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
+            <div className="px-5 max-w-7xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
 
                 {!isSearchMode && (
                     <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
@@ -728,11 +745,12 @@ export default function SalesPage() {
                                 Export
                             </button>
                             <button
-                                onClick={openEntryForm}
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
+                                onClick={() => !isReadOnly && openEntryForm()}
+                                disabled={isReadOnly}
+                                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 w-full sm:w-auto ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90'}`}
                             >
                                 <Plus size={16} strokeWidth={2.5} />
-                                New Order Entry
+                                {isReadOnly ? 'Read Only Mode' : 'New Order Entry'}
                             </button>
                         </div>
                     </div>
@@ -786,15 +804,14 @@ export default function SalesPage() {
                                                         {format(new Date(sale.order_date), 'MMM dd, yyyy')}
                                                     </span>
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
-                                                            {sale.parcel_status}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => openStatusModal(sale)}
-                                                            className="h-8 w-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-500 hover:text-primary transition-all"
-                                                        >
-                                                            <Edit2 size={14} />
-                                                        </button>
+                                                        {!isReadOnly && (
+                                                            <button
+                                                                onClick={() => openStatusModal(sale)}
+                                                                className="h-8 w-8 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-500 hover:text-primary transition-all"
+                                                            >
+                                                                <Edit2 size={14} />
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => openViewModal(sale)}
                                                             className="h-8 w-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
@@ -806,7 +823,13 @@ export default function SalesPage() {
 
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                         <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
+                                                         {sale.website_orders && sale.website_orders.length > 0 && (
+                                                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 rounded-md text-[8px] font-black uppercase tracking-tighter border border-indigo-100 dark:border-indigo-900/30">
+                                                                 <Globe size={10} strokeWidth={3} />
+                                                                 Web
+                                                             </div>
+                                                         )}
                                                         {sale.items && sale.items.length > 0 && (
                                                             <div className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-md text-[9px] font-black text-gray-500 truncate max-w-[120px]">
                                                                 {sale.items.length === 1 ? sale.items[0].product.sku : `${sale.items.length} Items`}
@@ -818,8 +841,13 @@ export default function SalesPage() {
                                                     </div>
                                                 </div>
 
-                                                <div className="text-left text-sm font-black text-primary font-mono tracking-tight">
-                                                    Rs. {Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                <div className="flex items-end justify-between gap-3">
+                                                    <div className="text-left text-sm font-black text-primary font-mono tracking-tight">
+                                                        Rs. {Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
+                                                        {sale.parcel_status}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -877,16 +905,11 @@ export default function SalesPage() {
                         <div className="bg-white dark:bg-gray-900 w-full max-w-4xl rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 flex flex-col max-h-[92svh]">
                             <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-primary/10 to-transparent flex-shrink-0">
                                 <div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-primary text-white rounded-xl shadow-lg">
-                                            <ShoppingCart size={20} />
-                                        </div>
-                                        <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit uppercase">Create Sale Record</h2>
-                                    </div>
-                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.3em] mt-2 ml-12">New Outbound Transaction</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Create Sale Record</h2>
+                                    <p className="text-xs text-gray-400 font-medium">New outbound transaction</p>
                                 </div>
-                                <button onClick={() => setIsFormOpen(false)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 text-gray-500 hover:text-red-500 transition-all">
-                                    <X size={24} />
+                                <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-primary transition-all shadow-sm border border-gray-100 dark:border-gray-800">
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
@@ -897,19 +920,15 @@ export default function SalesPage() {
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     {/* Order Core Info */}
-                                    <div className="space-y-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Order Date *</label>
-                                        <input required type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100" />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Order Date</label>
+                                        <input required type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all" />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Destination Branch *</label>
-                                        <input required type="text" value={destinationBranch} onChange={e => setDestinationBranch(e.target.value)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold" placeholder="Region / Branch Name" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Parcel Status *</label>
-                                        <select required value={parcelStatus} onChange={e => setParcelStatus(e.target.value as any)} className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Parcel Status</label>
+                                        <select required value={parcelStatus} onChange={e => setParcelStatus(e.target.value as any)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all">
                                             <option value="processing">Parcel Processing</option>
                                             <option value="sent">Parcel Sent</option>
                                             <option value="delivered">Delivered</option>
@@ -919,67 +938,91 @@ export default function SalesPage() {
                                     </div>
 
                                     {/* Customer Info */}
-                                    <div className="md:col-span-2 space-y-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Customer Full Name *</label>
-                                        <div className="relative">
-                                            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold" placeholder="Customer Name" />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2 lg:col-span-1 md:col-span-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phone Number 1 * (10 Digits)</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="text" maxLength={10} value={phone1} onChange={e => setPhone1(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest" placeholder="1234567890" />
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Customer Name</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <User size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <input required type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all" placeholder="Enter full name" />
                                         </div>
                                     </div>
 
-                                    <div className="md:col-span-2 space-y-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Full Delivery Address *</label>
-                                        <textarea required rows={2} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-medium text-gray-900 dark:text-gray-100" placeholder="House no, Street, City, Landmark..." />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Primary Phone</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Phone size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <input required type="text" maxLength={10} value={phone1} onChange={e => setPhone1(e.target.value.replace(/\D/g, ''))} className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold tracking-widest text-gray-900 dark:text-gray-100 outline-none transition-all" placeholder="10 Digits" />
+                                        </div>
                                     </div>
-                                    <div className="space-y-2 lg:col-span-1 md:col-span-2">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phone Number 2 (Optional - 10 Digits)</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest text-gray-900 dark:text-gray-100" placeholder="1234567890" />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Secondary Phone</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Phone size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <input type="text" maxLength={10} value={phone2} onChange={e => setPhone2(e.target.value.replace(/\D/g, ''))} className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold tracking-widest text-gray-900 dark:text-gray-100 outline-none transition-all" placeholder="Optional" />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 col-span-full">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Package</label>
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Destination</label>
+                                        <select
+                                            required
+                                            value={destinationBranch}
+                                            onChange={e => setDestinationBranch(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        >
+                                            <option value="">-- Select Destination --</option>
+                                            {deliveryBranches.map(branch => (
+                                                <option key={branch.id} value={branch.city}>
+                                                    {branch.city}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Delivery Address</label>
+                                        <textarea required rows={2} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all" placeholder="House no, Street, City, Landmark..." />
+                                    </div>
+
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Package / Notes</label>
                                         <input
                                             type="text"
                                             value={packageDetails}
                                             onChange={e => setPackageDetails(e.target.value)}
-                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100"
-                                            placeholder="Package details"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="Package details or internal notes"
                                         />
                                     </div>
 
                                     {/* Products Selection Section - Multi Product */}
-                                    <div className="col-span-full space-y-6">
-                                        <div className="flex items-center justify-between">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Order Items *</label>
+                                    <div className="sm:col-span-2 space-y-4">
+                                        <div className="flex items-center justify-between px-1">
+                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order Items</label>
                                             <button
                                                 type="button"
                                                 onClick={addOrderItem}
-                                                className="text-[10px] font-black text-primary uppercase bg-primary/10 px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-all"
+                                                className="text-[10px] font-bold text-primary uppercase bg-primary/10 px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-all"
                                             >
-                                                + Add Product
+                                                + Add SKU
                                             </button>
                                         </div>
 
-                                        <div className="space-y-4">
+                                        <div className="space-y-3">
                                             {orderItems.map((item, index) => (
-                                                <div key={index} className="flex flex-col sm:flex-row gap-4 items-end bg-gray-50 dark:bg-gray-800/30 p-4 rounded-2xl border border-dashed dark:border-gray-800 animate-in slide-in-from-top-2">
-                                                    <div className="flex-1 space-y-2 w-full">
-                                                        <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Select Product</label>
+                                                <div key={index} className="flex flex-col sm:flex-row gap-3 items-end bg-gray-50 dark:bg-gray-800/30 p-4 rounded-xl border border-gray-100 dark:border-gray-800 animate-in slide-in-from-top-2">
+                                                    <div className="flex-1 space-y-1.5 w-full">
+                                                        <label className="text-[9px] font-bold text-gray-400 uppercase ml-1">Select Product</label>
                                                         <select
                                                             required
                                                             value={item.productId}
                                                             onChange={e => updateOrderItem(index, 'productId', e.target.value)}
-                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-sm text-gray-900 dark:text-gray-100"
+                                                            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-gray-900 dark:text-gray-100 outline-none focus:border-primary/30 transition-all"
                                                         >
                                                             <option value="">-- Choose SKU --</option>
                                                             {baseAvailableProducts.map(p => {
@@ -987,22 +1030,22 @@ export default function SalesPage() {
                                                                 const isSelected = item.productId === p.id;
                                                                 return (
                                                                     <option key={p.id} value={p.id} disabled={!isSelected && remaining <= 0}>
-                                                                        {p.sku} (Available: {remaining})
+                                                                        {p.sku} ({remaining} in stock)
                                                                     </option>
                                                                 );
                                                             })}
                                                         </select>
                                                     </div>
 
-                                                    <div className="w-full sm:w-32 space-y-2">
-                                                        <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Quantity</label>
+                                                    <div className="w-full sm:w-28 space-y-1.5">
+                                                        <label className="text-[9px] font-bold text-gray-400 uppercase ml-1">Qty</label>
                                                         <input
                                                             required
                                                             type="number"
                                                             min="1"
                                                             value={item.quantity}
                                                             onChange={e => updateOrderItem(index, 'quantity', Number(e.target.value))}
-                                                            className="w-full h-12 px-4 bg-white dark:bg-gray-800 border-2 dark:border-gray-700 rounded-xl outline-none focus:border-primary/50 font-black text-gray-900 dark:text-gray-100"
+                                                            className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-bold text-gray-900 dark:text-gray-100 outline-none focus:border-primary/30 transition-all"
                                                         />
                                                     </div>
 
@@ -1010,9 +1053,9 @@ export default function SalesPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() => removeOrderItem(index)}
-                                                            className="h-12 w-12 flex items-center justify-center bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-xl hover:bg-rose-100 transition-all"
+                                                            className="h-10 w-10 flex items-center justify-center bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-lg hover:bg-rose-100 transition-all border border-rose-100 dark:border-rose-900/30"
                                                         >
-                                                            <X size={18} />
+                                                            <X size={16} />
                                                         </button>
                                                     )}
                                                 </div>
@@ -1020,37 +1063,47 @@ export default function SalesPage() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 col-span-full">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount (Rs.) *</label>
-                                        <div className="relative">
-                                            <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="number" step="1" min="1" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-xl text-primary text-gray-900 dark:text-gray-100" placeholder="0" />
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Total COD Amount (Rs.)</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <IndianRupee size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <input required type="number" step="1" min="1" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-primary outline-none transition-all" placeholder="0.00" />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 col-span-full">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Ads Campaign (Optional)</label>
+                                    <div className="sm:col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Ads Campaign (Optional)</label>
                                         <select
                                             value={adId}
                                             onChange={e => setAdId(e.target.value)}
-                                            className="w-full h-12 px-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-sm text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         >
-                                            <option value="">-- Select Ads Campaign --</option>
+                                            <option value="">-- No Ads Selected --</option>
                                             {adsOptions.map(ad => (
                                                 <option key={ad.id} value={ad.id}>
-                                                    {ad.description} (Rs. {Number(ad.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                    {ad.description} (Rs. {Number(ad.amount).toLocaleString()})
                                                 </option>
                                             ))}
                                         </select>
                                     </div>
                                 </div>
 
-                                <div className="pt-10 flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto w-full">
-                                    <button type="submit" disabled={loading} className="flex-1 h-14 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/30 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50">
-                                        {loading ? 'Processing Order...' : 'Confirm Shipment'}
+                                <div className="pt-6 flex gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFormOpen(false)}
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                                    >
+                                        Discard
                                     </button>
-                                    <button type="button" onClick={() => setIsFormOpen(false)} className="flex-1 h-14 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl shadow-xl shadow-gray-200/40 dark:shadow-black/20 transition-all hover:scale-[1.01] active:scale-95 hover:bg-gray-200 dark:hover:bg-gray-700">
-                                        Discard Order
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="flex-[2] py-3 px-6 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50"
+                                    >
+                                        {loading ? 'Processing...' : 'Confirm Sale'}
                                     </button>
                                 </div>
                             </form>
@@ -1225,9 +1278,17 @@ export default function SalesPage() {
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</p>
-                                        <p className="text-sm font-black text-gray-900 dark:text-gray-100">
-                                            {viewSale.customer_name}
-                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                                {viewSale.customer_name}
+                                            </p>
+                                            {viewSale.website_orders && viewSale.website_orders.length > 0 && (
+                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 rounded-md text-[8px] font-black uppercase tracking-tighter border border-indigo-100 dark:border-indigo-900/30">
+                                                    <Globe size={10} strokeWidth={3} />
+                                                    Web
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contact</p>

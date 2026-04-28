@@ -3,13 +3,14 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { UserPlus, Shield, Mail, Edit2, Check, X, AlertCircle, Key, UserCheck } from 'lucide-react';
+import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck, Users } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Profile = {
     id: string;
     full_name: string | null;
     role: 'admin' | 'staff';
+    permissions: 'read_only' | 'read_write';
     created_at: string;
 };
 
@@ -18,11 +19,7 @@ export default function StaffManagementPage() {
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
-
-    // Edit States
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editName, setEditName] = useState('');
-    const [editRole, setEditRole] = useState<'admin' | 'staff'>('staff');
+    const isReadOnly = currentUserProfile?.permissions === 'read_only';
 
     // Message State
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -33,6 +30,7 @@ export default function StaffManagementPage() {
     const [newEmail, setNewEmail] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
+    const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
     const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
@@ -88,32 +86,6 @@ export default function StaffManagementPage() {
         }
     };
 
-    const handleStartEdit = (p: Profile) => {
-        setEditingId(p.id);
-        setEditName(p.full_name || '');
-        setEditRole(p.role);
-    };
-
-    const handleSaveEdit = async (id: string) => {
-        setActionLoading(true);
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ full_name: editName, role: editRole })
-                .eq('id', id);
-
-            if (error) throw error;
-
-            setProfiles(prev => prev.map(p => p.id === id ? { ...p, full_name: editName, role: editRole } : p));
-            setEditingId(null);
-            setMessage({ type: 'success', text: 'Personnel updated successfully!' });
-        } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
     const handleAddStaff = async (e: React.FormEvent) => {
         e.preventDefault();
         setActionLoading(true);
@@ -142,7 +114,8 @@ export default function StaffManagementPage() {
                 options: {
                     data: {
                         full_name: newName,
-                        role: newRole
+                        role: newRole,
+                        permissions: newPermissions
                     }
                 }
             });
@@ -156,7 +129,8 @@ export default function StaffManagementPage() {
                 .insert({
                     id: authData.user.id,
                     full_name: newName,
-                    role: newRole
+                    role: newRole,
+                    permissions: newPermissions
                 });
 
             if (profileError) {
@@ -177,6 +151,7 @@ export default function StaffManagementPage() {
             setNewEmail('');
             setNewPassword('');
             setNewRole('staff');
+            setNewPermissions('read_only');
 
         } catch (error: any) {
             if (error.message?.includes('already registered')) {
@@ -194,174 +169,208 @@ export default function StaffManagementPage() {
 
     return (
         <DashboardLayout role={currentUserProfile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-7xl mx-auto space-y-8 pb-20">
-
+            <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
                 {/* Header Section */}
-                <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Staff Management</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-2 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Shield size={16} className="text-primary" /> Authority & Access Control
-                        </p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Staff Management</h1>
+                        <p className="text-gray-400 font-medium text-xs">Manage personnel accounts and system access levels.</p>
                     </div>
-
                     <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
+                        onClick={() => !isReadOnly && setIsAddModalOpen(true)}
+                        disabled={isReadOnly}
+                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 w-full sm:w-auto ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'}`}
                     >
                         <UserPlus size={16} strokeWidth={2.5} />
-                        Add New Personnel
+                        {isReadOnly ? 'Read Only Mode' : 'Issue Credentials'}
                     </button>
                 </div>
 
                 {message && (
-                    <div className={`p-6 rounded-3xl text-sm font-black flex items-center justify-between animate-in slide-in-from-top-4 ${message.type === 'success'
-                        ? 'bg-green-100 text-green-700 border border-green-200 shadow-lg shadow-green-500/10'
-                        : 'bg-rose-100 text-rose-700 border border-rose-200 shadow-lg shadow-rose-500/10'
-                        }`}>
-                        <div className="flex items-center gap-4">
-                            <div className={`p-2 rounded-xl ${message.type === 'success' ? 'bg-green-500/20' : 'bg-rose-500/20'}`}>
-                                <AlertCircle size={20} />
-                            </div>
-                            {message.text}
+                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                            {message.type === 'success' ? <UserCheck size={14} strokeWidth={3} /> : <AlertCircle size={14} strokeWidth={3} />}
                         </div>
-                        <button onClick={() => setMessage(null)} className="p-2 hover:bg-black/5 rounded-lg transition-colors">
-                            <X size={18} />
-                        </button>
+                        {message.text}
                     </div>
                 )}
 
-                {/* Personnel List */}
-                <div className="space-y-3">
+                {/* Personnel Registry Section Header */}
+                <div className="flex items-center gap-2 px-1">
+                    <Users size={14} strokeWidth={1.5} className="text-gray-400" />
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Personnel Registry</h3>
+                    <span className="ml-auto text-[10px] font-bold text-gray-300">{profiles.length} Accounts</span>
+                </div>
+
+                <div className="space-y-2.5">
                     {loading ? (
-                        <div className="py-24 text-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hydrating Personnel Registry...</span>
-                            </div>
-                        </div>
+                        Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="h-24 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 animate-pulse" />
+                        ))
                     ) : profiles.length === 0 ? (
-                        <div className="py-24 text-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 text-gray-400 font-bold uppercase tracking-widest text-sm">
-                            No personnel accounts detected
+                        <div className="bg-white dark:bg-gray-900 rounded-xl p-10 border border-gray-100 dark:border-gray-800 text-center">
+                            <div className="h-12 w-12 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <Users size={20} className="text-gray-400" />
+                            </div>
+                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">No personnel accounts</p>
                         </div>
                     ) : profiles.map((p, index) => {
                         const displayIndex = profiles.length - index;
                         return (
-                            <div key={p.id} className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all">
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
-                                    {displayIndex}
+                            <div key={p.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden active:scale-[0.99] transition-all">
+                                {/* Card Header Strip */}
+                                <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                            {displayIndex}
+                                        </span>
+                                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                                            Member since {format(new Date(p.created_at), 'MMM dd, yyyy')}
+                                        </span>
+                                    </div>
+                                    <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.role === 'admin'
+                                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800'
+                                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800'
+                                    }`}>
+                                        {p.role}
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-3 pl-12 pr-4 py-4">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <span className="text-[11px] font-black text-gray-600 dark:text-gray-300">
-                                                {format(new Date(p.created_at), 'MMM dd, yyyy')}
-                                            </span>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${p.role === 'admin'
-                                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                                    : 'bg-gray-100 text-gray-600 border-gray-200'
-                                                    }`}>
-                                                    {p.role}
-                                                </span>
-                                            </div>
+
+                                {/* Main Info Section */}
+                                <div className="px-3.5 pb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-11 w-11 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-primary font-black text-lg border border-gray-100 dark:border-gray-700">
+                                            {p.full_name?.[0] || 'U'}
                                         </div>
-                                        <div className="min-w-0">
-                                            <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</div>
-                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-1.5">
-                                                <UserCheck size={12} className="text-primary/40" /> {p.id.slice(0, 8)}...
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</h3>
+                                            <div className="flex items-center gap-1.5 text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                                <Shield size={10} className="text-gray-300" />
+                                                ID: {p.id.slice(0, 12)}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Detail Strip */}
+                                <div className="flex items-center gap-0 border-t border-gray-50 dark:border-gray-800">
+                                    <div className="flex-1 px-3.5 py-2.5 border-r border-gray-50 dark:border-gray-800">
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Access Control</p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <div className={`h-1.5 w-1.5 rounded-full ${p.permissions === 'read_write' ? 'bg-blue-500' : 'bg-amber-500'}`} />
+                                            <p className={`text-[10px] font-black uppercase tracking-tight ${p.permissions === 'read_write' ? 'text-blue-600' : 'text-amber-600'}`}>
+                                                {p.permissions === 'read_write' ? 'Read & Write' : 'Read Only'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 px-3.5 py-2.5 text-right">
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Account Status</p>
+                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-tight mt-0.5">Active Account</p>
+                                    </div>
+                                </div>
+                            </div>
                         );
                     })}
                 </div>
 
-                {/* Add Staff Modal */}
+                {/* Add Staff Modal (Standard Style) */}
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 flex flex-col max-h-[92svh]">
-                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent flex-shrink-0">
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[92svh] flex flex-col">
+                            <div className="px-5 py-4 sm:px-8 sm:py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50 flex-shrink-0">
                                 <div>
-                                    <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist Personnel</h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Initialize new secure account</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add Personnel</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Create secure credentials and ranks</p>
                                 </div>
                                 <button
                                     onClick={() => setIsAddModalOpen(false)}
-                                    className="h-14 w-14 flex items-center justify-center rounded-[1.5rem] bg-gray-100 dark:bg-gray-800 hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all"
+                                    className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800"
                                 >
-                                    <X size={28} />
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
-                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-800 text-sm font-semibold">
-                                    New accounts can log in immediately only if Supabase email confirmation is disabled.
-                                </div>
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
-                                            <div className="relative">
-                                                <Edit2 className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <input
-                                                    required
-                                                    type="text"
-                                                    value={newName}
-                                                    onChange={e => setNewName(e.target.value)}
-                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
-                                                    placeholder="e.g. Sujit Singh"
-                                                />
+                            <form onSubmit={handleAddStaff} className="p-5 sm:p-8 space-y-6 overflow-y-auto">
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Full Name</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Users size={18} />
                                             </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Assign Rank</label>
-                                            <div className="relative">
-                                                <Shield className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <select
-                                                    required
-                                                    value={newRole}
-                                                    onChange={e => setNewRole(e.target.value as any)}
-                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none"
-                                                >
-                                                    <option value="staff">Staff Personnel</option>
-                                                    <option value="admin">System Admin</option>
-                                                </select>
-                                            </div>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newName}
+                                                onChange={e => setNewName(e.target.value)}
+                                                className="w-full h-14 pl-12 pr-5 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 focus:bg-white dark:focus:bg-gray-900 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                placeholder="e.g. Sujit Singh"
+                                            />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Official Email Address</label>
-                                        <div className="relative">
-                                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Rank</label>
+                                            <select
+                                                required
+                                                value={newRole}
+                                                onChange={e => setNewRole(e.target.value as any)}
+                                                className="w-full h-14 px-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 appearance-none"
+                                            >
+                                                <option value="staff">Staff</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Permissions</label>
+                                            <select
+                                                required
+                                                value={newPermissions}
+                                                onChange={e => setNewPermissions(e.target.value as any)}
+                                                className="w-full h-14 px-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 appearance-none"
+                                            >
+                                                <option value="read_only">Read Only</option>
+                                                <option value="read_write">Read & Write</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Email Address</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Mail size={18} />
+                                            </div>
                                             <input
                                                 required
                                                 type="email"
                                                 value={newEmail}
                                                 onChange={e => setNewEmail(e.target.value)}
-                                                className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                className="w-full h-14 pl-12 pr-5 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 focus:bg-white dark:focus:bg-gray-900 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
                                                 placeholder="personnel@company.com"
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
-                                        <div className="relative">
-                                            <Key className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Secure Password</label>
+                                        <div className="relative group">
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Key size={18} />
+                                            </div>
                                             <input
                                                 required
                                                 type={showPassword ? 'text' : 'password'}
                                                 value={newPassword}
                                                 onChange={e => setNewPassword(e.target.value)}
-                                                className="w-full h-16 pl-14 pr-16 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                className="w-full h-14 pl-12 pr-16 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 focus:bg-white dark:focus:bg-gray-900 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
                                                 placeholder="••••••••"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors font-bold text-xs uppercase"
+                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary uppercase tracking-widest px-2 py-1 bg-primary/10 rounded-lg"
                                             >
                                                 {showPassword ? 'Hide' : 'Show'}
                                             </button>
@@ -372,16 +381,9 @@ export default function StaffManagementPage() {
                                 <button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="w-full h-20 bg-primary text-white font-black text-lg rounded-[2rem] shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                                    className="w-full h-16 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3 mt-4"
                                 >
-                                    {actionLoading ? (
-                                        <>
-                                            <div className="animate-spin h-6 w-6 border-4 border-white border-t-transparent rounded-full"></div>
-                                            Initializing Identity...
-                                        </>
-                                    ) : (
-                                        <>Issue Official Credentials</>
-                                    )}
+                                    {actionLoading ? 'Initializing...' : 'Issue Credentials'}
                                 </button>
                             </form>
                         </div>

@@ -36,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             id: user.id,
             full_name: (user.user_metadata as any)?.full_name || user.email?.split('@')[0] || 'User',
             role: isForceAdmin || (user.user_metadata as any)?.role === 'admin' ? 'admin' : 'staff',
+            permissions: isForceAdmin || (user.user_metadata as any)?.role === 'admin' ? 'read_write' : 'read_only',
             created_at: new Date().toISOString()
         });
 
@@ -52,13 +53,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             }
 
             const currentProfile = profile as Profile;
+            
+            // Handle missing permissions in legacy DB entries
+            if (!currentProfile.permissions) {
+                currentProfile.permissions = currentProfile.role === 'admin' ? 'read_write' : 'read_only';
+            }
 
-            if (isForceAdmin && currentProfile.role !== 'admin') {
+            if (isForceAdmin && (currentProfile.role !== 'admin' || currentProfile.permissions !== 'read_write')) {
                 await supabase
                     .from('profiles')
-                    .update({ role: 'admin' })
+                    .update({ 
+                        role: 'admin',
+                        permissions: 'read_write'
+                    })
                     .eq('id', user.id);
-                set({ profile: { ...currentProfile, role: 'admin' } });
+                set({ profile: { ...currentProfile, role: 'admin', permissions: 'read_write' } });
                 return;
             }
 

@@ -4,7 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, DollarSign, X, History, CheckCircle2, Edit2, FileDown, Globe } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, FileDown, Globe } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -58,6 +58,7 @@ type AdOption = {
 export default function SalesPage() {
     const { user, profile } = useAuthStore();
     const isAdmin = profile?.role === 'admin';
+    const isReadOnly = profile?.permissions === 'read_only';
     const { query } = useSearchStore();
 
     interface DeliveryBranch {
@@ -755,12 +756,13 @@ export default function SalesPage() {
                             Export
                         </button>
                         <button
-                            onClick={openEntryForm}
-                            className="group relative flex items-center gap-3 px-8 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                            onClick={() => !isReadOnly && openEntryForm()}
+                            disabled={isReadOnly}
+                            className={`group relative flex items-center gap-3 px-8 py-4 font-black rounded-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 overflow-hidden ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white shadow-primary/25'}`}
                         >
-                            <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            {!isReadOnly && <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>}
                             <Plus size={24} className="relative z-10" />
-                            <span className="relative z-10">New Order Entry</span>
+                            <span className="relative z-10">{isReadOnly ? 'Read Only Mode' : 'New Order Entry'}</span>
                         </button>
                     </div>
                 </div>
@@ -858,7 +860,7 @@ export default function SalesPage() {
                                                     )}
                                                 </div>
                                                 <div className="md:col-span-1 text-right text-sm font-black text-primary font-mono tracking-tight">
-                                                    ${Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(sale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                                 <div className="md:col-span-2 flex items-center justify-end">
                                                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusColor(sale.parcel_status)}`}>
@@ -866,12 +868,14 @@ export default function SalesPage() {
                                                     </span>
                                                 </div>
                                                 <div className="md:col-span-2 flex items-center justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openStatusModal(sale)}
-                                                        className="h-9 w-9 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-400 hover:text-primary transition-all"
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
+                                                    {!isReadOnly && (
+                                                        <button
+                                                            onClick={() => openStatusModal(sale)}
+                                                            className="h-9 w-9 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg text-gray-400 hover:text-primary transition-all"
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => openViewModal(sale)}
                                                         className="px-4 py-2 bg-primary/10 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-colors"
@@ -1091,9 +1095,9 @@ export default function SalesPage() {
                                     </div>
 
                                     <div className="space-y-2 col-span-full">
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount ($) *</label>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Total COD Amount (Rs.) *</label>
                                         <div className="relative">
-                                            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                            <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                             <input required type="number" step="1" min="1" value={codAmount || ''} onChange={e => setCodAmount(Number(e.target.value))} className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black text-xl text-primary text-gray-900 dark:text-gray-100" placeholder="0" />
                                         </div>
                                     </div>
@@ -1181,7 +1185,7 @@ export default function SalesPage() {
                                                         </div>
                                                     )}
                                                     <div className="relative">
-                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                        <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                         <input
                                                             type="number"
                                                             min="0"
@@ -1212,7 +1216,7 @@ export default function SalesPage() {
                                                         </div>
                                                     )}
                                                     <div className="relative">
-                                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                                                        <IndianRupee className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
                                                         <input
                                                             type="number"
                                                             min="0"
@@ -1286,7 +1290,7 @@ export default function SalesPage() {
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">COD Amount</p>
                                         <p className="text-sm font-black text-primary font-mono">
-                                            ${Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            Rs. {Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </p>
                                     </div>
                                     <div>

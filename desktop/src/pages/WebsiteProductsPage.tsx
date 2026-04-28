@@ -59,6 +59,7 @@ export default function WebsiteProductsPage() {
     const [products, setProducts] = useState<WebsiteProduct[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const isReadOnly = profile?.permissions === 'read_only';
     const [showForm, setShowForm] = useState(false);
     const [editingProduct, setEditingProduct] = useState<WebsiteProduct | null>(null);
     const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -472,8 +473,12 @@ export default function WebsiteProductsPage() {
                         </h1>
                         <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Manage products shown on your website</p>
                     </div>
-                    <button onClick={openAdd} className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
-                        <Plus size={16} /> Add Product
+                    <button 
+                        onClick={() => !isReadOnly && openAdd()} 
+                        disabled={isReadOnly}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-primary text-white shadow-primary/20 hover:bg-primary/90'}`}
+                    >
+                        <Plus size={16} /> {isReadOnly ? 'Read Only Mode' : 'Add Product'}
                     </button>
                 </div>
 
@@ -519,8 +524,30 @@ export default function WebsiteProductsPage() {
                                                 <button type="button" onClick={() => toggleField(p.id, 'is_featured', !p.is_featured)} className={`p-1 transition-colors ${p.is_featured ? 'text-amber-500' : 'text-gray-400'}`}><Star size={15} /></button>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(p); }} className="p-1 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 size={15} /></button>
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ show: true, id: p.id }); }} className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={15} /></button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { 
+                                                        if (isReadOnly) return;
+                                                        e.stopPropagation(); 
+                                                        openEdit(p); 
+                                                    }} 
+                                                    disabled={isReadOnly}
+                                                    className={`p-1 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-blue-500 hover:bg-blue-50'}`}
+                                                >
+                                                    <Edit3 size={15} />
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => { 
+                                                        if (isReadOnly) return;
+                                                        e.stopPropagation(); 
+                                                        setDeleteConfirm({ show: true, id: p.id }); 
+                                                    }} 
+                                                    disabled={isReadOnly}
+                                                    className={`p-1 rounded-lg transition-all ${isReadOnly ? 'text-gray-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -567,45 +594,6 @@ export default function WebsiteProductsPage() {
                         </div>
 
                         <div className="p-6 space-y-6">
-                            <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 mb-6">
-                                <label className="block text-[10px] font-black text-primary uppercase tracking-widest mb-2">⚡ Quick Import from Inventory</label>
-                                <div className="flex gap-2">
-                                    <select 
-                                        className="flex-1 h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                        onChange={(e) => {
-                                            const id = e.target.value;
-                                            if (!id) return;
-                                            const item = inventoryItems.find(p => p.id.toString() === id);
-                                            if (item) {
-                                                setForm(f => ({
-                                                    ...f,
-                                                    title: item.name || '',
-                                                    description: item.description || '',
-                                                    // If it has an image in inventory, we can't easily download and re-upload here 
-                                                    // but we could at least show it or add it as a URL if the system supports it.
-                                                }));
-                                                // Auto-add variant
-                                                setVariants(v => [...v, {
-                                                    product_id: editingProduct?.id || 0,
-                                                    color: 'Standard',
-                                                    size: 'Universal',
-                                                    sku: item.sku,
-                                                    inventory_product_id: item.id.toString(),
-                                                    price: ''
-                                                }]);
-                                                showToast('Imported ' + item.sku);
-                                            }
-                                            e.target.value = '';
-                                        }}
-                                    >
-                                        <option value="">-- Select Inventory Item to Auto-Fill --</option>
-                                        {inventoryItems.map(inv => (
-                                            <option key={inv.id} value={inv.id}>{inv.sku} - {inv.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <p className="text-[9px] text-gray-400 mt-2 italic font-medium">This will auto-populate the Title, Description, and Link the SKU for you.</p>
-                            </div>
 
                             <div className="grid grid-cols-1 gap-4">
                                 <div>

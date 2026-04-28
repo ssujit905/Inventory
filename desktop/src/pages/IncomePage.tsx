@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, TrendingUp, AlertCircle, X, ArrowRight, DollarSign, Check } from 'lucide-react';
+import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type IncomeEntry = {
@@ -11,7 +11,7 @@ type IncomeEntry = {
     description: string;
     amount: number;
     income_date: string;
-    category: 'income' | 'investment';
+    category: 'income' | 'investment' | 'operation';
     created_at: string;
 };
 
@@ -19,13 +19,14 @@ export default function IncomePage() {
     const { user, profile } = useAuthStore();
     const [incomeEntries, setIncomeEntries] = useState<IncomeEntry[]>([]);
     const [loading, setLoading] = useState(false);
+    const isReadOnly = profile?.permissions === 'read_only';
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [incomeDate, setIncomeDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState<number>(0);
-    const [category, setCategory] = useState<'income' | 'investment'>('income');
+    const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
 
     useEffect(() => {
         fetchIncomeEntries();
@@ -100,12 +101,13 @@ export default function IncomePage() {
                     </div>
 
                     <button
-                        onClick={openEntryForm}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-green-600 text-white font-black rounded-2xl shadow-xl shadow-green-600/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        onClick={() => !isReadOnly && openEntryForm()}
+                        disabled={isReadOnly}
+                        className={`group relative flex items-center gap-3 px-8 py-4 font-black rounded-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 overflow-hidden ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white shadow-green-600/20'}`}
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        {!isReadOnly && <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>}
                         <Plus size={24} className="relative z-10" />
-                        <span className="relative z-10">Add Income Entry</span>
+                        <span className="relative z-10">{isReadOnly ? 'Read Only Mode' : 'Add Income Entry'}</span>
                     </button>
                 </div>
 
@@ -156,12 +158,14 @@ export default function IncomePage() {
                                                     </div>
                                                 </div>
                                                 <div className="md:col-span-2 text-right text-sm font-black text-green-600 font-mono tracking-tight">
-                                                    ${Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                                 <div className="md:col-span-2 text-right">
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${entry.category === 'investment'
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                                        : 'bg-green-50 text-green-700 border-green-200'
+                                                        : entry.category === 'operation'
+                                                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                            : 'bg-green-50 text-green-700 border-green-200'
                                                         }`}>
                                                         {entry.category}
                                                     </span>
@@ -175,26 +179,21 @@ export default function IncomePage() {
                     </div>
                 </div>
 
-                {/* Form Modal */}
+                {/* Form Modal (Matches Stock In Design) */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
-                            <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-green-600/10 to-transparent">
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800">
+                            <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
-                                        <div className="p-2 bg-green-600 text-white rounded-xl shadow-lg shadow-green-600/30">
-                                            <Plus size={20} />
-                                        </div>
-                                        Record Income
-                                    </h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Inbound Cash Entry</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Record Income</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Log inbound cash entry</p>
                                 </div>
-                                <button onClick={() => setIsFormOpen(false)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20 text-gray-500 hover:text-red-500 transition-all">
-                                    <X size={24} />
+                                <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-green-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800">
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddIncome} className="p-8 space-y-6">
                                 {message && (
                                     <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                                         <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
@@ -204,47 +203,38 @@ export default function IncomePage() {
                                     </div>
                                 )}
 
-                                <div className="space-y-6">
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Income Date <span className="text-red-500">*</span></label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Income Date</label>
                                         <input
                                             required
                                             type="date"
                                             value={incomeDate}
                                             onChange={e => setIncomeDate(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-green-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-green-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         />
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Type <span className="text-red-500">*</span></label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Category</label>
                                         <select
                                             required
                                             value={category}
                                             onChange={e => setCategory(e.target.value as any)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-green-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-green-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         >
                                             <option value="income">Income</option>
                                             <option value="investment">Investment</option>
+                                            <option value="operation">Operation</option>
                                         </select>
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Details <span className="text-red-500">*</span></label>
-                                        <textarea
-                                            required
-                                            rows={3}
-                                            value={description}
-                                            onChange={e => setDescription(e.target.value)}
-                                            className="w-full p-5 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-green-600/50 font-medium transition-all text-gray-900 dark:text-gray-100"
-                                            placeholder="Describe the income or investment..."
-                                        />
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
+                                    <div className="col-span-full space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Amount (Rs.)</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-green-600 transition-colors">
+                                                <IndianRupee size={16} strokeWidth={1.5} />
+                                            </div>
                                             <input
                                                 required
                                                 type="number"
@@ -252,27 +242,39 @@ export default function IncomePage() {
                                                 min="1"
                                                 value={amount || ''}
                                                 onChange={e => setAmount(Number(e.target.value))}
-                                                className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-green-600/50 font-black text-2xl text-green-600 transition-all text-gray-900 dark:text-gray-100"
-                                                placeholder="0"
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-green-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                                placeholder="0.00"
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="col-span-full space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Details</label>
+                                        <textarea
+                                            required
+                                            rows={2}
+                                            value={description}
+                                            onChange={e => setDescription(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-green-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="Describe the income or investment..."
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="pt-6 flex gap-4">
+                                <div className="flex gap-4 pt-4">
                                     <button
                                         type="button"
                                         onClick={() => setIsFormOpen(false)}
-                                        className="h-16 px-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-1 h-16 bg-green-600 text-white font-black rounded-2xl shadow-xl shadow-green-600/30 transition-all hover:scale-[1.01] hover:bg-green-700 active:scale-95 disabled:opacity-50"
+                                        className="flex-[2] py-3 px-6 bg-green-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-green-600/20 hover:bg-green-700 transition-all active:scale-[0.98] disabled:opacity-50"
                                     >
-                                        {loading ? 'Recording...' : 'Confirm Income'}
+                                        {loading ? 'Processing...' : 'Confirm Income'}
                                     </button>
                                 </div>
                             </form>

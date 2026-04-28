@@ -122,26 +122,18 @@ export default function InventoryPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-7xl mx-auto space-y-6 pb-24 lg:pb-12">
+            <div className="w-full pb-24 lg:pb-12">
                 {!isSearchMode && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="px-5 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="space-y-1">
-                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
-                            <p className="text-gray-400 font-medium text-xs">Real-time batch movement and stock status tracking.</p>
+                            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Inventory Ledger</h1>
+                            <p className="text-gray-400 font-medium text-[10px]">Real-time batch movement and stock status.</p>
                         </div>
-                        <button
-                            onClick={() => fetchInventory()}
-                            disabled={loading}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm disabled:opacity-50 min-h-[44px] sm:min-h-0"
-                        >
-                            <RotateCcw size={14} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
-                            Refresh Data
-                        </button>
                     </div>
                 )}
 
                 {error ? (
-                    <div className="p-10 bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col items-center gap-4 text-center">
+                    <div className="mx-4 p-10 bg-rose-50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex flex-col items-center gap-4 text-center">
                         <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-xl">
                             <AlertTriangle size={24} strokeWidth={1.5} />
                         </div>
@@ -162,17 +154,17 @@ export default function InventoryPage() {
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Scanning Databases...</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-0">
                         {filteredInventory.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
+                            <div className="py-20 text-center">
                                 <div className="flex flex-col items-center gap-3 opacity-30">
                                     <Package size={40} strokeWidth={1.5} />
                                     <p className="text-xs font-bold uppercase tracking-widest">No active records</p>
                                 </div>
                             </div>
                         ) : (
-                            <div className="rounded-xl overflow-hidden border-2 border-gray-300 dark:border-gray-600 shadow-md bg-white dark:bg-gray-900">
-                                {/* Excel-style table */}
+                            <div className="border-y border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                                {/* Excel-style table - Full Screen */}
                                 <div className="overflow-x-auto">
                                     <table className="w-full border-collapse" style={{ minWidth: '360px' }}>
                                         <thead>

@@ -5,16 +5,14 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { DollarSign } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 
 type FinanceStats = {
-    totalRevenue: number;
-    totalCOGS: number;
-    grossProfit: number;
-    totalExpenses: number;
     totalReturn: number;
     totalInvestment: number;
+    totalOperations: number;
     totalStockValue: number;
+    netProfit: number;
     cashInHand: number;
     margin: number;
 };
@@ -28,7 +26,9 @@ export default function ReportsPage() {
         totalExpenses: 0,
         totalReturn: 0,
         totalInvestment: 0,
+        totalOperations: 0,
         totalStockValue: 0,
+        netProfit: 0,
         cashInHand: 0,
         margin: 0
     });
@@ -246,6 +246,15 @@ export default function ReportsPage() {
                     monthProfitMap.set(monthKey, (monthProfitMap.get(monthKey) || 0) + profitLoss);
                 });
 
+            const monthOpsMap = new Map<string, number>();
+            (incomeEntries || [])
+                .filter((i: any) => i.category === 'operation')
+                .forEach((i: any) => {
+                    const date = new Date(i.income_date);
+                    const key = format(date, 'yyyy-MM');
+                    monthOpsMap.set(key, (monthOpsMap.get(key) || 0) + Number(i.amount));
+                });
+
             const saleRowIndexForReturns = new Map<string, number>();
             const totalReturn = (lotSales || [])
                 .filter((t: any) => t.sale_id && t.lot)
@@ -261,6 +270,10 @@ export default function ReportsPage() {
             const totalExpenses = (expensesData || []).reduce((sum, e) => sum + Number(e.amount), 0);
             const totalInvestment = (incomeEntries || [])
                 .filter((i: any) => i.category === 'investment')
+                .reduce((sum, i) => sum + Number(i.amount), 0);
+
+            const totalOperations = (incomeEntries || [])
+                .filter((i: any) => i.category === 'operation')
                 .reduce((sum, i) => sum + Number(i.amount), 0);
 
             const totalStockValue = (lotsData || [])
@@ -285,8 +298,8 @@ export default function ReportsPage() {
                 })
                 .reduce((sum: number, v: number) => sum + v, 0);
 
-            const cashInHand = (totalRevenue + totalInvestment) - (totalCOGS + totalExpenses + totalReturn);
-            const netProfit = totalRevenue - totalCOGS - totalExpenses;
+            const cashInHand = (totalRevenue + totalInvestment) - (totalCOGS + totalExpenses + totalReturn + totalOperations);
+            const netProfit = grossProfit - totalOperations;
             const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
             setStats({
@@ -296,7 +309,9 @@ export default function ReportsPage() {
                 totalExpenses,
                 totalReturn,
                 totalInvestment,
+                totalOperations,
                 totalStockValue,
+                netProfit,
                 cashInHand,
                 margin
             });
@@ -374,9 +389,12 @@ export default function ReportsPage() {
 
             const gpTrendData = last12Months.map(month => {
                 const key = format(month, 'yyyy-MM');
+                const gp = monthProfitMap.get(key) || 0;
+                const ops = monthOpsMap.get(key) || 0;
                 return {
                     name: format(month, 'MMM'),
-                    grossProfit: monthProfitMap.get(key) || 0
+                    grossProfit: gp,
+                    netProfit: gp - ops
                 };
             });
 
@@ -401,61 +419,73 @@ export default function ReportsPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="space-y-8 pb-12">
+            <div className="max-w-7xl mx-auto space-y-8 pb-12">
                 <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Dashboard</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Revenue, Investment & Expenditure Analytics</p>
+                    <div className="space-y-1">
+                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Financial Overview</h1>
+                        <p className="text-sm text-gray-400 font-bold mt-1 uppercase tracking-widest">Growth & Expenditure Analytics</p>
                     </div>
                 </div>
 
                 {/* Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <FinanceStatCard
-                        title="Total Revenue"
+                        title="Revenue"
                         value={stats.totalRevenue}
                         trend="+12.5%"
                         color="emerald"
                     />
                     <FinanceStatCard
-                        title="Cost of Goods"
+                        title="COGS"
                         value={stats.totalCOGS}
                         trend="+5.2%"
                         color="amber"
-                        sub="Stock Purchase Cost"
+                        sub="Stock Purchase"
                     />
                     <FinanceStatCard
-                        title="Total Expenses"
+                        title="Expenses"
                         value={stats.totalExpenses}
                         trend="+2.1%"
                         color="rose"
                     />
                     <FinanceStatCard
-                        title="Total Return"
+                        title="Returns"
                         value={stats.totalReturn}
-                        trend="Courier Return Cost"
+                        trend="Logistics Cost"
                         color="rose"
+                    />
+                    <FinanceStatCard
+                        title="Operations"
+                        value={stats.totalOperations}
+                        trend="Operational"
+                        color="amber"
                     />
                     <FinanceStatCard
                         title="Gross Profit"
                         value={stats.grossProfit}
-                        trend="Revenue - COGS"
+                        trend="Before Ops"
                         color="emerald"
                     />
                     <FinanceStatCard
-                        title="Total Investment"
+                        title="Net Profit"
+                        value={stats.netProfit}
+                        trend="After Ops"
+                        color="emerald"
+                    />
+                    <FinanceStatCard
+                        title="Investment"
                         value={stats.totalInvestment}
                         trend={`${stats.margin.toFixed(1)}% Margin`}
                         color="blue"
                     />
                     <FinanceStatCard
-                        title="Remaining Stock Value"
+                        title="Inventory"
                         value={stats.totalStockValue}
-                        trend="Inventory"
+                        trend="Stock Value"
                         color="indigo"
                     />
                     <FinanceStatCard
-                        title="Cash in Hand"
+                        title="Cash flow"
                         value={stats.cashInHand}
                         trend="Available"
                         color="emerald"
@@ -465,10 +495,22 @@ export default function ReportsPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Monthly Comparison */}
-                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
-                        <div className="mb-8">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Monthly Revenue vs Expenses</h3>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Cash flow comparison</p>
+                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+                        <div className="mb-8 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Revenue vs Expenses</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Cash flow comparison</p>
+                            </div>
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/40" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Revenue</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/40" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Expenses</span>
+                                </div>
+                            </div>
                         </div>
                         <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
@@ -487,10 +529,22 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Gross Profit Trend */}
-                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
-                        <div className="mb-8">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Gross Profit Trend</h3>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Last 12 months (monthly)</p>
+                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+                        <div className="mb-8 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Profit Trends</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Yearly performance</p>
+                            </div>
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/40" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gross Profit</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/40" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Net Profit</span>
+                                </div>
+                            </div>
                         </div>
                         <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
@@ -500,6 +554,10 @@ export default function ReportsPage() {
                                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.12} />
                                             <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                                         </linearGradient>
+                                        <linearGradient id="netProfitGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.12} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                        </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} dy={10} />
@@ -508,6 +566,7 @@ export default function ReportsPage() {
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                                     />
                                     <Area type="monotone" dataKey="grossProfit" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Gross Profit" />
+                                    <Area type="monotone" dataKey="netProfit" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#netProfitGradient)" name="Net Profit" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -529,19 +588,19 @@ function FinanceStatCard({ title, value, trend, color, sub }: any) {
     };
 
     return (
-        <div className="group relative bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px]">
+        <div className="group relative bg-white dark:bg-gray-900 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm transition-all hover:shadow-md hover:translate-y-[-2px]">
             <div className="flex items-start justify-between">
                 <div>
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">{title}</p>
-                    <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight">
-                        ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <h4 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
+                        Rs. {value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </h4>
-                    <p className="text-[10px] text-gray-400 font-medium mt-1.5">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1.5">
                         {sub || trend}
                     </p>
                 </div>
-                <div className={`h-10 w-10 ${accents[color] || 'bg-primary'} text-white rounded-lg flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
-                    <DollarSign size={18} strokeWidth={1.5} />
+                <div className={`h-12 w-12 ${accents[color] || 'bg-primary'} text-white rounded-2xl flex items-center justify-center shadow-lg shadow-current/10 transition-transform group-hover:scale-110`}>
+                    <IndianRupee size={24} strokeWidth={2.5} />
                 </div>
             </div>
         </div>

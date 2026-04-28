@@ -5,26 +5,26 @@ import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import {
     RotateCcw, Loader2, ChevronDown, ChevronUp,
-    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare, Search
+    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare
 } from 'lucide-react';
 
 interface ReturnRequest {
     id: number;
-    order_id: number;
-    order_number: string;
+    order_id?: number | null;
+    order_number?: string | null;
     customer_phone: string;
-    type: 'return' | 'exchange';
+    type: 'return' | 'exchange' | 'message';
     message: string;
-    media: { url: string; type: string }[];
+    media?: { url: string; type: string }[] | null;
     status: 'pending' | 'approved' | 'rejected' | 'completed';
     created_at: string;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    pending: { label: 'New Request', color: 'bg-amber-500 text-white border-amber-600', icon: <Clock size={12} /> },
-    approved: { label: 'Approved', color: 'bg-blue-500 text-white border-blue-600', icon: <Check size={12} /> },
-    rejected: { label: 'Rejected', color: 'bg-rose-500 text-white border-rose-600', icon: <X size={12} /> },
-    completed: { label: 'Resolved', color: 'bg-emerald-500 text-white border-emerald-600', icon: <Check size={12} /> },
+    pending: { label: 'New', color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Clock size={12} /> },
+    approved: { label: 'Processed', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Check size={12} /> },
+    rejected: { label: 'Rejected', color: 'bg-rose-50 text-rose-600 border-rose-200', icon: <X size={12} /> },
+    completed: { label: 'Completed', color: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <Check size={12} /> },
 };
 
 export default function WebsiteReturnsPage() {
@@ -33,7 +33,8 @@ export default function WebsiteReturnsPage() {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
+    const isReadOnly = profile?.permissions === 'read_only';
 
     useEffect(() => {
         fetchRequests();
@@ -46,7 +47,11 @@ export default function WebsiteReturnsPage() {
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            setTimeout(() => {
+                if (channel && (channel as any).state !== 'joining') {
+                    supabase.removeChannel(channel).catch(() => {});
+                }
+            }, 100);
         };
     }, []);
 
@@ -83,115 +88,171 @@ export default function WebsiteReturnsPage() {
         showToast(`Request ${status}!`);
     };
 
-    const filteredRequests = requests.filter(r => 
-        r.order_number.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        r.customer_phone.includes(searchQuery)
-    );
+    const filteredRequests = activeTab === 'all' 
+        ? requests 
+        : requests.filter(r => r.type === activeTab);
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             {toast && (
-                <div className={`fixed top-4 left-4 right-4 z-[200] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl text-white text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-[11px] font-black uppercase tracking-widest animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                        {toast.type === 'success' ? <Check size={14} strokeWidth={3} /> : <AlertTriangle size={14} strokeWidth={3} />}
+                    </div>
                     {toast.msg}
                 </div>
             )}
-
-            <div className="space-y-6 pb-20">
-                <div className="flex flex-col gap-4">
-                    <div>
-                        <h1 className="text-2xl font-black text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                             Return Center
-                        </h1>
-                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mt-1">Website Order Claims</p>
+            <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Customer Requests</h1>
+                        <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Manage return, exchange, and contact messages.</p>
                     </div>
-
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by Order ID or Phone..." 
-                            className="w-full h-12 pl-10 pr-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" 
-                        />
+                    <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm w-full md:w-auto">
+                        <div className="h-9 w-9 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
+                            <RotateCcw size={18} />
+                        </div>
+                        <div>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Active Requests</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{requests.length} Submissions</p>
+                        </div>
                     </div>
                 </div>
 
+                {/* Filter Tabs */}
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+                    {(['all', 'return', 'exchange', 'message'] as const).map((tab) => {
+                        const isActive = activeTab === tab;
+                        const count = tab === 'all' ? requests.length : requests.filter(r => r.type === tab).length;
+                        return (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${isActive ? 'bg-primary text-white shadow-md' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
+                            >
+                                {tab} <span className="opacity-60">({count})</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Request Feed */}
+                <div className="flex items-center gap-2 px-1">
+                    <RotateCcw size={14} strokeWidth={1.5} className="text-gray-400" />
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Request Feed</h3>
+                    <span className="ml-auto text-[10px] font-bold text-gray-300">{filteredRequests.length} visible</span>
+                </div>
+
                 {loading ? (
-                    <div className="flex h-64 items-center justify-center">
-                        <Loader2 size={32} className="animate-spin text-primary" />
+                    <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Syncing Records...</p>
                     </div>
                 ) : filteredRequests.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 gap-4">
-                        <RotateCcw size={48} className="text-gray-200 dark:text-gray-700" />
-                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest text-sm">No return requests found</p>
+                    <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                        <div className="flex flex-col items-center gap-3 opacity-30">
+                            <RotateCcw size={40} strokeWidth={1.5} />
+                            <p className="text-xs font-bold uppercase tracking-widest">No matching requests</p>
+                        </div>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {filteredRequests.map(request => {
+                    <div className="space-y-3">
+                        {filteredRequests.map((request, idx) => {
                             const cfg = STATUS_CONFIG[request.status] || STATUS_CONFIG.pending;
                             const isExpanded = expandedId === request.id;
+                            const displayIndex = filteredRequests.length - idx;
                             
+                            const typeColors = {
+                                return: 'bg-rose-50 text-rose-600 border-rose-100',
+                                exchange: 'bg-blue-50 text-blue-600 border-blue-100',
+                                message: 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                            };
+
                             return (
-                                <div key={request.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm transition-all">
+                                <div 
+                                    key={request.id} 
+                                    className={`bg-white dark:bg-gray-900 rounded-xl border transition-all overflow-hidden shadow-sm active:scale-[0.99] ${isExpanded ? 'border-primary/30 ring-1 ring-primary/10' : 'border-gray-100 dark:border-gray-800'}`}
+                                >
                                     <div 
                                         className="p-4 cursor-pointer"
                                         onClick={() => setExpandedId(isExpanded ? null : request.id)}
                                     >
-                                        <div className="flex items-start justify-between">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${cfg.color}`}>
-                                                        {cfg.label}
-                                                    </span>
-                                                    <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${request.type === 'return' ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600'}`}>
-                                                        {request.type}
-                                                    </span>
-                                                </div>
-                                                <p className="font-black text-gray-900 dark:text-gray-100 text-sm">#{request.order_number}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase">{format(new Date(request.created_at), 'MMM dd, yyyy')}</p>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black">
+                                                    {displayIndex}
+                                                </span>
+                                                <span className={`px-2 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-wider ${typeColors[request.type]}`}>
+                                                    {request.type}
+                                                </span>
                                             </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                {request.media?.length > 0 && (
-                                                    <div className="flex -space-x-2">
-                                                        {request.media.slice(0, 3).map((m, i) => (
-                                                            <div key={i} className="w-8 h-8 rounded-lg border-2 border-white dark:border-gray-950 overflow-hidden bg-gray-100">
+                                            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider ${cfg.color}`}>
+                                                {cfg.icon} {cfg.label}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{request.customer_phone}</p>
+                                                <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                                                    {format(new Date(request.created_at), 'MMM dd, h:mm a')}
+                                                    {request.order_number && <span className="ml-2 text-gray-300 font-mono">#{request.order_number}</span>}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                {(request.media || []).length > 0 && (
+                                                    <div className="flex -space-x-1.5">
+                                                        {request.media!.slice(0, 2).map((m, i) => (
+                                                            <div key={i} className="w-6 h-6 rounded-md border border-white dark:border-gray-900 overflow-hidden bg-gray-100 shadow-sm">
                                                                 <img src={m.url} className="w-full h-full object-cover" />
                                                             </div>
                                                         ))}
                                                     </div>
                                                 )}
-                                                {isExpanded ? <ChevronUp size={18} className="text-gray-300" /> : <ChevronDown size={18} className="text-gray-300" />}
+                                                <div className={`p-1.5 rounded-lg transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-primary/10 text-primary' : 'text-gray-300'}`}>
+                                                    <ChevronDown size={16} />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     {isExpanded && (
-                                        <div className="border-t border-gray-100 dark:border-gray-800 p-5 space-y-6 bg-gray-50/50 dark:bg-gray-900/50">
+                                        <div className="px-4 pb-5 space-y-5 animate-in slide-in-from-top-4 duration-300 border-t border-gray-50 dark:border-gray-800 pt-5">
+                                            {/* Content Layout */}
                                             <div className="space-y-4">
-                                                <div>
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Customer Message</label>
-                                                    <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-800 leading-relaxed shadow-sm">
-                                                        {request.message}
-                                                    </div>
+                                                <div className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                                        <MessageSquare size={12} className="text-primary" /> Submission Context
+                                                    </p>
+                                                    <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap italic">
+                                                        "{request.message}"
+                                                    </p>
                                                 </div>
-                                                
-                                                <div className="flex items-center justify-between bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Phone</span>
-                                                        <span className="font-black text-sm text-gray-700 dark:text-gray-200">{request.customer_phone}</span>
+
+                                                <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                                                            <Phone size={14} />
+                                                        </div>
+                                                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">{request.customer_phone}</span>
                                                     </div>
-                                                    <a href={`tel:${request.customer_phone}`} className="h-10 w-10 bg-primary text-white rounded-xl flex items-center justify-center">
-                                                        <Phone size={16} />
+                                                    <a href={`tel:${request.customer_phone}`} className="px-3 py-1.5 bg-primary text-white rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 transition-transform">
+                                                        Call Now
                                                     </a>
                                                 </div>
-                                                
-                                                {request.media?.length > 0 && (
-                                                    <div>
-                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Photos</label>
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            {request.media.map((m, i) => (
-                                                                <a key={i} href={m.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-xl overflow-hidden bg-white border border-gray-100 dark:border-gray-800">
+
+                                                {/* Media Evidence */}
+                                                {(request.media || []).length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest ml-1">Evidence Payload</p>
+                                                        <div className="grid grid-cols-4 gap-2">
+                                                            {request.media!.map((m, i) => (
+                                                                <a key={i} href={m.url} target="_blank" rel="noopener noreferrer" className="aspect-square rounded-lg overflow-hidden border border-gray-100 dark:border-gray-800 bg-gray-50 relative group">
                                                                     <img src={m.url} className="w-full h-full object-cover" />
+                                                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                                        <ExternalLink size={12} className="text-white" />
+                                                                    </div>
                                                                 </a>
                                                             ))}
                                                         </div>
@@ -199,12 +260,29 @@ export default function WebsiteReturnsPage() {
                                                 )}
                                             </div>
 
-                                            <div className="pt-6 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => updateStatus(request.id, 'approved')} className="flex-1 h-12 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Approve</button>
-                                                    <button onClick={() => updateStatus(request.id, 'completed')} className="flex-1 h-12 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Resolve</button>
-                                                </div>
-                                                <button onClick={() => updateStatus(request.id, 'rejected')} className="w-full h-12 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-xl text-[10px] font-black uppercase tracking-widest">Reject Claim</button>
+                                            {/* Action Bar */}
+                                            <div className="flex gap-2 pt-2">
+                                                <button 
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'approved')}
+                                                    disabled={isReadOnly}
+                                                    className={`flex-1 py-3 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-blue-600 shadow-blue-600/20'}`}
+                                                >
+                                                    <Check size={14} /> {isReadOnly ? 'Read Only' : (request.type === 'message' ? 'Process' : 'Approve')}
+                                                </button>
+                                                <button 
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'completed')}
+                                                    disabled={isReadOnly}
+                                                    className={`flex-1 py-3 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 shadow-emerald-600/20'}`}
+                                                >
+                                                    <Check size={14} /> {isReadOnly ? 'R-ONLY' : 'Resolve'}
+                                                </button>
+                                                <button 
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'rejected')}
+                                                    disabled={isReadOnly}
+                                                    className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center ${isReadOnly ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}
+                                                >
+                                                    <X size={14} />
+                                                </button>
                                             </div>
                                         </div>
                                     )}
@@ -214,6 +292,7 @@ export default function WebsiteReturnsPage() {
                     </div>
                 )}
             </div>
+
         </DashboardLayout>
     );
 }

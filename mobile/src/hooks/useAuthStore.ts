@@ -36,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             id: user.id,
             full_name: (user.user_metadata as any)?.full_name || user.email?.split('@')[0] || 'User',
             role: isForceAdmin || (user.user_metadata as any)?.role === 'admin' ? 'admin' : 'staff',
+            permissions: isForceAdmin || (user.user_metadata as any)?.role === 'admin' ? 'read_write' : 'read_only',
             created_at: new Date().toISOString()
         });
 
@@ -52,13 +53,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             }
 
             const currentProfile = profile as Profile;
+            
+            // Handle missing permissions in legacy DB entries
+            if (!currentProfile.permissions) {
+                currentProfile.permissions = currentProfile.role === 'admin' ? 'read_write' : 'read_only';
+            }
 
-            if (isForceAdmin && currentProfile.role !== 'admin') {
+            if (isForceAdmin && (currentProfile.role !== 'admin' || currentProfile.permissions !== 'read_write')) {
                 await supabase
                     .from('profiles')
-                    .update({ role: 'admin' })
+                    .update({ 
+                        role: 'admin',
+                        permissions: 'read_write'
+                    })
                     .eq('id', user.id);
-                set({ profile: { ...currentProfile, role: 'admin' } });
+                set({ profile: { ...currentProfile, role: 'admin', permissions: 'read_write' } });
                 return;
             }
 
@@ -69,59 +78,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     },
 
     initialize: async () => {
-        // Prevent multiple initializations
-        if (get().initialized) {
-            console.log('Already initialized, skipping...');
+        // Prevent multiple simultaneous initializations
+        if (get().initialized && !get().loading) {
             return;
         }
 
         try {
-            console.log('Initializing auth...');
-            set({ initialized: true }); // Set initialized to true
+            console.log('Initializing auth state...');
+            set({ initialized: true, loading: true });
 
-            // Check active session
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-            if (sessionError) {
-                console.error('Session error:', sessionError)
-                set({ user: null, profile: null, loading: false })
-                return
-            }
-
-            if (session?.user) {
-                console.log('User session found:', session.user.id);
-
-                set({ user: session.user });
-                await get().refreshProfile();
-                set({ loading: false });
-            } else {
-                console.log('No active session');
-                set({ user: null, profile: null, loading: false })
-            }
-
-            // Keep exactly one auth listener to avoid duplicate refresh loops in dev/HMR.
-            if (authSubscription) {
-                authSubscription.unsubscribe();
-                authSubscription = null;
-            }
-
-            const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-                console.log('Auth state changed:', event);
-
-                // Only handle SIGNED_IN and SIGNED_OUT events
-                if (event === 'SIGNED_OUT') {
-                    set({ user: null, profile: null, loading: false })
-                } else if (event === 'SIGNED_IN' && session?.user) {
-                    set({ user: session.user });
-                    await get().refreshProfile();
+            // Add a global safety timeout for the app initialization (10 seconds)
+            setTimeout(() => {
+                if (get().loading) {
+                    console.warn('Auth initialization timed out, forcing app to load.');
                     set({ loading: false });
                 }
-                // Ignore INITIAL_SESSION and other events to prevent loops
-            })
-            authSubscription = listener.subscription;
+            }, 10000);
+
+            // Check active session
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+            if (sessionError) throw sessionError;
+
+            if (session?.user) {
+                set({ user: session.user });
+                await get().refreshProfile();
+            } else {
+                set({ user: null, profile: null });
+            }
+            
+            set({ loading: false });
+
+            // Set up listener for future changes
+            if (!authSubscription) {
+                const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+                    console.log('Auth state event:', event);
+                    if (event === 'SIGNED_OUT') {
+                        set({ user: null, profile: null, loading: false });
+                    } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                        if (session?.user) {
+                            set({ user: session.user });
+                            await get().refreshProfile();
+                            set({ loading: false });
+                        }
+                    }
+                });
+                authSubscription = listener.subscription;
+            }
         } catch (error) {
-            console.error('Auth initialization error:', error)
-            set({ user: null, profile: null, loading: false })
+            console.error('Core Auth Error:', error);
+            set({ user: null, profile: null, loading: false });
         }
     },
 

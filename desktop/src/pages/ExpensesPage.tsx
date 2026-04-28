@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, DollarSign, AlertCircle, X, History, ArrowRight, Check } from 'lucide-react';
+import { Plus, IndianRupee, AlertCircle, X, History, ArrowRight, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Expense = {
@@ -17,6 +17,7 @@ type Expense = {
 
 export default function ExpensesPage() {
     const { user, profile } = useAuthStore();
+    const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -153,12 +154,13 @@ export default function ExpensesPage() {
                     </div>
 
                     <button
-                        onClick={openEntryForm}
-                        className="group relative flex items-center gap-3 px-8 py-4 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/25 transition-all hover:scale-[1.02] active:scale-95 overflow-hidden"
+                        onClick={() => !isReadOnly && openEntryForm()}
+                        disabled={isReadOnly}
+                        className={`group relative flex items-center gap-3 px-8 py-4 font-black rounded-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 overflow-hidden ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white shadow-red-600/20'}`}
                     >
-                        <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        {!isReadOnly && <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>}
                         <Plus size={24} className="relative z-10" />
-                        <span className="relative z-10">Add New Expense</span>
+                        <span className="relative z-10">{isReadOnly ? 'Read Only Mode' : 'Add New Expense'}</span>
                     </button>
                 </div>
 
@@ -176,7 +178,7 @@ export default function ExpensesPage() {
                     <div className="space-y-3">
                         {expenses.length === 0 ? (
                             <div className="py-24 flex flex-col items-center justify-center border-2 border-dashed dark:border-gray-800 rounded-[2rem] bg-gray-50/50 dark:bg-gray-900/20">
-                                <DollarSign size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
+                                <IndianRupee size={48} className="text-gray-200 dark:text-gray-800 mb-4" />
                                 <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">No expense records found</p>
                                 <button onClick={openEntryForm} className="mt-4 text-red-600 font-black flex items-center gap-2 hover:underline">
                                     Record First Expense <ArrowRight size={16} />
@@ -209,7 +211,7 @@ export default function ExpensesPage() {
                                                     </div>
                                                 </div>
                                                 <div className="md:col-span-2 text-right text-sm font-black text-red-600 font-mono tracking-tight">
-                                                    ${Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    Rs. {Number(exp.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
                                                 <div className="md:col-span-1 text-right">
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${exp.category === 'ads'
@@ -230,26 +232,21 @@ export default function ExpensesPage() {
                     </div>
                 </div>
 
-                {/* Form Modal */}
+                {/* Form Modal (Matches Stock In Design) */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[85vh] flex flex-col">
-                            <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent">
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800">
+                            <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
-                                        <div className="p-2 bg-red-600 text-white rounded-xl shadow-lg shadow-red-600/30">
-                                            <Plus size={20} />
-                                        </div>
-                                        Record Expense
-                                    </h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Financial Outflow Entry</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Record Expense</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Log financial outflow record</p>
                                 </div>
-                                <button onClick={() => setIsFormOpen(false)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20 text-gray-500 hover:text-red-500 transition-all">
-                                    <X size={24} />
+                                <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800">
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddExpense} className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddExpense} className="p-8 space-y-6">
                                 {message && (
                                     <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                                         <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
@@ -259,32 +256,20 @@ export default function ExpensesPage() {
                                     </div>
                                 )}
 
-                                <div className="space-y-6">
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Date <span className="text-red-500">*</span></label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Expense Date</label>
                                         <input
                                             required
                                             type="date"
                                             value={expenseDate}
                                             onChange={e => setExpenseDate(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         />
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Details <span className="text-red-500">*</span></label>
-                                        <textarea
-                                            required
-                                            rows={3}
-                                            value={description}
-                                            onChange={e => setDescription(e.target.value)}
-                                            className="w-full p-5 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-medium transition-all text-gray-900 dark:text-gray-100"
-                                            placeholder="What was this expense for?"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Type <span className="text-red-500">*</span></label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Category</label>
                                         <select
                                             required
                                             value={category}
@@ -293,7 +278,7 @@ export default function ExpensesPage() {
                                                 setCategory(next);
                                                 if (next !== 'packaging') setPackagingQuantity(0);
                                             }}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         >
                                             <option value="other">Other</option>
                                             <option value="ads">Ads</option>
@@ -302,8 +287,8 @@ export default function ExpensesPage() {
                                     </div>
 
                                     {category === 'packaging' && (
-                                        <div className="space-y-3">
-                                            <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Packaging Quantity <span className="text-red-500">*</span></label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Quantity</label>
                                             <input
                                                 required
                                                 type="number"
@@ -311,16 +296,18 @@ export default function ExpensesPage() {
                                                 step="1"
                                                 value={packagingQuantity || ''}
                                                 onChange={e => setPackagingQuantity(Number(e.target.value))}
-                                                className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
-                                                placeholder="Enter quantity"
+                                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-red-600 outline-none transition-all"
+                                                placeholder="0"
                                             />
                                         </div>
                                     )}
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount ($) <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Amount (Rs.)</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-red-600 transition-colors">
+                                                <IndianRupee size={16} strokeWidth={1.5} />
+                                            </div>
                                             <input
                                                 required
                                                 type="number"
@@ -328,27 +315,39 @@ export default function ExpensesPage() {
                                                 min="1"
                                                 value={amount || ''}
                                                 onChange={e => setAmount(Number(e.target.value))}
-                                                className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-2xl text-red-600 transition-all text-gray-900 dark:text-gray-100"
-                                                placeholder="0"
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                                placeholder="0.00"
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="col-span-full space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Details</label>
+                                        <textarea
+                                            required
+                                            rows={2}
+                                            value={description}
+                                            onChange={e => setDescription(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="What was this expense for?"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="pt-6 flex gap-4">
+                                <div className="flex gap-4 pt-4">
                                     <button
                                         type="button"
                                         onClick={() => setIsFormOpen(false)}
-                                        className="h-16 px-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-1 h-16 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/30 transition-all hover:scale-[1.01] hover:bg-red-700 active:scale-95 disabled:opacity-50"
+                                        className="flex-[2] py-3 px-6 bg-red-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-600/20 hover:bg-red-700 transition-all active:scale-[0.98] disabled:opacity-50"
                                     >
-                                        {loading ? 'Recording...' : 'Confirm Expense'}
+                                        {loading ? 'Processing...' : 'Confirm Expense'}
                                     </button>
                                 </div>
                             </form>

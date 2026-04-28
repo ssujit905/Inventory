@@ -19,3 +19,25 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
 if (typeof window !== 'undefined') {
     (window as any).supabase = supabase;
 }
+
+/**
+ * 🎯 RESOLVED TIMEOUT HELPER
+ * Returns { data, error } instead of throwing, to prevent Uncaught (in promise) AbortErrors.
+ */
+export async function supabaseWithTimeout<T = any>(
+    request: Promise<{ data: T | null; error: any }> | any,
+    timeoutMs: number = 30000
+): Promise<{ data: T | null; error: any }> {
+    const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) => {
+        setTimeout(() => reject({ 
+            data: null, 
+            error: { message: 'NETWORK_TIMEOUT', status: 408 } 
+        }), timeoutMs);
+    });
+
+    try {
+        return await Promise.race([request, timeoutPromise]);
+    } catch (err: any) {
+        return { data: null, error: err.error || err };
+    }
+}

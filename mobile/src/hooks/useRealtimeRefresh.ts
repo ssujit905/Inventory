@@ -69,20 +69,51 @@ export function useRealtimeRefresh(
             void runRefresh();
         }, pollMs);
 
-        const handleVisible = () => {
-            if (document.visibilityState === 'visible') {
-                void runRefresh();
+        const mounted = { current: true };
+
+        const handleFocus = async () => {
+            // Force reset locks in case a fetch Promise hung infinitely during computer sleep
+            inFlightRef.current = false;
+            queuedRef.current = false;
+            
+            try {
+                // Re-verify session to wake up the Supabase client
+                await supabase.auth.getSession();
+                // Force an immediate data re-validation when the user returns to the app
+                if (mounted.current) void runRefresh();
+            } catch (e) {
+                // Silent catch for expected aborts
             }
         };
-        window.addEventListener('focus', handleVisible);
-        document.addEventListener('visibilitychange', handleVisible);
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('visibilitychange', () => {
+             if (document.visibilityState === 'visible') handleFocus();
+        });
+
+        // Native Electron IPC fallback for strict focus detection
+        const ipcWindow = window as any;
+        const _handleIpcFocus = () => {
+             if (mounted.current) handleFocus();
+        };
+        if (ipcWindow.ipcRenderer) {
+            ipcWindow.ipcRenderer.on('window-focus', _handleIpcFocus);
+        }
 
         return () => {
+            mounted.current = false;
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
             clearInterval(interval);
-            window.removeEventListener('focus', handleVisible);
-            document.removeEventListener('visibilitychange', handleVisible);
-            supabase.removeChannel(channel);
+            window.removeEventListener('focus', handleFocus);
+            if (ipcWindow.ipcRenderer) {
+                ipcWindow.ipcRenderer.off('window-focus', _handleIpcFocus);
+            }
+            setTimeout(() => {
+                // Only attempt removal if the channel is actually active to avoid browser-level WebSocket errors
+                // during fast-refresh cycles.
+                if (channel && (channel as any).state !== 'joining') {
+                    supabase.removeChannel(channel).catch(() => {});
+                }
+            }, 100);
         };
     }, [channelName, tablesKey, enabled, debounceMs, pollMs]);
 }

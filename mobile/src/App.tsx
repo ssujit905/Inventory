@@ -66,7 +66,7 @@ function App() {
   }
 
   return (
-    <Router initialEntries={[persistedPath]}>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[persistedPath]}>
       <Routes>
         <Route path="/" element={
           !user ? <LoginPage /> : <Navigate to="/admin/dashboard" replace />
@@ -117,7 +117,7 @@ function App() {
         } />
 
         <Route path="/admin/website/delivery" element={
-          user && profile?.role === 'admin' ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
+          user ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/website/settings" element={

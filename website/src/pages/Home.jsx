@@ -51,12 +51,13 @@ const Home = () => {
     const flashSaleProducts = isFlashSaleEnabled ? flashSaleConfig.map(saleItem => {
         const product = products.find(p => p.id === saleItem.id);
         if (!product) return null;
-        const discount = Number(settings.flash_sale_discount || 0);
+        const discount = Number(saleItem.discount || 0);
         const salePrice = Math.floor(product.price - (product.price * (discount / 100)));
         return {
             ...product,
             original_price: product.price, // Use current base price as "Original"
-            price: salePrice               // Use calculated sale price
+            price: salePrice,               // Use calculated sale price
+            discount: discount
         };
     }).filter(p => p !== null) : [];
 
@@ -279,7 +280,7 @@ const Home = () => {
                                             fontWeight: '800',
                                             zIndex: 10
                                         }}>
-                                            {discount}% OFF
+                                            {product.discount}% OFF
                                         </div>
 
                                         <img src={product.image} alt={product.title} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />

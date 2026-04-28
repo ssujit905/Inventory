@@ -58,7 +58,6 @@ const SETTING_GROUPS = [
         keys: [
             { key: 'flash_sale_enabled', label: 'Flash Sale Mode', type: 'toggle' },
             { key: 'flash_sale_end', label: 'Sale End Time', type: 'datetime', placeholder: 'Select end time...' },
-            { key: 'flash_sale_discount', label: 'Global Discount Percentage (%)', placeholder: 'e.g. 20' },
         ]
     }
 ];
@@ -83,6 +82,7 @@ export default function WebsiteSettingsPage() {
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState<string | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const isReadOnly = profile?.permissions === 'read_only';
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => { 
@@ -154,7 +154,7 @@ export default function WebsiteSettingsPage() {
 
     const addProductToSale = (p: Product) => {
         if (flashSaleProducts.find(fp => fp.id === p.id)) return;
-        setFlashSaleProducts([...flashSaleProducts, { ...p, sale_price: p.price - (p.price * 0.1) }]);
+        setFlashSaleProducts([...flashSaleProducts, { ...p, discount: 0 }]);
         setSearchQuery('');
     };
 
@@ -162,12 +162,13 @@ export default function WebsiteSettingsPage() {
         setFlashSaleProducts(flashSaleProducts.filter(p => p.id !== id));
     };
 
-    const updateSalePrice = (id: number, price: number) => {
-        setFlashSaleProducts(flashSaleProducts.map(p => p.id === id ? { ...p, sale_price: price } : p));
+    const updateProductDiscount = (id: number, discount: number) => {
+        setFlashSaleProducts(flashSaleProducts.map(p => p.id === id ? { ...p, discount } : p));
     };
 
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
+        if (isReadOnly) return;
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -194,6 +195,7 @@ export default function WebsiteSettingsPage() {
     };
 
     const handleSave = async () => {
+        if (isReadOnly) return;
         setSaving(true);
         try {
             const currentSettings = { ...settings };
@@ -248,11 +250,11 @@ export default function WebsiteSettingsPage() {
                     </div>
                     <button
                         onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 disabled:opacity-60 shadow-lg shadow-primary/20"
+                        disabled={saving || isReadOnly}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg active:scale-95 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'}`}
                     >
-                        {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                        {saving ? 'Saving...' : 'Save All'}
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : (isReadOnly ? null : <Save size={16} />)}
+                        {saving ? 'Saving...' : (isReadOnly ? 'Read Only Mode' : 'Save All')}
                     </button>
                 </div>
 
@@ -292,13 +294,13 @@ export default function WebsiteSettingsPage() {
                                                 </div>
                                             )}
                                             <div className="flex items-center gap-4">
-                                                <label className={`flex-1 flex items-center justify-center gap-2 px-4 py-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${uploading === field.key ? 'bg-gray-50 border-gray-200' : 'bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/40'}`}>
+                                                <label className={`flex-1 flex items-center justify-center gap-2 px-4 py-8 border-2 border-dashed rounded-2xl transition-all ${isReadOnly ? 'bg-gray-50 border-gray-100 cursor-not-allowed' : (uploading === field.key ? 'bg-gray-50 border-gray-200' : 'bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/40 cursor-pointer')}`}>
                                                     <input 
                                                         type="file" 
                                                         accept="image/*" 
                                                         className="hidden" 
                                                         onChange={(e) => handleFileUpload(e, field.key)}
-                                                        disabled={uploading === field.key}
+                                                        disabled={uploading === field.key || isReadOnly}
                                                     />
                                                     {uploading === field.key ? (
                                                         <div className="flex items-center gap-2 text-primary font-bold">
@@ -307,9 +309,9 @@ export default function WebsiteSettingsPage() {
                                                         </div>
                                                     ) : (
                                                         <div className="flex flex-col items-center gap-1">
-                                                            <Image size={24} className="text-primary opacity-60" />
-                                                            <span className="text-xs font-black text-primary uppercase tracking-widest">
-                                                                {settings[field.key] ? 'Change Image' : 'Select Hero Banner'}
+                                                            <Image size={24} className={isReadOnly ? 'text-gray-300' : 'text-primary opacity-60'} />
+                                                            <span className={`text-xs font-black uppercase tracking-widest ${isReadOnly ? 'text-gray-300' : 'text-primary'}`}>
+                                                                {isReadOnly ? 'View Only' : (settings[field.key] ? 'Change Image' : 'Select Hero Banner')}
                                                             </span>
                                                         </div>
                                                     )}
@@ -319,23 +321,25 @@ export default function WebsiteSettingsPage() {
                                     ) : (field as any).textarea ? (
                                         <textarea
                                             value={settings[field.key] || ''}
-                                            onChange={e => update(field.key, e.target.value)}
+                                            onChange={e => !isReadOnly && update(field.key, e.target.value)}
+                                            readOnly={isReadOnly}
                                             placeholder={field.placeholder}
                                             rows={3}
-                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none"
+                                            className={`w-full px-4 py-3 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
                                         />
                                     ) : (field as any).type === 'datetime' ? (
                                         <input
                                             type="datetime-local"
                                             value={settings[field.key]?.replace(' ', 'T') || ''}
-                                            onChange={e => update(field.key, e.target.value.replace('T', ' '))}
+                                            onChange={e => !isReadOnly && update(field.key, e.target.value.replace('T', ' '))}
+                                            readOnly={isReadOnly}
                                             placeholder={field.placeholder}
-                                            className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold"
+                                            className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
                                         />
                                     ) : (field as any).type === 'toggle' ? (
                                         <div 
-                                            onClick={() => update(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
-                                            className="flex items-center gap-3 cursor-pointer"
+                                            onClick={() => !isReadOnly && update(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
+                                            className={`flex items-center gap-3 ${isReadOnly ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                         >
                                             <div className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${settings[field.key] === 'true' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                                                 <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 shadow-sm ${settings[field.key] === 'true' ? 'left-7' : 'left-1'}`} />
@@ -348,9 +352,10 @@ export default function WebsiteSettingsPage() {
                                         <input
                                             type="text"
                                             value={settings[field.key] || ''}
-                                            onChange={e => update(field.key, e.target.value)}
+                                            onChange={e => !isReadOnly && update(field.key, e.target.value)}
+                                            readOnly={isReadOnly}
                                             placeholder={field.placeholder}
-                                            className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary/30 outline-none"
+                                            className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
                                         />
                                     )}
                                 </div>
@@ -364,22 +369,24 @@ export default function WebsiteSettingsPage() {
                                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Pick Product for Flash Sale</label>
                                         <div className="flex gap-3">
                                             <select 
-                                                className="flex-1 h-14 px-4 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all appearance-none cursor-pointer"
+                                                className={`flex-1 h-14 px-4 rounded-2xl border-2 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all appearance-none ${isReadOnly ? 'border-gray-50 text-gray-300 cursor-not-allowed' : 'border-gray-100 dark:border-gray-800 cursor-pointer'}`}
                                                 onChange={(e) => {
+                                                    if (isReadOnly) return;
                                                     const p = products.find(prod => prod.id === Number(e.target.value));
                                                     if (p) addProductToSale(p);
                                                     e.target.value = ""; // Reset dropdown
                                                 }}
+                                                disabled={isReadOnly}
                                                 defaultValue=""
                                             >
-                                                <option value="" disabled>Choose a product from your website...</option>
-                                                {products.map(p => (
+                                                <option value="" disabled>{isReadOnly ? 'Read Only Mode' : 'Choose a product from your website...'}</option>
+                                                {!isReadOnly && products.map(p => (
                                                     <option key={p.id} value={p.id}>
                                                         {p.title} (Rs. {p.price})
                                                     </option>
                                                 ))}
                                             </select>
-                                            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border-2 border-primary/20">
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 ${isReadOnly ? 'bg-gray-50 text-gray-300 border-gray-50' : 'bg-primary/10 text-primary border-primary/20'}`}>
                                                 <Zap size={20} />
                                             </div>
                                         </div>
@@ -390,31 +397,43 @@ export default function WebsiteSettingsPage() {
                                             <h4 className="text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-tighter flex items-center gap-2">
                                                 Currently in Flash Sale ({flashSaleProducts.length})
                                             </h4>
-                                            <div className="px-3 py-1 bg-rose-500/10 text-rose-500 rounded-lg text-[10px] font-black uppercase tracking-widest">
-                                                {settings.flash_sale_discount || 0}% OFF APPLIED
-                                            </div>
                                         </div>
                                         <div className="grid gap-3">
                                             {flashSaleProducts.map(p => {
-                                                const discount = Number(settings.flash_sale_discount || 0);
+                                                const discount = Number(p.discount || 0);
                                                 const salePrice = Math.floor(p.price - (p.price * (discount / 100)));
                                                 return (
-                                                    <div key={p.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 group">
-                                                        <img src={p.image} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{p.title}</p>
-                                                            <p className="text-xs text-gray-400 font-bold">Standard: Rs.{p.price}</p>
+                                                    <div key={p.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 group">
+                                                        <div className="flex items-center gap-4">
+                                                            <img src={p.image} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{p.title}</p>
+                                                                <p className="text-xs text-gray-400 font-bold">Standard: Rs.{p.price}</p>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => removeProductFromSale(p.id)}
+                                                                className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors rounded-xl"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
                                                         </div>
-                                                        <div className="text-right px-4 py-2 bg-white dark:bg-gray-900 rounded-xl border border-rose-100">
-                                                            <p className="text-[10px] font-black text-gray-400 uppercase">Flash Price</p>
-                                                            <p className="text-sm font-black text-rose-500">Rs. {salePrice.toLocaleString()}</p>
+
+                                                        <div className="flex items-center gap-4 pt-3 border-t dark:border-gray-800">
+                                                            <div className="flex-1 space-y-1">
+                                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Discount %</label>
+                                                                <input 
+                                                                    type="number"
+                                                                    value={p.discount}
+                                                                    onChange={(e) => updateProductDiscount(p.id, Number(e.target.value))}
+                                                                    className="w-full h-10 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-bold focus:border-primary outline-none"
+                                                                    placeholder="0"
+                                                                />
+                                                            </div>
+                                                            <div className="text-right px-4 py-2 bg-white dark:bg-gray-900 rounded-xl border border-rose-100 min-w-[120px]">
+                                                                <p className="text-[10px] font-black text-gray-400 uppercase">Flash Price</p>
+                                                                <p className="text-sm font-black text-rose-500">Rs. {salePrice.toLocaleString()}</p>
+                                                            </div>
                                                         </div>
-                                                        <button 
-                                                            onClick={() => removeProductFromSale(p.id)}
-                                                            className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors rounded-xl"
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
                                                     </div>
                                                 );
                                             })}
@@ -434,11 +453,11 @@ export default function WebsiteSettingsPage() {
                 {/* Save Button (bottom) */}
                 <button
                     onClick={handleSave}
-                    disabled={saving}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-primary text-white rounded-2xl font-black text-sm hover:bg-primary/90 disabled:opacity-60 shadow-lg shadow-primary/20"
+                    disabled={saving || isReadOnly}
+                    className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black text-sm transition-all shadow-lg active:scale-95 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'}`}
                 >
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    {saving ? 'Save All Website Content' : 'Save All Website Content'}
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : (isReadOnly ? null : <Save size={16} />)}
+                    {saving ? 'Saving...' : (isReadOnly ? 'Read Only - No Changes Allowed' : 'Save All Website Content')}
                 </button>
             </div>
         </DashboardLayout>

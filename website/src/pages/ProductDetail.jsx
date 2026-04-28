@@ -55,8 +55,9 @@ const ProductDetail = () => {
     const { settings } = useSettings();
     const isFlashSaleEnabled = settings.flash_sale_enabled === 'true';
     const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
-    const discountPercent = Number(settings.flash_sale_discount || 0);
-    const isProductInFlashSale = isFlashSaleEnabled && flashSaleConfig.some(item => item.id.toString() === id?.toString());
+    const flashSaleItem = isFlashSaleEnabled ? flashSaleConfig.find(item => item.id.toString() === id?.toString()) : null;
+    const isProductInFlashSale = !!flashSaleItem;
+    const discountPercent = Number(flashSaleItem?.discount || 0);
 
     const currentVariant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
     const rawPrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);

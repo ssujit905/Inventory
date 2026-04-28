@@ -17,6 +17,7 @@ type Expense = {
 
 export default function ExpensesPage() {
     const { user, profile } = useAuthStore();
+    const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -109,7 +110,7 @@ export default function ExpensesPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="max-w-6xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
+            <div className="px-5 max-w-6xl mx-auto space-y-8 pb-24 relative min-h-[80vh]">
 
                 {/* Header Section */}
                 <div className="flex flex-col gap-4 border-b dark:border-gray-800 pb-6">
@@ -119,11 +120,12 @@ export default function ExpensesPage() {
                     </div>
 
                     <button
-                        onClick={openEntryForm}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm active:scale-95 w-full sm:w-auto"
+                        onClick={() => !isReadOnly && openEntryForm()}
+                        disabled={isReadOnly}
+                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 w-full sm:w-auto ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
                     >
                         <Plus size={16} strokeWidth={2.5} />
-                        Add New Expense
+                        {isReadOnly ? 'Read Only Mode' : 'Add New Expense'}
                     </button>
                 </div>
 
@@ -185,58 +187,41 @@ export default function ExpensesPage() {
                     </div>
                 </div>
 
-                {/* Form Modal */}
+                {/* Form Modal (Matches Stock In Design) */}
                 {isFormOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/80 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/5 max-h-[92svh] flex flex-col">
-                            <div className="p-5 sm:p-8 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent flex-shrink-0">
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800">
+                            <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit flex items-center gap-3">
-                                        <div className="p-2 bg-red-600 text-white rounded-xl shadow-lg shadow-red-600/30">
-                                            <Plus size={20} />
-                                        </div>
-                                        Record Expense
-                                    </h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Financial Outflow Entry</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Record Expense</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Log financial outflow record</p>
                                 </div>
-                                <button onClick={() => setIsFormOpen(false)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/20 text-gray-500 hover:text-red-500 transition-all">
-                                    <X size={24} />
+                                <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800">
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddExpense} className="p-5 sm:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleAddExpense} className="p-8 space-y-6">
                                 {message && (
-                                    <div className={`p-5 rounded-2xl text-sm font-black flex items-center gap-3 animate-in slide-in-from-left-4 ${message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
-                                        <AlertCircle size={20} /> {message.text}
+                                    <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                                        <AlertCircle size={16} /> {message.text}
                                     </div>
                                 )}
 
-                                <div className="space-y-6">
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Date <span className="text-red-500">*</span></label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Expense Date</label>
                                         <input
                                             required
                                             type="date"
                                             value={expenseDate}
                                             onChange={e => setExpenseDate(e.target.value)}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         />
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Details <span className="text-red-500">*</span></label>
-                                        <textarea
-                                            required
-                                            rows={3}
-                                            value={description}
-                                            onChange={e => setDescription(e.target.value)}
-                                            className="w-full p-5 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-medium transition-all text-gray-900 dark:text-gray-100"
-                                            placeholder="What was this expense for?"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Expense Type <span className="text-red-500">*</span></label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Category</label>
                                         <select
                                             required
                                             value={category}
@@ -245,7 +230,7 @@ export default function ExpensesPage() {
                                                 setCategory(next);
                                                 if (next !== 'packaging') setPackagingQuantity(0);
                                             }}
-                                            className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         >
                                             <option value="other">Other</option>
                                             <option value="ads">Ads</option>
@@ -254,8 +239,8 @@ export default function ExpensesPage() {
                                     </div>
 
                                     {category === 'packaging' && (
-                                        <div className="space-y-3">
-                                            <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Packaging Quantity <span className="text-red-500">*</span></label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Quantity</label>
                                             <input
                                                 required
                                                 type="number"
@@ -263,16 +248,18 @@ export default function ExpensesPage() {
                                                 step="1"
                                                 value={packagingQuantity || ''}
                                                 onChange={e => setPackagingQuantity(Number(e.target.value))}
-                                                className="w-full h-14 px-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-gray-900 dark:text-gray-100"
-                                                placeholder="Enter quantity"
+                                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-red-600 outline-none transition-all"
+                                                placeholder="0"
                                             />
                                         </div>
                                     )}
 
-                                    <div className="space-y-3">
-                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-[0.1em]">Amount (Rs.) <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                            <IndianRupee className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-300" />
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Amount (Rs.)</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-red-600 transition-colors">
+                                                <IndianRupee size={16} strokeWidth={1.5} />
+                                            </div>
                                             <input
                                                 required
                                                 type="number"
@@ -280,27 +267,39 @@ export default function ExpensesPage() {
                                                 min="1"
                                                 value={amount || ''}
                                                 onChange={e => setAmount(Number(e.target.value))}
-                                                className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-2xl outline-none focus:border-red-600/50 font-black text-2xl text-red-600 transition-all text-gray-900 dark:text-gray-100"
-                                                placeholder="0"
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                                placeholder="0.00"
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="col-span-full space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Details</label>
+                                        <textarea
+                                            required
+                                            rows={2}
+                                            value={description}
+                                            onChange={e => setDescription(e.target.value)}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-red-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="What was this expense for?"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="pt-6 flex flex-col gap-4">
-                                    <button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="h-14 bg-red-600 text-white font-black rounded-2xl shadow-xl shadow-red-600/30 transition-all hover:scale-[1.01] hover:bg-red-700 active:scale-95 disabled:opacity-50"
-                                    >
-                                        {loading ? 'Recording...' : 'Confirm Expense'}
-                                    </button>
+                                <div className="flex gap-4 pt-4">
                                     <button
                                         type="button"
                                         onClick={() => setIsFormOpen(false)}
-                                        className="h-14 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-black rounded-2xl transition-all hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95"
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
                                     >
                                         Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="flex-[2] py-3 px-6 bg-red-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-600/20 hover:bg-red-700 transition-all active:scale-[0.98] disabled:opacity-50"
+                                    >
+                                        {loading ? 'Processing...' : 'Confirm Expense'}
                                     </button>
                                 </div>
                             </form>

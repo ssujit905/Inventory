@@ -107,7 +107,11 @@ export function useRealtimeRefresh(
             if (ipcWindow.ipcRenderer) {
                 ipcWindow.ipcRenderer.off('window-focus', _handleIpcFocus);
             }
-            void supabase.removeChannel(channel);
+            setTimeout(() => {
+                if (channel && (channel as any).state !== 'joining') {
+                    supabase.removeChannel(channel).catch(() => {});
+                }
+            }, 100);
         };
     }, [channelName, tablesKey, enabled, debounceMs, pollMs]);
 }

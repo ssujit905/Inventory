@@ -187,7 +187,8 @@ export default function ProfitPage() {
                 const returnAllocated = isReturned ? (qty / totalQtyInSale) * returnCost : 0;
                 const adsSpentPerSale = adSpentBySale.get(t.sale_id) || 0;
                 const adsAllocated = (qty / totalQtyInSale) * adsSpentPerSale;
-                const packagingPerSale = packagingBySale.get(t.sale_id) || 0;
+                const isCancelled = t.sale?.parcel_status === 'cancelled';
+                const packagingPerSale = isCancelled ? 0 : (packagingBySale.get(t.sale_id) || 0);
                 const packagingAllocated = (qty / totalQtyInSale) * packagingPerSale;
 
                 const existing = lotAgg.get(lotId);
@@ -226,23 +227,35 @@ export default function ProfitPage() {
                 .map((t: any) => {
                     const qty = Math.abs(Number(t.quantity_changed || 0));
                     const costPrice = Number(t.lot?.cost_price || 0);
+                    const totalQtyInSale = saleTotals.get(t.sale_id) || 1; // Prevent division by zero
+                    
                     const adId = t.sale?.ad_id;
                     const budget = adId ? (adBudgetMap.get(adId) || 0) : 0;
                     const count = adId ? (adSaleIds.get(adId)?.size || 1) : 1;
-                    const adsSpent = adId ? budget / count : 0;
-                    const currentIndex = saleRowIndex.get(t.sale_id) || 0;
-                    saleRowIndex.set(t.sale_id, currentIndex + 1);
-                    const isFirstRow = currentIndex === 0;
-                    const adsSpentRow = isFirstRow ? adsSpent : 0;
-                    const packagingForSale = packagingBySale.get(t.sale_id) || 0;
-                    const packagingSpent = isFirstRow ? packagingForSale : 0;
+                    const totalAdsSpentForSale = adId ? budget / count : 0;
+                    const adsSpentRow = (qty / totalQtyInSale) * totalAdsSpentForSale;
+                    
+                    const totalPackagingForSale = packagingBySale.get(t.sale_id) || 0;
+                    const packagingSpent = (qty / totalQtyInSale) * totalPackagingForSale;
+                    
                     const status = t.sale?.parcel_status;
                     const saleDate = new Date(t.sale?.created_at || 0);
-                    const soldAmount = (isFirstRow && status === 'delivered') ? Number(t.sale?.sold_amount || 0) : 0;
-                    const returnCost = (isFirstRow && status === 'returned') ? Number(t.sale?.return_cost || 0) : 0;
-                    const profitLoss = status === 'returned'
-                        ? -(returnCost + adsSpentRow + packagingSpent)
-                        : (soldAmount - (qty * costPrice + adsSpentRow + packagingSpent));
+                    
+                    const totalSoldAmount = status === 'delivered' ? Number(t.sale?.sold_amount || 0) : 0;
+                    const soldAmount = (qty / totalQtyInSale) * totalSoldAmount;
+                    
+                    const totalReturnCost = status === 'returned' ? Number(t.sale?.return_cost || 0) : 0;
+                    const returnCost = (qty / totalQtyInSale) * totalReturnCost;
+                    
+                    let profitLoss = 0;
+                    if (status === 'returned') {
+                        const totalLoss = returnCost + adsSpentRow + packagingSpent;
+                        profitLoss = totalLoss === 0 ? 0 : -totalLoss;
+                    } else if (status === 'cancelled') {
+                        profitLoss = adsSpentRow === 0 ? 0 : -adsSpentRow;
+                    } else {
+                        profitLoss = soldAmount - (qty * costPrice + adsSpentRow + packagingSpent);
+                    }
                     return {
                         sale_id: t.sale_id,
                         lot_number: t.lot?.lot_number || 'N/A',
@@ -274,144 +287,158 @@ export default function ProfitPage() {
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
-            <div className="space-y-8 pb-12">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit tracking-tight">Profit</h1>
-                        <p className="text-sm text-gray-500 font-medium mt-1 uppercase tracking-widest">Lot-wise and Sale-wise Profit</p>
+            <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
+                
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Profit & Loss Analysis</h1>
+                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">Financial Performance Metrics</p>
                     </div>
                 </div>
 
                 {loading ? (
-                    <div className="flex h-48 items-center justify-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                    <div className="flex h-64 items-center justify-center">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Calculating margins...</p>
+                        </div>
                     </div>
                 ) : (
                     <>
+                        {/* Summary Stats */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Profit</p>
+                                <p className={`text-lg font-black ${lotProfitRows.reduce((acc, r) => acc + r.profit, 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    Rs. {lotProfitRows.reduce((acc, r) => acc + r.profit, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Revenue</p>
+                                <p className="text-lg font-black text-gray-900 dark:text-gray-100">
+                                    Rs. {lotProfitRows.reduce((acc, r) => acc + r.revenue_allocated, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Delivered Qty</p>
+                                <p className="text-lg font-black text-primary">
+                                    {lotProfitRows.reduce((acc, r) => acc + r.qty_sold, 0)} <span className="text-[10px] opacity-40">units</span>
+                                </p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Ads</p>
+                                <p className="text-lg font-black text-blue-600">
+                                    Rs. {lotProfitRows.reduce((acc, r) => acc + r.ads_spent, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
+                        </div>
                         {/* Lot-wise Profit */}
-                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Lot-wise Profit</h3>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Delivered sales only</p>
-                                </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 px-1">
+                                <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Lot-wise Performance</h3>
+                                <span className="ml-auto text-[10px] font-bold text-gray-300">Delivered sales only</span>
                             </div>
 
                             {lotProfitRows.length === 0 ? (
-                                <div className="py-12 text-center text-sm text-gray-400 font-bold uppercase tracking-widest">
-                                    No delivered sales with sold amount yet
+                                <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-300">No delivered sales data</p>
                                 </div>
                             ) : (
-                                <div className="overflow-auto max-h-[65vh] mobile-fit-table-wrap mobile-scroll-table-wrap rounded-2xl border border-gray-100 dark:border-gray-800">
-                                    <table className="w-full text-left border-collapse min-w-[900px] mobile-fit-table mobile-scroll-table">
-                                        <thead>
-                                            <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">SKU</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Lot</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Qty Sold</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Revenue</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Returned</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Ads</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Packaging</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Profit / Loss</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                            {lotProfitRows.map((row) => (
-                                                <tr key={row.lot_id}>
-                                                    <td className="p-4 text-sm font-black text-gray-900 dark:text-gray-100">{row.sku}</td>
-                                                    <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.qty_sold}</td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className={`p-4 text-sm font-black text-right ${row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        Rs. {row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                <div className="space-y-3">
+                                    {lotProfitRows.map((row) => (
+                                        <div key={row.lot_id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden active:scale-[0.99] transition-all">
+                                            <div className="px-4 py-3 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center bg-gray-50/30 dark:bg-gray-800/20">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[11px] font-black text-gray-900 dark:text-gray-100">{row.sku}</span>
+                                                    <span className="text-[10px] font-bold text-gray-400">#{row.lot_number}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[11px] font-black text-gray-900 dark:text-gray-100">
+                                                        {row.qty_sold} <span className="text-[9px] text-gray-400">sold</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-4 grid grid-cols-3 gap-4">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Revenue</p>
+                                                    <p className="text-xs font-black text-gray-900 dark:text-gray-100">Rs. {row.revenue_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Returns</p>
+                                                    <p className="text-xs font-black text-rose-600">Rs. {row.return_allocated.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                                <div className="space-y-0.5 text-right">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Ads/Pack</p>
+                                                    <p className="text-xs font-black text-blue-600">Rs. {(row.ads_spent + row.packaging_spent).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="px-4 py-2.5 bg-gray-50/50 dark:bg-gray-800/30 border-t border-gray-50 dark:border-gray-800 flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Net Profit</span>
+                                                <span className={`text-sm font-black ${row.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    Rs. {row.profit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
 
                         {/* Sale-wise Rows */}
-                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Sale-wise Cost Rows</h3>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Lot, SKU, Qty, Cost, Sold/Return</p>
-                                </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 px-1">
+                                <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Sale-wise Cost Allocation</h3>
+                                <span className="ml-auto text-[10px] font-bold text-gray-300">All transactions</span>
                             </div>
 
                             {saleProfitRows.length === 0 ? (
-                                <div className="py-12 text-center text-sm text-gray-400 font-bold uppercase tracking-widest">
-                                    No sale transactions yet
+                                <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-300">No sale transactions</p>
                                 </div>
                             ) : (
-                                <div className="overflow-auto max-h-[65vh] mobile-fit-table-wrap mobile-scroll-table-wrap rounded-2xl border border-gray-100 dark:border-gray-800">
-                                    <table className="w-full text-left border-collapse min-w-[1100px] mobile-fit-table mobile-scroll-table">
-                                        <thead>
-                                            <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-100 dark:border-gray-800">
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Sale ID</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">SKU</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] bg-gray-50 dark:bg-gray-900">Lot</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Qty</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost Price</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Cost Total</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Sold Amount</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Return Cost</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Ads Spent</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Packaging</th>
-                                                <th className="sticky top-0 z-10 p-4 font-black text-[10px] text-gray-400 uppercase tracking-[0.2em] text-right bg-gray-50 dark:bg-gray-900">Profit / Loss</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                            {saleProfitRows.map((row, idx) => (
-                                                <tr key={`${row.sale_id}-${idx}`}>
-                                                    <td className="p-4 text-xs font-bold text-gray-600 dark:text-gray-300">{row.sale_id.slice(0, 8)}...</td>
-                                                    <td className="p-4 text-sm font-black text-gray-900 dark:text-gray-100">{row.sku}</td>
-                                                    <td className="p-4 text-sm font-bold text-gray-600 dark:text-gray-300">#{row.lot_number}</td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">{row.quantity}</td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.cost_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.ads_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="p-4 text-sm font-black text-gray-700 dark:text-gray-300 text-right">
-                                                        Rs. {row.packaging_spent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className={`p-4 text-sm font-black text-right ${row.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        Rs. {row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                <div className="space-y-3">
+                                    {saleProfitRows.map((row, idx) => (
+                                        <div key={`${row.sale_id}-${idx}`} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden active:scale-[0.99] transition-all">
+                                            <div className="px-4 py-3 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center bg-gray-50/30 dark:bg-gray-800/20">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[9px] font-black text-gray-400">{row.sale_id.slice(0, 8)}</span>
+                                                    <span className="text-[11px] font-black text-gray-900 dark:text-gray-100">{row.sku}</span>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-gray-500">
+                                                    Qty: {row.quantity}
+                                                </span>
+                                            </div>
+
+                                            <div className="p-4 grid grid-cols-2 gap-y-4 gap-x-6">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Cost Impact</p>
+                                                    <p className="text-xs font-black text-gray-900 dark:text-gray-100">Rs. {row.cost_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                                <div className="space-y-0.5 text-right">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Ads/Pack</p>
+                                                    <p className="text-xs font-black text-blue-600">Rs. {(row.ads_spent + row.packaging_spent).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Revenue Impact</p>
+                                                    <p className="text-xs font-black text-emerald-600">Rs. {row.sold_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                                <div className="space-y-0.5 text-right">
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Return Impact</p>
+                                                    <p className="text-xs font-black text-rose-600">Rs. {row.return_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="px-4 py-2.5 bg-gray-50/50 dark:bg-gray-800/30 border-t border-gray-50 dark:border-gray-800 flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Profit/Loss</span>
+                                                <span className={`text-sm font-black ${row.profit_loss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    Rs. {row.profit_loss.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>

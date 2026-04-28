@@ -52,7 +52,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             setPendingOrdersCount(orders || 0);
 
             const { count: returns } = await supabase
-                .from('website_returns')
+                .from('website_order_returns')
                 .select('id', { count: 'exact', head: true })
                 .eq('status', 'pending');
             setPendingReturnsCount(returns || 0);
@@ -63,11 +63,15 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         const channel = supabase
             .channel('count-updates')
             .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'website_orders' }, fetchCounts)
-            .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'website_returns' }, fetchCounts)
+            .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'website_order_returns' }, fetchCounts)
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            setTimeout(() => {
+                if (channel && (channel as any).state !== 'joining') {
+                    supabase.removeChannel(channel).catch(() => {});
+                }
+            }, 100);
         };
     }, [role]);
 
@@ -190,32 +194,32 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     return (
         <div className="flex flex-col h-screen w-full bg-gray-50 dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
             {/* MOBILE TOP BAR */}
-            <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-5 sticky top-0 z-30">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary rounded-xl text-white shadow-lg shadow-primary/20">
-                        <Package size={20} strokeWidth={2.5} />
-                    </div>
-                    <span className="text-xl font-bold tracking-tight">InvPro</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setIsSearchOpen((v) => !v)}
-                        className="p-2.5 text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl"
-                    >
-                        <Search size={20} />
-                    </button>
-                    <button className="p-2.5 text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl relative">
-                        <Bell size={20} />
-                        {(pendingCostCount > 0 || pendingOrdersCount > 0) && (
-                            <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white dark:border-gray-900 animate-pulse"></span>
-                        )}
-                    </button>
+            <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sticky top-0 z-30">
+                {/* Left: Menu */}
+                <div className="flex w-12 justify-start">
                     <button
                         onClick={() => setIsMenuOpen(true)}
-                        className="p-2.5 text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-xl"
+                        className="p-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
                     >
-                        <Menu size={20} />
+                        <Menu size={24} strokeWidth={2.5} />
+                    </button>
+                </div>
+
+                {/* Middle: Logo & Name */}
+                <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-primary rounded-lg text-white shadow-md shadow-primary/20">
+                        <Package size={18} strokeWidth={2.5} />
+                    </div>
+                    <span className="text-lg font-black tracking-tight text-gray-900 dark:text-gray-100">InvPro</span>
+                </div>
+
+                {/* Right: Search */}
+                <div className="flex w-12 justify-end">
+                    <button
+                        onClick={() => setIsSearchOpen((v) => !v)}
+                        className="p-2.5 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                    >
+                        <Search size={20} />
                     </button>
                 </div>
             </header>
@@ -305,7 +309,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 </div>
 
                 <div
-                    className="p-5 max-w-md mx-auto transition-transform duration-150"
+                    className="w-full transition-transform duration-150"
                     style={pullDistance > 0 ? { transform: `translateY(${Math.round(Math.min(18, pullDistance * 0.2))}px)` } : undefined}
                 >
                     {children}
@@ -327,11 +331,11 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Main Operations</label>
                             <div className="space-y-1">
-                                <MenuLink icon={<LayoutDashboard className="text-cyan-500" />} label="Dashboard" path="/admin/dashboard" />
-                                <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" />
-                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" badge={role === 'admin' ? pendingCostCount : undefined} />
-                                <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" />
-                                <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" />
+                                <MenuLink icon={<LayoutDashboard className="text-cyan-500" />} label="Dashboard" path="/admin/dashboard" onSelect={() => setIsMenuOpen(false)} />
+                                <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" onSelect={() => setIsMenuOpen(false)} />
+                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} badge={role === 'admin' ? pendingCostCount : undefined} />
+                                <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" onSelect={() => setIsMenuOpen(false)} />
+                                <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" onSelect={() => setIsMenuOpen(false)} />
                             </div>
                         </section>
 
@@ -340,15 +344,15 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Website Ecosystem</label>
                             <div className="space-y-1">
                                 {role === 'admin' && (
-                                    <MenuLink icon={<Globe className="text-pink-500" />} label="Products" path="/admin/website/products" />
+                                    <MenuLink icon={<Globe className="text-pink-500" />} label="Products" path="/admin/website/products" onSelect={() => setIsMenuOpen(false)} />
                                 )}
-                                <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" badge={pendingOrdersCount} />
-                                <MenuLink icon={<RotateCcw className="text-orange-500" />} label="Returns" path="/admin/website/returns" badge={pendingReturnsCount} />
+                                <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" onSelect={() => setIsMenuOpen(false)} badge={pendingOrdersCount} />
+                                <MenuLink icon={<RotateCcw className="text-orange-500" />} label="Returns" path="/admin/website/returns" onSelect={() => setIsMenuOpen(false)} badge={pendingReturnsCount} />
+                                <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
                                 {role === 'admin' && (
                                     <>
-                                        <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" />
-                                        <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" />
-                                        <MenuLink icon={<Settings className="text-gray-500" />} label="Settings" path="/admin/website/settings" />
+                                        <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
+                                        <MenuLink icon={<Settings className="text-gray-500" />} label="Settings" path="/admin/website/settings" onSelect={() => setIsMenuOpen(false)} />
                                     </>
                                 )}
                             </div>
@@ -359,10 +363,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <section>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Analytics & Logic</label>
                                 <div className="space-y-1">
-                                    <MenuLink icon={<TrendingUp className="text-emerald-500" />} label="Income" path="/admin/income" />
-                                    <MenuLink icon={<FileText className="text-orange-500" />} label="Profit" path="/admin/profit" />
-                                    <MenuLink icon={<Activity className="text-rose-500" />} label="Finance" path="/admin/reports" />
-                                    <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" />
+                                    <MenuLink icon={<TrendingUp className="text-emerald-500" />} label="Income" path="/admin/income" onSelect={() => setIsMenuOpen(false)} />
+                                    <MenuLink icon={<FileText className="text-orange-500" />} label="Profit" path="/admin/profit" onSelect={() => setIsMenuOpen(false)} />
+                                    <MenuLink icon={<Activity className="text-rose-500" />} label="Finance" path="/admin/reports" onSelect={() => setIsMenuOpen(false)} />
+                                    <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" onSelect={() => setIsMenuOpen(false)} />
                                 </div>
                             </section>
                         )}
@@ -371,9 +375,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Business Tools</label>
                             <div className="space-y-1">
-                                <MenuLink icon={<Printer className="text-blue-500" />} label="Print Center" path="/admin/print" />
+                                <MenuLink icon={<Printer className="text-blue-500" />} label="Print Center" path="/admin/print" onSelect={() => setIsMenuOpen(false)} />
                                 {role === 'admin' && (
-                                    <MenuLink icon={<MessageSquare className="text-primary" />} label="AI Chatbot" path="/admin/chatbot" />
+                                    <MenuLink icon={<MessageSquare className="text-primary" />} label="AI Chatbot" path="/admin/chatbot" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                             </div>
                         </section>
@@ -402,14 +406,17 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     );
 }
 
-function MenuLink({ icon, label, path, badge }: { icon: React.ReactNode, label: string, path: string, badge?: number }) {
+function MenuLink({ icon, label, path, badge, onSelect }: { icon: React.ReactNode, label: string, path: string, badge?: number, onSelect: () => void }) {
     const navigate = useNavigate();
     const location = useLocation();
     const isActive = location.pathname === path;
 
     return (
         <button
-            onClick={() => navigate(path)}
+            onClick={() => {
+                navigate(path);
+                onSelect();
+            }}
             className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all duration-200 group ${isActive
                 ? 'bg-primary/10 dark:bg-primary/20'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-900 active:bg-gray-100 dark:active:bg-gray-800'

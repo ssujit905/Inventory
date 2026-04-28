@@ -3,7 +3,7 @@ import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, DollarSign, Package, AlertCircle, Barcode, X, History, Hash, Check } from 'lucide-react';
+import { Plus, IndianRupee, Package, AlertCircle, Barcode, X, History, Hash, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type RecentTransaction = {
@@ -18,6 +18,7 @@ type RecentTransaction = {
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
     const isAdmin = profile?.role === 'admin';
+    const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -253,11 +254,12 @@ export default function StockInPage() {
                         <p className="text-gray-400 font-medium text-xs">Record and verify inbound product shipments and costs.</p>
                     </div>
                     <button
-                        onClick={openEntryForm}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95"
+                        onClick={() => !isReadOnly && openEntryForm()}
+                        disabled={isReadOnly}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90'}`}
                     >
                         <Plus size={16} strokeWidth={2.5} />
-                        Receive Shipment
+                        {isReadOnly ? 'Read Only Mode' : 'Receive Shipment'}
                     </button>
                 </div>
 
@@ -323,12 +325,12 @@ export default function StockInPage() {
                                             </td>
                                             {isAdmin && (
                                                 <td className="px-6 py-4 text-right font-semibold text-gray-700 dark:text-gray-300">
-                                                    ${(tx.lot?.cost_price || 0).toLocaleString()}
+                                                    Rs. {(tx.lot?.cost_price || 0).toLocaleString()}
                                                 </td>
                                             )}
                                             {isAdmin && (
                                                 <td className="px-6 py-4 text-right font-bold text-gray-900 dark:text-gray-100">
-                                                    ${(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString()}
+                                                    Rs. {(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString()}
                                                 </td>
                                             )}
                                             {isAdmin && (
@@ -342,12 +344,14 @@ export default function StockInPage() {
                                             )}
                                             {isAdmin && (
                                                 <td className="px-6 py-4 text-right">
-                                                    <button
-                                                        onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
-                                                        className="text-xs font-bold text-gray-400 hover:text-primary transition-colors bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-md border border-gray-100 dark:border-gray-700"
-                                                    >
-                                                        Update Cost
-                                                    </button>
+                                                    {!isReadOnly && (
+                                                        <button
+                                                            onClick={() => openUpdateModal(tx.lot?.id, tx.product?.sku, tx.quantity_changed, tx.lot?.cost_price)}
+                                                            className="text-xs font-bold text-gray-400 hover:text-primary transition-colors bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-md border border-gray-100 dark:border-gray-700"
+                                                        >
+                                                            Update Cost
+                                                        </button>
+                                                    )}
                                                 </td>
                                             )}
                                         </tr>
@@ -442,10 +446,10 @@ export default function StockInPage() {
 
                                     {isAdmin && (
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Unit Cost ($)</label>
+                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Unit Cost (Rs.)</label>
                                             <div className="relative group">
                                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
-                                                    <DollarSign size={16} strokeWidth={1.5} />
+                                                    <IndianRupee size={16} strokeWidth={1.5} />
                                                 </div>
                                                 <input
                                                     type="number"
@@ -476,7 +480,7 @@ export default function StockInPage() {
                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Transaction Value</span>
                                             <span className="text-[10px] text-primary/60 font-medium">Automatic Calculation</span>
                                         </div>
-                                        <span className="text-2xl font-bold text-primary group-hover:scale-110 transition-transform">${(quantity * costPrice).toLocaleString()}</span>
+                                        <span className="text-2xl font-bold text-primary group-hover:scale-110 transition-transform">Rs. {(quantity * costPrice).toLocaleString()}</span>
                                     </div>
                                 )}
 
@@ -507,7 +511,7 @@ export default function StockInPage() {
                         <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                                 <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                    <DollarSign size={16} className="text-primary" />
+                                    <IndianRupee size={16} className="text-primary" />
                                     Cost Update
                                 </h3>
                                 <button onClick={() => setIsUpdateModalOpen(false)} className="text-gray-400 hover:text-gray-600">

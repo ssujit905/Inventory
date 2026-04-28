@@ -34,6 +34,7 @@ export default function WebsiteReturnsPage() {
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
+    const isReadOnly = profile?.permissions === 'read_only';
 
     useEffect(() => {
         fetchRequests();
@@ -46,7 +47,11 @@ export default function WebsiteReturnsPage() {
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            try {
+                supabase.removeChannel(channel);
+            } catch (e) {
+                // Ignore
+            }
         };
     }, []);
 
@@ -242,22 +247,25 @@ export default function WebsiteReturnsPage() {
 
                                             <div className="pt-6 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-2">
                                                 <button 
-                                                    onClick={() => updateStatus(request.id, 'approved')}
-                                                    className="flex-1 min-w-[120px] bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'approved')}
+                                                    disabled={isReadOnly}
+                                                    className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
                                                 >
-                                                    <Check size={14} /> {request.type === 'message' ? 'Mark Processed' : 'Approve Request'}
+                                                    <Check size={14} /> {isReadOnly ? 'Read Only Mode' : (request.type === 'message' ? 'Mark Processed' : 'Approve Request')}
                                                 </button>
                                                 <button 
-                                                    onClick={() => updateStatus(request.id, 'completed')}
-                                                    className="flex-1 min-w-[120px] bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'completed')}
+                                                    disabled={isReadOnly}
+                                                    className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
                                                 >
-                                                    <Check size={14} /> {request.type === 'message' ? 'Resolved' : 'Mark Resolved'}
+                                                    <Check size={14} /> {isReadOnly ? 'Restricted' : (request.type === 'message' ? 'Resolved' : 'Mark Resolved')}
                                                 </button>
                                                 <button 
-                                                    onClick={() => updateStatus(request.id, 'rejected')}
-                                                    className="flex-1 min-w-[120px] bg-gray-100 text-gray-600 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                                                    onClick={() => !isReadOnly && updateStatus(request.id, 'rejected')}
+                                                    disabled={isReadOnly}
+                                                    className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                                 >
-                                                    <X size={14} /> Dismiss
+                                                    <X size={14} /> {isReadOnly ? 'Disabled' : 'Dismiss'}
                                                 </button>
                                             </div>
                                         </div>
