@@ -83,6 +83,47 @@ export default function WebsiteProductsPage() {
     };
     const [form, setForm] = useState(emptyForm);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('product_entry_draft');
+        const savedVariantsDraft = localStorage.getItem('product_variants_draft');
+        const savedFormOpen = localStorage.getItem('product_entry_form_open');
+
+        if (savedFormOpen === 'true' && !editingProduct) setShowForm(true);
+        
+        if (savedDraft && !editingProduct) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setForm(f => ({ ...f, ...d, images: [] })); // Don't restore images/files
+            } catch (e) { console.error('Product draft restore failed'); }
+        }
+
+        if (savedVariantsDraft && !editingProduct) {
+            try {
+                const v = JSON.parse(savedVariantsDraft);
+                setVariants(v);
+            } catch (e) { console.error('Variants draft restore failed'); }
+        }
+    }, [editingProduct]);
+
+    useEffect(() => {
+        if (showForm && !editingProduct) {
+            // Save form except files/images
+            const { images, video_file, ...textData } = form;
+            localStorage.setItem('product_entry_draft', JSON.stringify(textData));
+            localStorage.setItem('product_variants_draft', JSON.stringify(variants));
+            localStorage.setItem('product_entry_form_open', 'true');
+        } else if (!editingProduct) {
+            localStorage.removeItem('product_entry_form_open');
+        }
+    }, [form, variants, showForm, editingProduct]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('product_entry_draft');
+        localStorage.removeItem('product_variants_draft');
+        localStorage.removeItem('product_entry_form_open');
+    };
+
     useEffect(() => { fetchProducts(); }, []);
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -104,9 +145,9 @@ export default function WebsiteProductsPage() {
             setProducts(data || []);
         }
 
-        // Also fetch inventory items for mapping
+        // Also fetch inventory items for mapping with REAL-TIME stock
         const { data: inv, error: invErr } = await supabaseWithTimeout(
-            supabase.from('products').select('id, name, sku, description, image_url')
+            supabase.from('inventory_stock_view').select('id, name, sku, available_stock')
         );
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
@@ -158,7 +199,9 @@ export default function WebsiteProductsPage() {
             is_prebook: p.is_prebook,
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
-            video_url: p.video_url || ''
+            video_url: p.video_url || '',
+            video_file: undefined,
+            video_progress: undefined
         });
         setVariants([]);
         fetchVariants(p.id);
@@ -189,11 +232,11 @@ export default function WebsiteProductsPage() {
         // Supabase v2 supports onUploadProgress in the options
         const { error } = await supabaseWithTimeout(
             supabase.storage.from('website-images').upload(path, file, {
-                onUploadProgress: (progress) => {
+                onUploadProgress: (progress: any) => {
                     const pct = Math.round((progress.loaded / progress.total) * 100);
                     if (onProgress) onProgress(pct);
                 }
-            }),
+            } as any),
             120000 // Give large images up to 2 mins
         );
         
@@ -235,11 +278,11 @@ export default function WebsiteProductsPage() {
                 const path = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
                 const { error: vidErr } = await supabaseWithTimeout(
                     supabase.storage.from('website-images').upload(path, form.video_file, {
-                        onUploadProgress: (progress) => {
+                        onUploadProgress: (progress: any) => {
                             const pct = Math.round((progress.loaded / progress.total) * 100);
                             setVideoProgress(pct);
                         }
-                    }),
+                    } as any),
                     300000 // 5 mins for video
                 );
                 if (vidErr) throw vidErr;
@@ -283,18 +326,18 @@ export default function WebsiteProductsPage() {
                 if (variants.length > 0) {
                     const toInsert = variants.filter(v => !v.id).map(v => ({
                         product_id: productId,
-                        color: v.color,
-                        size: v.size,
+                        color: v.color || 'Standard',
+                        size: v.size || 'Universal',
                         sku: v.sku,
                         price: v.price ? parseFloat(v.price.toString()) : null,
                         inventory_product_id: v.inventory_product_id || null,
-                        ...(v.color === 'Combo' ? { is_bundle: true } : {})
+                        is_bundle: v.color === 'Combo'
                     }));
 
                     const toUpdate = variants.filter(v => !!v.id).map(v => ({
                         ...v,
                         inventory_product_id: v.inventory_product_id || null,
-                        ...(v.color === 'Combo' ? { is_bundle: true } : {})
+                        is_bundle: v.color === 'Combo'
                     }));
 
                     if (toInsert.length > 0) {
@@ -307,12 +350,12 @@ export default function WebsiteProductsPage() {
                     for (const v of toUpdate) {
                         const { error: updErr } = await supabaseWithTimeout(
                             supabase.from('website_variants').update({
-                                color: v.color,
-                                size: v.size,
+                                color: v.color || 'Standard',
+                                size: v.size || 'Universal',
                                 sku: v.sku,
                                 price: v.price ? parseFloat(v.price.toString()) : null,
                                 inventory_product_id: v.inventory_product_id || null,
-                                ...(v.color === 'Combo' ? { is_bundle: true } : {})
+                                is_bundle: v.color === 'Combo'
                             }).eq('id', v.id)
                         );
                         if (updErr) throw updErr;
@@ -410,6 +453,7 @@ export default function WebsiteProductsPage() {
             }
 
             showToast(editingProduct ? 'Product and Variants updated!' : 'Product added!');
+            clearDraft();
             setShowForm(false);
             fetchProducts();
         } catch (err: any) {
@@ -794,14 +838,22 @@ export default function WebsiteProductsPage() {
                                                 <div className="col-span-1">
                                                     <button onClick={() => setVariants(vs => vs.filter((_, i) => i !== idx))} className="h-9 w-9 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 size={16} /></button>
                                                 </div>
-                                                {v.current_stock !== undefined && (
-                                                    <div className="col-span-12 mt-2 flex items-center gap-2">
-                                                        <div className={`h-1.5 w-1.5 rounded-full ${v.current_stock > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                                                            Current Inventory Stock: <span className={v.current_stock > 0 ? 'text-emerald-500' : 'text-rose-500'}>{v.current_stock} units</span>
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const stock = v.inventory_product_id 
+                                                        ? inventoryItems.find(inv => inv.id.toString() === v.inventory_product_id.toString())?.available_stock
+                                                        : v.current_stock;
+                                                    
+                                                    if (stock === undefined) return null;
+                                                    
+                                                    return (
+                                                        <div className="col-span-12 mt-2 flex items-center gap-2">
+                                                            <div className={`h-1.5 w-1.5 rounded-full ${stock > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                                                                Current Inventory Stock: <span className={stock > 0 ? 'text-emerald-500' : 'text-rose-500'}>{stock} units</span>
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                             );
                                         })}

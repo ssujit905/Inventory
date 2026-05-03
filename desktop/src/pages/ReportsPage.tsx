@@ -8,6 +8,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { IndianRupee } from 'lucide-react';
 
 type FinanceStats = {
+    totalRevenue: number;
+    totalCOGS: number;
+    grossProfit: number;
+    totalExpenses: number;
     totalReturn: number;
     totalInvestment: number;
     totalOperations: number;

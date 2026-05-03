@@ -18,7 +18,7 @@ function App() {
   const isAdminPage = location.pathname.startsWith('/admin');
   const isMyOrders = location.pathname.startsWith('/my-orders');
   const { settings } = useSettings();
-  const supportPhone = settings.support_phone || '9800000000'; // Fallback
+  const supportPhone = settings.support_phone || settings.store_phone || '9779845877777'; 
   const hideGlobalElements = isProductDetail || isAdminPage;
 
   return (

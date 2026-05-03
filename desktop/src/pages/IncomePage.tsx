@@ -28,6 +28,38 @@ export default function IncomePage() {
     const [amount, setAmount] = useState<number>(0);
     const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('income_entry_draft');
+        const savedFormOpen = localStorage.getItem('income_entry_form_open');
+
+        if (savedFormOpen === 'true') setIsFormOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setDescription(d.description || '');
+                setAmount(d.amount || 0);
+                setIncomeDate(d.incomeDate || format(new Date(), 'yyyy-MM-dd'));
+                setCategory(d.category || 'income');
+            } catch (e) { console.error('Income draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            const draft = { description, amount, incomeDate, category };
+            localStorage.setItem('income_entry_draft', JSON.stringify(draft));
+            localStorage.setItem('income_entry_form_open', 'true');
+        } else {
+            localStorage.removeItem('income_entry_form_open');
+        }
+    }, [description, amount, incomeDate, category, isFormOpen]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('income_entry_draft');
+        localStorage.removeItem('income_entry_form_open');
+    };
+
     useEffect(() => {
         fetchIncomeEntries();
     }, []);
@@ -77,6 +109,7 @@ export default function IncomePage() {
             if (error) throw error;
 
             setMessage({ type: 'success', text: 'Income recorded successfully!' });
+            clearDraft();
             fetchIncomeEntries();
 
             setTimeout(() => {

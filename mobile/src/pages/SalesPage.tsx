@@ -121,6 +121,51 @@ export default function SalesPage() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_sale_draft');
+        const savedFormOpen = localStorage.getItem('mobile_sale_form_open');
+
+        if (savedFormOpen === 'true') setIsFormOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setOrderDate(d.orderDate || format(new Date(), 'yyyy-MM-dd'));
+                setDestinationBranch(d.destinationBranch || '');
+                setParcelStatus(d.parcelStatus || 'processing');
+                setCustomerName(d.customerName || '');
+                setCustomerAddress(d.customerAddress || '');
+                setPhone1(d.phone1 || '');
+                setPhone2(d.phone2 || '');
+                setPackageDetails(d.packageDetails || '');
+                setCodAmount(d.codAmount || 0);
+                setAdId(d.adId || '');
+                setOrderItems(d.orderItems || [{ productId: '', quantity: 1 }]);
+            } catch (e) { console.error('Mobile Sale draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            const draft = {
+                orderDate, destinationBranch, parcelStatus, customerName,
+                customerAddress, phone1, phone2, packageDetails, codAmount, adId, orderItems
+            };
+            localStorage.setItem('mobile_sale_draft', JSON.stringify(draft));
+            localStorage.setItem('mobile_sale_form_open', 'true');
+        } else {
+            localStorage.removeItem('mobile_sale_form_open');
+        }
+    }, [
+        orderDate, destinationBranch, parcelStatus, customerName, customerAddress,
+        phone1, phone2, packageDetails, codAmount, adId, orderItems, isFormOpen
+    ]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mobile_sale_draft');
+        localStorage.removeItem('mobile_sale_form_open');
+    };
+
     useEffect(() => {
         fetchSales();
     }, []);
@@ -498,6 +543,7 @@ export default function SalesPage() {
             }
 
             setMessage({ type: 'success', text: 'Order created successfully!' });
+            clearDraft();
             fetchSales();
             setTimeout(() => setIsFormOpen(false), 1000);
 

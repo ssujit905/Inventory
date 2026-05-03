@@ -56,29 +56,30 @@ const Header = () => {
                 justifyContent: 'space-between',
                 gap: '1rem'
             }}>
-                {/* Left Side: Hamburger (Mobile) / Logo (Desktop) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-                    <button
-                        className="mobile-only"
-                        onClick={() => setIsMenuOpen(true)}
-                        style={{ color: 'var(--text-dark)', padding: '0.5rem', marginLeft: '-0.5rem', display: 'flex', alignItems: 'center', background: 'none', border: 'none' }}
-                    >
-                        <Menu size={28} strokeWidth={2.5} />
-                    </button>
+                {/* Left Side: Hamburger (Mobile) & Logo (Desktop) */}
+                <div style={{ display: 'flex', alignItems: 'center', flex: 1, gap: '1rem' }}>
+                    <div className="mobile-only">
+                        <button
+                            onClick={() => setIsMenuOpen(true)}
+                            style={{ color: 'var(--text-dark)', padding: '0.5rem', background: 'none', border: 'none' }}
+                        >
+                            <Menu size={28} strokeWidth={2.5} />
+                        </button>
+                    </div>
                     
-                    <Link to="/" style={{
+                    {/* Desktop Logo */}
+                    <Link to="/" className="desktop-only" style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '10px',
                         textDecoration: 'none',
-                        minWidth: 'fit-content'
-                    }} className={`header-logo ${isMyOrdersPage ? 'header-logo-left' : ''}`}>
-                        <img src="/logo.png" alt="" style={{ height: '28px', width: 'auto' }} onError={(e) => e.target.style.display = 'none'} />
+                    }}>
+                        <img src="/logo.png" alt="" style={{ height: '32px', width: 'auto' }} onError={(e) => e.target.style.display = 'none'} />
                         <span style={{
-                            fontSize: '1.4rem',
-                            fontWeight: '800',
+                            fontSize: '1.5rem',
+                            fontWeight: '900',
                             color: 'var(--primary-blue)',
-                            letterSpacing: '-0.03em',
+                            letterSpacing: '-0.04em',
                             whiteSpace: 'nowrap'
                         }}>
                             {storeName.slice(0, Math.ceil(storeName.length / 2))}
@@ -87,110 +88,77 @@ const Header = () => {
                     </Link>
                 </div>
 
-                {/* Center: Desktop Navigation */}
-                <div className="desktop-only" style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2rem' }}>
-                    <nav>
-                         <ul style={{ display: 'flex', gap: '1.5rem', listStyle: 'none', margin: 0, padding: 0 }}>
-                            <li>
-                                <NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
-                                    <Home size={18} /> Home
-                                </NavLink>
-                            </li>
-                            <li>
-                                <NavLink to="/shop" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
-                                    <ShoppingBag size={18} /> Shop
-                                </NavLink>
-                            </li>
-                            <li>
-                                <NavLink to="/contact" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
-                                    <MessageSquare size={18} /> Contact
-                                </NavLink>
-                            </li>
-                            <li>
-                                <NavLink to="/my-orders" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' })}>
-                                    <User size={18} /> Account
-                                </NavLink>
-                            </li>
-                         </ul>
-                    </nav>
+                {/* Center: Logo (Mobile ONLY) */}
+                <div className="mobile-only" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 3 }}>
+                    <Link to="/" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        textDecoration: 'none',
+                        whiteSpace: 'nowrap',
+                        minWidth: 'fit-content'
+                    }}>
+                        <img src="/logo.png" alt="" style={{ height: '22px', width: 'auto' }} onError={(e) => e.target.style.display = 'none'} />
+                        <span style={{
+                            fontSize: '1.15rem',
+                            fontWeight: '900',
+                            color: 'var(--primary-blue)',
+                            letterSpacing: '-0.03em'
+                        }}>
+                            {storeName.slice(0, Math.ceil(storeName.length / 2))}
+                            <span style={{ color: 'var(--primary-red)' }}>{storeName.slice(Math.ceil(storeName.length / 2))}</span>
+                        </span>
+                    </Link>
                 </div>
 
                 {/* Right Side: Action Icons */}
-                <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+                <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, justifyContent: 'flex-end' }}>
                     {/* Desktop Search Toggle */}
                     {!hideSearch && (
                         <button 
-                            className="desktop-only hover-scale"
+                            className="desktop-only hover-scale action-btn"
                             onClick={() => setIsSearchOpen(!isSearchOpen)}
                             style={{ 
                                 color: isSearchOpen ? 'var(--primary-red)' : 'var(--text-dark)', 
-                                width: '44px',
-                                height: '44px',
-                                borderRadius: '12px', 
-                                display: 'flex', 
-                                alignItems: 'center',
-                                justifyContent: 'center',
                                 background: isSearchOpen ? 'var(--primary-red-50)' : '#f8fafc',
                                 border: '1px solid var(--border-color)',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                minHeight: 'unset',
-                                padding: 0
                             }}
                         >
-                            {isSearchOpen ? <X size={22} strokeWidth={2} /> : <Search size={22} strokeWidth={2} />}
+                            {isSearchOpen ? <X size={20} strokeWidth={2.5} /> : <Search size={20} strokeWidth={2.5} />}
                         </button>
                     )}
 
-                    {/* Settings Icon — only when customer is logged in on the account page */}
+                    {/* Settings Icon */}
                     {customer && isMyOrdersPage && (
                         <button
-                            className="hover-scale"
+                            className="action-btn hover-scale"
                             onClick={() => window.dispatchEvent(new CustomEvent('open-change-pin-modal'))}
-                            title="Account Settings"
                             style={{
                                 color: 'var(--primary-blue)',
-                                width: '44px',
-                                height: '44px',
-                                borderRadius: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s',
-                                background: 'rgba(59, 130, 246, 0.08)',
-                                border: '1px solid rgba(59, 130, 246, 0.2)',
-                                cursor: 'pointer',
-                                minHeight: 'unset',
-                                padding: 0
+                                background: '#f8fafc',
+                                border: '1px solid var(--border-color)',
+                                boxSizing: 'border-box'
                             }}
                         >
-                            <SettingsIcon size={22} strokeWidth={2} />
+                            <SettingsIcon size={20} strokeWidth={2.5} style={{ display: 'block' }} />
                         </button>
                     )}
 
-                    <Link id="cart-icon" to="/cart" className="hover-scale" style={{ 
-                        position: 'relative', 
+                    <Link id="cart-icon" to="/cart" className="action-btn hover-scale" style={{ 
                         color: 'var(--text-dark)', 
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '12px', 
-                        display: 'flex', 
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s', 
                         background: '#f8fafc', 
                         border: '1px solid var(--border-color)',
-                        padding: 0
+                        boxSizing: 'border-box'
                     }}>
-                        <ShoppingCart size={22} strokeWidth={2} />
+                        <ShoppingCart size={20} strokeWidth={2.5} style={{ display: 'block' }} />
                         {cartCount > 0 && (
                             <span style={{
                                 position: 'absolute',
-                                top: '-4px',
-                                right: '-4px',
+                                top: '-5px',
+                                right: '-5px',
                                 backgroundColor: 'var(--primary-red)',
                                 color: 'white',
-                                fontSize: '0.65rem',
+                                fontSize: '0.6rem',
                                 fontWeight: '900',
                                 height: '18px',
                                 width: '18px',
@@ -199,38 +167,28 @@ const Header = () => {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 border: '2px solid white',
-                                boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)'
+                                boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
                             }}>
                                 {cartCount}
                             </span>
                         )}
                     </Link>
+
                     {customer && (
-                            <button 
-                                className="desktop-only hover-scale"
-                                onClick={() => {
-                                    customerLogout();
-                                    navigate('/');
-                                }}
-                                title="Sign Out"
-                                style={{ 
-                                    color: '#ef4444', 
-                                    width: '44px',
-                                    height: '44px',
-                                    borderRadius: '12px', 
-                                    display: 'flex', 
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s', 
-                                    background: '#fef2f2', 
-                                    border: '1px solid #fecaca',
-                                    cursor: 'pointer',
-                                    minHeight: 'unset',
-                                    padding: 0
-                                }}
-                            >
-                                <LogOut size={22} strokeWidth={2} />
-                            </button>
+                        <button 
+                            className="desktop-only hover-scale action-btn"
+                            onClick={() => {
+                                customerLogout();
+                                navigate('/');
+                            }}
+                            style={{ 
+                                color: '#ef4444', 
+                                background: '#fef2f2', 
+                                border: '1px solid #fecaca',
+                            }}
+                        >
+                            <LogOut size={20} strokeWidth={2.5} />
+                        </button>
                     )}
                 </div>
             </div>
@@ -246,7 +204,8 @@ const Header = () => {
                         top: '70px',
                         left: 0,
                         right: 0,
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                        zIndex: 9998
                      }}>
                     <div className="container">
                         <form onSubmit={handleSearch} style={{ position: 'relative', maxWidth: '800px', margin: '0 auto' }}>
@@ -254,25 +213,23 @@ const Header = () => {
                                 size={20} 
                                 style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} 
                             />
-                                <input
-                                    autoFocus
-                                    type="text"
-                                    placeholder="What are you looking for?"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{
-                                        padding: '1.2rem 1.5rem 1.2rem 3.5rem',
-                                        borderRadius: '16px',
-                                        border: '2px solid var(--primary-red)',
-                                        background: '#f8fafc',
-                                        fontSize: '1.1rem',
-                                        fontWeight: '600',
-                                        width: '100%',
-                                        outline: 'none',
-                                        transition: 'all 0.2s',
-                                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)'
-                                    }}
-                                />
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="Search products, brands and categories..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{
+                                    padding: '1.2rem 1.5rem 1.2rem 3.5rem',
+                                    borderRadius: '16px',
+                                    border: '2px solid var(--primary-red)',
+                                    background: '#f8fafc',
+                                    fontSize: '1.1rem',
+                                    fontWeight: '600',
+                                    width: '100%',
+                                    outline: 'none'
+                                }}
+                            />
                             <button 
                                 type="submit"
                                 style={{ 
@@ -297,10 +254,43 @@ const Header = () => {
                 </div>
             )}
 
-            {/* Premium Mobile Search Bar (Only shown on mobile) */}
+            {/* Desktop Center Navigation (Floating below) */}
+            <div className="desktop-only" style={{ 
+                borderTop: '1px solid var(--border-color)', 
+                backgroundColor: '#f8fafc' 
+            }}>
+                <div className="container" style={{ display: 'flex', justifyContent: 'center', padding: '0.75rem 0' }}>
+                    <nav>
+                        <ul style={{ display: 'flex', gap: '2.5rem', listStyle: 'none', margin: 0, padding: 0 }}>
+                            <li>
+                                <NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' })}>
+                                    <Home size={18} /> Home
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/shop" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' })}>
+                                    <ShoppingBag size={18} /> Shop
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/contact" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' })}>
+                                    <MessageSquare size={18} /> Contact
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink to="/my-orders" style={({isActive}) => ({ color: isActive ? 'var(--primary-red)' : 'var(--text-dark)', fontWeight: '700', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' })}>
+                                    <User size={18} /> Account
+                                </NavLink>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+
+            {/* Mobile Search Bar */}
             {!hideSearch && (
-                <div className="mobile-only" style={{ padding: '0 1.25rem 1rem' }}>
-                    <form onSubmit={handleSearch} style={{ position: 'relative' }}>
+                <div className="mobile-only" style={{ padding: '0 0.75rem 1rem' }}>
+                    <form onSubmit={handleSearch} style={{ position: 'relative', width: '100%' }}>
                         <div style={{
                             position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)',
                             color: 'var(--text-gray)', pointerEvents: 'none'
@@ -326,31 +316,65 @@ const Header = () => {
                     </form>
                 </div>
             )}
+            
             <style>{`
+                /* Reset ALL browser defaults for any element using action-btn */
+                button.action-btn,
+                a.action-btn {
+                    box-sizing: border-box !important;
+                    -webkit-appearance: none !important;
+                    appearance: none !important;
+                    outline: none !important;
+                    font-family: inherit !important;
+                    line-height: 1 !important;
+                    flex-shrink: 0 !important;
+                }
+                .action-btn {
+                    width: 40px !important;
+                    min-width: 40px !important;
+                    height: 40px !important;
+                    min-height: 40px !important;
+                    border-radius: 10px !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    cursor: pointer !important;
+                    transition: all 0.2s !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    position: relative !important;
+                    text-decoration: none !important;
+                    vertical-align: middle !important;
+                }
+                .action-btn svg {
+                    display: block !important;
+                    flex-shrink: 0 !important;
+                }
+                .desktop-only {
+                    display: flex !important;
+                }
+                .mobile-only {
+                    display: none !important;
+                }
                 @media (max-width: 768px) {
-                    .header-logo {
-                        position: absolute;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        max-width: 200px;
+                    .desktop-only {
+                        display: none !important;
                     }
-                    /* On Account page, shift logo left to give right-side icons more room */
-                    .header-logo.header-logo-left {
-                        position: static !important;
-                        transform: none !important;
-                        margin-left: 0.5rem;
+                    .mobile-only {
+                        display: flex !important;
                     }
-                    /* Scale down the action icons somewhat on small screens to prevent overlap */
-                    .header-actions {
-                        gap: 2px !important;
+                    .action-btn {
+                        width: 38px !important;
+                        min-width: 38px !important;
+                        height: 38px !important;
+                        min-height: 38px !important;
+                        border-radius: 10px !important;
                     }
-                    .header-actions button, .header-actions a {
-                        width: 36px !important;
-                        height: 36px !important;
+                    .header-logo span {
+                        font-size: 1.1rem !important;
                     }
-                    .header-actions svg {
-                        width: 18px !important;
-                        height: 18px !important;
+                    .header-logo img {
+                        height: 22px !important;
                     }
                 }
             `}</style>

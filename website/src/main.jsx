@@ -9,21 +9,24 @@ import { ProductProvider } from './context/ProductContext.jsx'
 import { SettingsProvider } from './context/SettingsContext.jsx'
 
 import { CustomerProvider } from './context/CustomerContext.jsx'
+import { NotificationProvider } from './context/NotificationContext.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <CustomerProvider>
-          <SettingsProvider>
-            <ProductProvider>
-              <CartProvider>
-                <App />
-              </CartProvider>
-            </ProductProvider>
-          </SettingsProvider>
-        </CustomerProvider>
-      </AuthProvider>
+      <NotificationProvider>
+        <AuthProvider>
+          <CustomerProvider>
+            <SettingsProvider>
+              <ProductProvider>
+                <CartProvider>
+                  <App />
+                </CartProvider>
+              </ProductProvider>
+            </SettingsProvider>
+          </CustomerProvider>
+        </AuthProvider>
+      </NotificationProvider>
     </BrowserRouter>
   </React.StrictMode>,
 )

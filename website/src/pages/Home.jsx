@@ -47,7 +47,8 @@ const Home = () => {
     }, [flashSaleEndTime]);
 
     // Merge flash sale products with full product details
-    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true';
+    const isFlashSaleTimeValid = flashSaleEndTime ? new Date(flashSaleEndTime.replace(' ', 'T')) > new Date() : false;
+    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true' && isFlashSaleTimeValid;
     const flashSaleProducts = isFlashSaleEnabled ? flashSaleConfig.map(saleItem => {
         const product = products.find(p => p.id === saleItem.id);
         if (!product) return null;
@@ -183,10 +184,10 @@ const Home = () => {
 
             {/* ── FLASH SALE SECTION (Shopee Style) ── */}
             {(settings.flash_sale_enabled === 'true' && flashSaleProducts.length > 0) ? (
-                <div style={{ backgroundColor: '#fff', borderBottom: '1px solid var(--border-color)', borderTop: '1px solid var(--border-color)', marginTop: '1rem', marginBottom: '1rem' }}>
-                    <div>
+                <div className="flash-sale-wrapper" style={{ backgroundColor: '#fff', borderBottom: '1px solid var(--border-color)', borderTop: '1px solid var(--border-color)', marginTop: '1rem', marginBottom: '1rem', padding: '1.5rem 0' }}>
+                    <div className="flash-sale-container">
                         {/* Flash Sale Header (Title Left, Timer Right) */}
-                        <div style={{ 
+                        <div className="flash-sale-header" style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'space-between', 
@@ -236,7 +237,7 @@ const Home = () => {
                         </div>
 
                         {/* Horizontal Scrollable Flash Sale Product List */}
-                        <div style={{ 
+                        <div className="flash-sale-list" style={{ 
                             display: 'flex', 
                             gap: '12px',
                             padding: '12px 1rem',
@@ -462,6 +463,31 @@ const Home = () => {
                     }
                     .discovery-masonry > div {
                         display: contents !important;
+                    }
+                    
+                    /* Desktop Flash Sale Styles */
+                    .flash-sale-wrapper {
+                        background-color: #f8fafc !important;
+                        border: none !important;
+                    }
+                    .flash-sale-container {
+                        max-width: 1200px;
+                        margin: 0 auto;
+                        padding: 0 1rem;
+                    }
+                    .flash-sale-header {
+                        border-radius: 1rem 1rem 0 0 !important;
+                    }
+                    .flash-sale-list {
+                        border-radius: 0 0 1rem 1rem !important;
+                        border: 1px solid #e2e8f0;
+                        border-top: none;
+                        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+                        padding: 24px !important;
+                        gap: 24px !important;
+                    }
+                    .flash-sale-list > a {
+                        flex: 0 0 200px !important; /* Larger cards on desktop */
                     }
                 }
 

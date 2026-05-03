@@ -4,10 +4,12 @@ import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, A
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
+import { useNotification } from '../context/NotificationContext';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
     const { customer, login, refreshCustomer } = useCustomer();
+    const { showNotification } = useNotification();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -119,9 +121,6 @@ const Checkout = () => {
         }
     }, [cartReady, isBuyNow, cart.length, isOrdered, navigate]);
 
-    // Hold render until hydration is done
-    if (!cartReady && !isOrdered) return null;
-
     const shippingFee = selectedBranch ? Number(selectedBranch.shipping_fee) : 0;
     
     // Loyalty Points (Coins) Evaluation
@@ -134,20 +133,64 @@ const Checkout = () => {
 
     const grandTotal = checkoutSubtotal + shippingFee - appliedCoinDiscount;
 
+    // Meta Pixel: Track Purchase Success
+    // Note: Meta Pixel currency must be ISO 4217 from Meta's allowlist.
+    // NPR (Nepalese Rupee) is NOT in Meta's pixel allowlist — use USD.
+    // content_ids must be an array of strings (not numbers/UUIDs).
+    useEffect(() => {
+        if (isOrdered && window.fbq) {
+            try {
+                window.fbq('track', 'Purchase', {
+                    value: grandTotal,
+                    currency: 'USD',
+                    content_ids: checkoutItems.map(item => String(item.variant_id || item.id || '')).filter(Boolean),
+                    content_type: 'product',
+                    num_items: checkoutItems.reduce((sum, item) => sum + (item.quantity || 1), 0)
+                });
+            } catch (e) {
+                console.warn('[Meta Pixel] Purchase tracking failed:', e);
+            }
+        }
+    }, [isOrdered]);
+
+    // Hold render until hydration is done
+    if (!cartReady && !isOrdered) return null;
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (formData.phone.length !== 10 || !/^\d+$/.test(formData.phone)) {
-            alert('Primary phone must be exactly 10 digits.');
+            showNotification('Primary phone must be exactly 10 digits.', 'error');
             return;
         }
         if (formData.phone2 && (formData.phone2.length !== 10 || !/^\d+$/.test(formData.phone2))) {
-            alert('Secondary phone must be exactly 10 digits.');
+            showNotification('Secondary phone must be exactly 10 digits.', 'error');
             return;
         }
 
         setSaving(true);
         try {
+            // [NEW] REAL-TIME STOCK AUDIT: Fetch the very latest stock before proceeding
+            const { data: latestStock, error: stockError } = await supabase
+                .from('website_variant_stock_view')
+                .select('variant_id, current_stock, sku, is_bundle')
+                .in('variant_id', checkoutItems.map(i => i.variant_id));
+
+            if (stockError) throw stockError;
+
+            // Verify each item against live database values
+            for (const item of checkoutItems) {
+                const liveItem = latestStock.find(s => s.variant_id === item.variant_id);
+                const currentAvailable = liveItem ? liveItem.current_stock : 0;
+                
+                if (currentAvailable < item.quantity) {
+                    setSaving(false);
+                    setCheckoutError(`Wait! The stock for "${item.title}" just changed. Only ${currentAvailable} left. Please adjust your order.`);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return; // STOP THE PURCHASE
+                }
+            }
+
             // Prepare Items for Atomic RPC
             const orderItems = checkoutItems.map(item => ({
                 variant_id: item.variant_id,
@@ -194,6 +237,7 @@ const Checkout = () => {
             if (result && result.order_number) {
                 setOrderNumber(result.order_number);
                 setIsOrdered(true);
+                showNotification('Order placed successfully!', 'success');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 if (!isBuyNow) clearSelectedItems();
                 // Refresh client-side coin balance immediately
@@ -202,17 +246,17 @@ const Checkout = () => {
                 throw new Error("Order creation succeeded but no order number was returned.");
             }
         } catch (err) {
-            alert('Order failed: ' + (err.message || 'Please try again'));
+            showNotification('Order failed: ' + (err.message || 'Please try again'), 'error');
         } finally {
             setSaving(false);
         }
     };
 
+
     const handleCreateAccount = async () => {
-        if (pin.length < 4) return alert('Please enter a 4-digit PIN');
+        if (pin.length < 4) return showNotification('Please enter a 4-digit PIN', 'warning');
         setCreatingAccount(true);
         try {
-            // No account found - create new one
             const { error: insertError } = await supabase.from('website_customers').insert({
                 phone: formData.phone,
                 name: formData.fullName,
@@ -220,26 +264,40 @@ const Checkout = () => {
                 address: formData.address,
                 city: formData.city
             });
-            
+
             if (insertError) {
-                if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
-                    // Number exists - try to log in
+                // Catch ALL forms of "already exists":
+                // - PostgreSQL duplicate key: code 23505
+                // - Supabase REST HTTP 409 Conflict: status 409
+                // - Various message patterns
+                const isConflict =
+                    insertError.code === '23505' ||
+                    insertError.status === 409 ||
+                    String(insertError.message || '').toLowerCase().match(/duplicate|already exist|conflict|unique/);
+
+                if (isConflict) {
+                    // Phone already registered — try to log in with the PIN they entered
                     const success = await login(formData.phone, pin);
                     if (success) {
                         setAccountCreated(true);
-                        // No need to alert, they are logged in now
+                        showNotification('Welcome back! Order linked to your account.', 'success');
                     } else {
-                        alert('This number is already registered. Please enter the correct PIN to link this order to your account.');
+                        showNotification(
+                            'This number is already registered. Please enter your correct PIN to link this order.',
+                            'error'
+                        );
                     }
                     return;
                 }
                 throw insertError;
             }
-            
-            await login(formData.phone, pin); // Log in the new user
+
+            // New account created — log in immediately
+            await login(formData.phone, pin);
             setAccountCreated(true);
+            showNotification('Account created! Your order is saved.', 'success');
         } catch (err) {
-            alert('Could not link account: ' + err.message);
+            showNotification('Could not link account: ' + (err.message || 'Please try again'), 'error');
         } finally {
             setCreatingAccount(false);
         }

@@ -33,6 +33,39 @@ export default function ExpensesPage() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_expense_draft');
+        const savedFormOpen = localStorage.getItem('mobile_expense_form_open');
+
+        if (savedFormOpen === 'true') setIsFormOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setDescription(d.description || '');
+                setAmount(d.amount || 0);
+                setExpenseDate(d.expenseDate || '');
+                setCategory(d.category || 'other');
+                setPackagingQuantity(d.packagingQuantity || 0);
+            } catch (e) { console.error('Mobile Expenses draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            const draft = { description, amount, expenseDate, category, packagingQuantity };
+            localStorage.setItem('mobile_expense_draft', JSON.stringify(draft));
+            localStorage.setItem('mobile_expense_form_open', 'true');
+        } else {
+            localStorage.removeItem('mobile_expense_form_open');
+        }
+    }, [description, amount, expenseDate, category, packagingQuantity, isFormOpen]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mobile_expense_draft');
+        localStorage.removeItem('mobile_expense_form_open');
+    };
+
     useEffect(() => {
         fetchExpenses();
     }, []);
@@ -93,6 +126,7 @@ export default function ExpensesPage() {
             if (error) throw error;
 
             setMessage({ type: 'success', text: 'Expense recorded successfully!' });
+            clearDraft();
 
             // Immediate UI update
             fetchExpenses();

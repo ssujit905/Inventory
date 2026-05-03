@@ -23,11 +23,13 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { useNotification } from '../context/NotificationContext';
 
 const ProductDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { addToCart, cart } = useCart();
+    const { showNotification } = useNotification();
     const [product, setProduct] = useState(null);
     const [variants, setVariants] = useState([]);
     const [selectedColor, setSelectedColor] = useState(null);
@@ -53,7 +55,13 @@ const ProductDetail = () => {
     );
 
     const { settings } = useSettings();
-    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true';
+    const flashSaleEndTime = settings.flash_sale_end;
+    const isFlashSaleTimeValid = useMemo(() => {
+        if (!flashSaleEndTime) return false;
+        return new Date(flashSaleEndTime.replace(' ', 'T')) > new Date();
+    }, [flashSaleEndTime]);
+
+    const isFlashSaleEnabled = settings.flash_sale_enabled === 'true' && isFlashSaleTimeValid;
     const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
     const flashSaleItem = isFlashSaleEnabled ? flashSaleConfig.find(item => item.id.toString() === id?.toString()) : null;
     const isProductInFlashSale = !!flashSaleItem;
@@ -112,6 +120,19 @@ const ProductDetail = () => {
     useEffect(() => {
         if (id) fetchRatings();
     }, [id]);
+
+    // Meta Pixel: Track Product View
+    useEffect(() => {
+        if (product && window.fbq) {
+            window.fbq('track', 'ViewContent', {
+                content_name: product.title,
+                content_ids: [id],
+                content_type: 'product',
+                value: activePrice,
+                currency: 'NPR'
+            });
+        }
+    }, [product, id, activePrice]);
 
     const fetchRatings = async () => {
         try {
@@ -234,8 +255,13 @@ const ProductDetail = () => {
     const handleFinalPurchase = (e) => {
         if (!isSelectionComplete()) return;
         
-        if (!currentVariant || currentVariant.current_stock <= 0) {
-            alert('Sorry, this specific variation is out of stock!');
+        if (!currentVariant || currentVariant.current_stock < quantity) {
+            showNotification(
+                currentVariant?.current_stock <= 0 
+                    ? 'Sorry, this specific variation is out of stock!' 
+                    : `Only ${currentVariant.current_stock} items left in stock!`, 
+                'warning'
+            );
             return;
         }
 
@@ -254,8 +280,23 @@ const ProductDetail = () => {
             setIsPickerOpen(false);
             navigate('/checkout', { state: { buyNowItem: cartItem } });
         } else {
+            // Meta Pixel: Track Add to Cart
+            if (window.fbq) {
+                try {
+                    window.fbq('track', 'AddToCart', {
+                        content_name: cartItem.title,
+                        content_ids: [String(cartItem.variant_id || cartItem.id || '')].filter(Boolean),
+                        content_type: 'product',
+                        value: cartItem.price,
+                        currency: 'USD'
+                    });
+                } catch (e) {
+                    console.warn('[Meta Pixel] AddToCart tracking failed:', e);
+                }
+            }
             addToCart(cartItem);
             setIsPickerOpen(false);
+            showNotification('Item added to your cart!', 'success');
             animateToCart(e, cartItem.image);
         }
     };
@@ -333,9 +374,9 @@ const ProductDetail = () => {
             // Fallback: Copy to clipboard
             try {
                 await navigator.clipboard.writeText(window.location.href);
-                alert('Link copied to clipboard!');
+                showNotification('Link copied to clipboard!', 'success');
             } catch (err) {
-                console.error('Failed to copy: ', err);
+                showNotification('Failed to copy link', 'error');
             }
         }
     };
@@ -576,15 +617,22 @@ const ProductDetail = () => {
                                 <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
                                 {product.is_sold_out && (
                                     <span style={{
-                                        backgroundColor: '#ef4444',
-                                        color: 'white',
+                                        backgroundColor: '#f8fafc',
+                                        color: '#64748b',
                                         padding: '4px 10px',
-                                        fontWeight: '900',
-                                        fontSize: '0.7rem',
-                                        borderRadius: '4px',
+                                        fontWeight: '800',
+                                        fontSize: '0.65rem',
+                                        borderRadius: '6px',
                                         textTransform: 'uppercase',
-                                        letterSpacing: '0.05em'
-                                    }}>Sold Out</span>
+                                        letterSpacing: '0.1em',
+                                        border: '1px solid #e2e8f0',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}>
+                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+                                        Sold Out
+                                    </span>
                                 )}
                             </div>
 
@@ -921,8 +969,12 @@ const ProductDetail = () => {
                                         })}
                                     </div>
                                     {currentVariant && (
-                                        <p style={{ fontSize: '0.75rem', marginTop: '10px', fontWeight: '800', color: currentVariant.current_stock < 5 ? '#ef4444' : '#10b981' }}>
-                                            {currentVariant.current_stock < 5 ? `⚠️ Only ${currentVariant.current_stock} left!` : '✅ In Stock'}
+                                        <p style={{ fontSize: '0.75rem', marginTop: '10px', fontWeight: '800', color: currentVariant.current_stock <= 0 ? '#ef4444' : currentVariant.current_stock < 5 ? '#f59e0b' : '#10b981' }}>
+                                            {currentVariant.current_stock <= 0
+                                                ? '❌ Out of Stock'
+                                                : currentVariant.current_stock < 5
+                                                    ? `⚠️ Only ${currentVariant.current_stock} left!`
+                                                    : '✅ In Stock'}
                                         </p>
                                     )}
                                 </div>
@@ -934,7 +986,27 @@ const ProductDetail = () => {
                                 <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', background: 'white shadow-sm' }}>
                                     <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: '40px', height: '40px', border: 'none', background: 'transparent', fontWeight: 'bold' }}>-</button>
                                     <div style={{ width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: '900' }}>{quantity}</div>
-                                    <button onClick={() => setQuantity(q => q + 1)} style={{ width: '40px', height: '40px', border: 'none', background: 'transparent', fontWeight: 'bold' }}>+</button>
+                                    <button 
+                                        onClick={() => setQuantity(q => {
+                                            const maxStock = currentVariant?.current_stock ?? 0;
+                                            // Only allow adding more if current quantity is strictly less than stock
+                                            if (q < maxStock) return q + 1;
+                                            return q;
+                                        })} 
+                                        disabled={!currentVariant || (currentVariant?.current_stock ?? 0) <= 0}
+                                        style={{ 
+                                            width: '40px', 
+                                            height: '40px', 
+                                            border: 'none', 
+                                            background: 'transparent', 
+                                            fontWeight: 'bold', 
+                                            // Grey out only when you've already selected ALL available stock
+                                            opacity: (!currentVariant || quantity >= (currentVariant?.current_stock ?? 1)) ? 0.3 : 1,
+                                            cursor: !currentVariant ? 'wait' : 'pointer'
+                                        }}
+                                    >
+                                        +
+                                    </button>
                                 </div>
                             </div>
                         </div>

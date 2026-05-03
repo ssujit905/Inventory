@@ -4,14 +4,17 @@ import { MapPin, Truck } from 'lucide-react';
 
 const ProductCard = ({ product }) => {
 
-    const discount = product.originalPrice
-        ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    const isSoldOut = product.is_sold_out || product.isSoldOut === true;
+    const originalPrice = product.original_price || product.originalPrice;
+    
+    const discount = originalPrice
+        ? Math.round(((originalPrice - product.price) / originalPrice) * 100)
         : 0;
 
     return (
         <div style={{
             backgroundColor: 'white',
-            borderRadius: '0.75rem', // Increased rounding for a softer, premium look
+            borderRadius: '0.75rem', 
             overflow: 'hidden',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
             transition: 'all 0.2s ease',
@@ -43,31 +46,39 @@ const ProductCard = ({ product }) => {
                         aspectRatio: '1',
                         objectFit: 'cover',
                         display: 'block',
-                        opacity: product.is_sold_out ? 0.6 : 1
+                        opacity: isSoldOut ? 0.4 : 1,
+                        filter: isSoldOut ? 'grayscale(0.8)' : 'none'
                     }}
                 />
 
-                {product.is_sold_out && (
+                {isSoldOut && (
                     <div style={{
                         position: 'absolute',
                         inset: 0,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.3)',
+                        backgroundColor: 'rgba(255,255,255,0.4)',
                         zIndex: 2
                     }}>
                         <span style={{
-                            backgroundColor: '#ef4444',
-                            color: 'white',
-                            padding: '4px 10px',
-                            fontWeight: '900',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            color: '#64748b',
+                            padding: '6px 14px',
+                            fontWeight: '800',
                             fontSize: '0.7rem',
-                            borderRadius: '2px',
+                            borderRadius: '8px',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}>Sold Out</span>
+                            letterSpacing: '0.1em',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                            border: '1px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+                            Sold Out
+                        </span>
                     </div>
                 )}
             </Link>
@@ -84,7 +95,7 @@ const ProductCard = ({ product }) => {
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
-                        color: 'var(--text-dark)'
+                        color: isSoldOut ? 'var(--text-gray)' : 'var(--text-dark)'
                     }}>
                         {product.title}
                     </h3>
@@ -101,69 +112,74 @@ const ProductCard = ({ product }) => {
                             borderRadius: '3px',
                             fontWeight: '800',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.02em'
+                            letterSpacing: '0.02em',
+                            opacity: isSoldOut ? 0.5 : 1
                         }}>ShopyNepal</span>
                     )}
 
-                    {/* COD Badge - only show if explicitly true, or as default if others aren't set */}
+                    {/* COD Badge */}
                     {(product.is_cod === true || (product.is_cod === undefined && !product.is_prepaid && !product.is_prebook)) && (
                         <span style={{
                             fontSize: '0.65rem',
-                            color: '#10b981', // Emerald Green
+                            color: '#10b981', 
                             border: '1.2px solid #10b981',
                             padding: '1px 6px',
                             borderRadius: '3px',
                             fontWeight: '800',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.02em'
+                            letterSpacing: '0.02em',
+                            opacity: isSoldOut ? 0.5 : 1
                         }}>COD</span>
                     )}
 
                     {product.is_prepaid === true && (
                         <span style={{
                             fontSize: '0.65rem',
-                            color: '#3b82f6', // Bright Blue
+                            color: '#3b82f6', 
                             border: '1.2px solid #3b82f6',
                             padding: '1px 6px',
                             borderRadius: '3px',
                             fontWeight: '800',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.02em'
+                            letterSpacing: '0.02em',
+                            opacity: isSoldOut ? 0.5 : 1
                         }}>Prepaid</span>
                     )}
 
                     {product.is_prebook === true && (
                         <span style={{
                             fontSize: '0.65rem',
-                            color: '#f59e0b', // Amber/Orange
+                            color: '#f59e0b', 
                             border: '1.2px solid #f59e0b',
                             padding: '1px 6px',
                             borderRadius: '3px',
                             fontWeight: '800',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.02em'
+                            letterSpacing: '0.02em',
+                            opacity: isSoldOut ? 0.5 : 1
                         }}>Pre-booking</span>
                     )}
                 </div>
 
-                {/* Price - Only show price as requested */}
+                {/* Price */}
                 <div style={{ marginTop: '0.25rem' }}>
                     <span style={{
                         fontWeight: '800',
                         fontSize: '1.1rem',
-                        color: 'var(--primary-red)'
+                        color: isSoldOut ? 'var(--text-gray)' : 'var(--primary-red)'
                     }}>
                         Rs. {product.price.toLocaleString()}
                     </span>
-                    {product.original_price && (
+                    {originalPrice && (
                         <span style={{
                             fontSize: '0.8rem',
                             color: 'var(--text-gray)',
                             textDecoration: 'line-through',
                             marginLeft: '0.5rem',
-                            fontWeight: '500'
+                            fontWeight: '500',
+                            opacity: isSoldOut ? 0.5 : 1
                         }}>
-                            Rs. {product.original_price.toLocaleString()}
+                            Rs. {originalPrice.toLocaleString()}
                         </span>
                     )}
                 </div>

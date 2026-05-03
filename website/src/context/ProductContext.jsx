@@ -20,8 +20,7 @@ export const ProductProvider = ({ children }) => {
                 .from('website_products')
                 .select(`
                     *,
-                    website_product_images(*),
-                    website_product_variations(*)
+                    website_product_images(*)
                 `)
                 .eq('is_active', true)
                 .order('created_at', { ascending: false });
@@ -32,6 +31,11 @@ export const ProductProvider = ({ children }) => {
             }
 
             if (data) {
+                // Fetch stock info for all products in one go to be efficient
+                const { data: stockData } = await supabase
+                    .from('website_variant_stock_view')
+                    .select('*');
+
                 // Normalize to the shape the website expects
                 const normalized = data.map(p => {
                     const primaryImg = p.website_product_images?.find(i => i.is_primary) || p.website_product_images?.[0];
@@ -41,6 +45,14 @@ export const ProductProvider = ({ children }) => {
                             url: img.image_url,
                             label: img.label || ''
                         }));
+                    
+                    const productVariants = (stockData || []).filter(v => v.parent_product_id === p.id);
+                    const totalStock = productVariants.reduce((acc, curr) => acc + (Number(curr.current_stock) || 0), 0);
+                    
+                    // Logic: 
+                    // 1. If manual is_sold_out is true, it's sold out.
+                    // 2. Otherwise, check if total stock across all variants is 0.
+                    const isSoldOut = p.is_sold_out || (productVariants.length > 0 && totalStock <= 0);
 
                     return {
                         id: p.id,
@@ -60,11 +72,13 @@ export const ProductProvider = ({ children }) => {
                         is_cod: p.is_cod,
                         is_prepaid: p.is_prepaid,
                         is_prebook: p.is_prebook,
-                        is_sold_out: p.is_sold_out,
+                        is_sold_out: isSoldOut,
+                        total_stock: totalStock,
+                        variant_count: productVariants.length,
                         sizes: p.sizes || '',
                         sold: p.sold_count,
                         sold_count: p.sold_count,
-                        variations: p.website_product_variations || [],
+                        variations: productVariants
                     };
                 });
                 setProducts(normalized);

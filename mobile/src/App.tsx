@@ -17,6 +17,7 @@ import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
+import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -130,6 +131,10 @@ function App() {
 
         <Route path="/admin/chatbot" element={
           user && profile?.role === 'admin' ? <ChatbotPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/website/customers" element={
+          user ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
         } />
 
 

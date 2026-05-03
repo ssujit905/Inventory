@@ -33,6 +33,39 @@ export default function StaffManagementPage() {
     const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
     const [showPassword, setShowPassword] = useState(false);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_staff_draft');
+        const savedFormOpen = localStorage.getItem('mobile_staff_form_open');
+
+        if (savedFormOpen === 'true') setIsAddModalOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setNewName(d.newName || '');
+                setNewEmail(d.newEmail || '');
+                setNewPassword(d.newPassword || '');
+                setNewRole(d.newRole || 'staff');
+                setNewPermissions(d.newPermissions || 'read_only');
+            } catch (e) { console.error('Mobile Staff draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isAddModalOpen) {
+            const draft = { newName, newEmail, newPassword, newRole, newPermissions };
+            localStorage.setItem('mobile_staff_draft', JSON.stringify(draft));
+            localStorage.setItem('mobile_staff_form_open', 'true');
+        } else {
+            localStorage.removeItem('mobile_staff_form_open');
+        }
+    }, [newName, newEmail, newPassword, newRole, newPermissions, isAddModalOpen]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mobile_staff_draft');
+        localStorage.removeItem('mobile_staff_form_open');
+    };
+
     useEffect(() => {
         fetchProfiles();
     }, []);
@@ -144,6 +177,7 @@ export default function StaffManagementPage() {
             });
 
             fetchProfiles();
+            clearDraft();
             setIsAddModalOpen(false);
 
             // Clear Form

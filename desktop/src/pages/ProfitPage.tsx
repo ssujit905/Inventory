@@ -92,40 +92,39 @@ export default function ProfitPage() {
 
             const { data: packagingData } = await supabase
                 .from('expenses')
-                .select('amount, description, created_at')
+                .select('amount, description, expense_date')
                 .eq('category', 'packaging')
-                .order('created_at', { ascending: true });
+                .order('expense_date', { ascending: true });
 
             const adBudgetMap = new Map<string, number>();
             (adsData || []).forEach((a: any) => adBudgetMap.set(a.id, Number(a.amount || 0)));
 
             const toTimeKey = (value: any) => {
                 if (!value) return '';
-                if (typeof value === 'string') return value;
+                if (typeof value === 'string') return value.split('T')[0]; // Use date only
                 if (value instanceof Date) {
-                    return value.toISOString();
+                    return value.toISOString().split('T')[0];
                 }
                 return '';
             };
 
             const extractPackagingQty = (description: string | null | undefined): number => {
                 if (!description) return 0;
-                const match = description.match(/qty\s*:\s*(\d+)/i);
+                const match = description.match(/qty\s*[:|]\s*(\d+)/i);
                 return match ? Number(match[1] || 0) : 0;
             };
 
             const packagingHistory = (packagingData || [])
                 .map((p: any) => ({
-                    timeKey: toTimeKey(p.created_at),
+                    timeKey: toTimeKey(p.expense_date),
                     amount: Number(p.amount || 0),
                     unitCost: (() => {
                         const qty = extractPackagingQty(p.description);
                         if (qty > 0) return Number(p.amount || 0) / qty;
-                        // Backward compatibility for older packaging rows without quantity.
-                        return Number(p.amount || 0);
+                        return 0; // If no qty, we can't determine unit cost reliably
                     })()
                 }))
-                .filter((p: any) => p.timeKey)
+                .filter((p: any) => p.timeKey && p.unitCost > 0)
                 .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
 
             const adSaleIds = new Map<string, Set<string>>();
@@ -149,20 +148,29 @@ export default function ProfitPage() {
                 adSpentBySale.set(t.sale_id, budget / count);
             });
 
+            // Get the MOST RECENT packaging cost available if no historical match
+            const defaultPackagingCost = packagingHistory.length > 0 
+                ? packagingHistory[packagingHistory.length - 1].unitCost 
+                : 0;
+
             const packagingBySale = new Map<string, number>();
             (lotSales || []).forEach((t: any) => {
                 if (!t.sale_id || !t.sale) return;
-                const saleTimeKey = toTimeKey(t.sale.created_at);
+                const saleTimeKey = toTimeKey(t.sale.order_date || t.sale.created_at);
                 if (!saleTimeKey) return;
+                
                 let selected = 0;
+                let foundMatch = false;
                 for (const p of packagingHistory) {
                     if (p.timeKey <= saleTimeKey) {
                         selected = p.unitCost;
+                        foundMatch = true;
                     } else {
                         break;
                     }
                 }
-                packagingBySale.set(t.sale_id, selected);
+                // Fallback to the latest available packaging cost if no historical match found yet
+                packagingBySale.set(t.sale_id, foundMatch ? selected : defaultPackagingCost);
             });
 
             const lotAgg = new Map<string, LotProfitRow>();

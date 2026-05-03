@@ -348,6 +348,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 )}
                                 <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" onSelect={() => setIsMenuOpen(false)} badge={pendingOrdersCount} />
                                 <MenuLink icon={<RotateCcw className="text-orange-500" />} label="Returns" path="/admin/website/returns" onSelect={() => setIsMenuOpen(false)} badge={pendingReturnsCount} />
+                                {role === 'admin' && (
+                                    <MenuLink icon={<Users className="text-purple-500" />} label="Customers" path="/admin/website/customers" onSelect={() => setIsMenuOpen(false)} />
+                                )}
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
                                 {role === 'admin' && (
                                     <>

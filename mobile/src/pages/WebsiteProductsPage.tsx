@@ -83,6 +83,50 @@ export default function WebsiteProductsPage() {
     };
     const [form, setForm] = useState(emptyForm);
 
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_web_product_draft');
+        const savedVariantsDraft = localStorage.getItem('mobile_web_product_variants_draft');
+        const savedFormOpen = localStorage.getItem('mobile_web_product_form_open');
+
+        if (savedFormOpen === 'true') setShowForm(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                // Exclude files/binary data from draft restoration
+                setForm(prev => ({ 
+                    ...prev, 
+                    ...d,
+                    images: [], // Re-upload images on refresh
+                    video_file: undefined 
+                }));
+            } catch (e) { console.error('Mobile Product draft restore failed'); }
+        }
+        if (savedVariantsDraft) {
+            try {
+                setVariants(JSON.parse(savedVariantsDraft));
+            } catch (e) { console.error('Mobile Variants draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (showForm) {
+            // Filter out non-serializable fields before saving
+            const { images, video_file, ...serializableForm } = form;
+            localStorage.setItem('mobile_web_product_draft', JSON.stringify(serializableForm));
+            localStorage.setItem('mobile_web_product_variants_draft', JSON.stringify(variants));
+            localStorage.setItem('mobile_web_product_form_open', 'true');
+        } else {
+            localStorage.removeItem('mobile_web_product_form_open');
+        }
+    }, [form, variants, showForm]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mobile_web_product_draft');
+        localStorage.removeItem('mobile_web_product_variants_draft');
+        localStorage.removeItem('mobile_web_product_form_open');
+    };
+
     useEffect(() => { fetchProducts(); }, []);
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -410,6 +454,7 @@ export default function WebsiteProductsPage() {
             }
 
             showToast(editingProduct ? 'Product and Variants updated!' : 'Product added!');
+            clearDraft();
             setShowForm(false);
             fetchProducts();
         } catch (err: any) {

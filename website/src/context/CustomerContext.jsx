@@ -16,21 +16,18 @@ export const CustomerProvider = ({ children }) => {
         setLoading(true);
         try {
             const { data, error } = await supabase.rpc('get_customer_profile', {
-                p_phone: phone,
-                p_pin: pin
+                p_phone: String(phone).trim(),
+                p_pin: String(pin).trim()
             });
 
             if (error || !data || data.length === 0) {
+                console.error('Login failure:', error || 'No data');
                 throw new Error('Invalid phone number or PIN');
             }
 
             const customerData = data[0];
             setCustomer(customerData);
             localStorage.setItem('shopy_customer', JSON.stringify(customerData));
-            return { success: true };
-
-            setCustomer(data);
-            localStorage.setItem('shopy_customer', JSON.stringify(data));
             return { success: true };
         } catch (error) {
             console.error('Login error:', error);
@@ -42,12 +39,15 @@ export const CustomerProvider = ({ children }) => {
 
     const register = async (name, phone, pin, address, city) => {
         setLoading(true);
+        // Standardize phone to 10 digits
+        const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+        
         try {
-            // Check if phone already exists
-            const { data: existing, error: checkError } = await supabase
+            // Check if phone already exists (using ilike for flexibility)
+            const { data: existing } = await supabase
                 .from('website_customers')
-                .select('id')
-                .eq('phone', phone)
+                .select('phone')
+                .ilike('phone', `%${cleanPhone}`)
                 .maybeSingle();
 
             if (existing) {
@@ -59,8 +59,8 @@ export const CustomerProvider = ({ children }) => {
                 .from('website_customers')
                 .insert({
                     name,
-                    phone,
-                    pin_hash: pin, // Store as text for now
+                    phone: cleanPhone,
+                    pin_hash: String(pin),
                     address,
                     city,
                     created_at: new Date().toISOString()
@@ -68,13 +68,16 @@ export const CustomerProvider = ({ children }) => {
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                if (error.code === '23505') throw new Error('This phone number is already registered.');
+                throw error;
+            }
 
             setCustomer(data);
             localStorage.setItem('shopy_customer', JSON.stringify(data));
             return { success: true };
         } catch (error) {
-            console.error('Registration error:', error);
+            console.error('Registration error detail:', error);
             return { success: false, error: error.message };
         } finally {
             setLoading(false);
@@ -115,13 +118,15 @@ export const CustomerProvider = ({ children }) => {
             const parsed = JSON.parse(saved);
             
             const { data, error } = await supabase.rpc('get_customer_profile', {
-                p_phone: customer.phone,
-                p_pin: parsed.pin_hash || parsed.pin // Depends on how it was saved
+                p_phone: String(customer.phone).trim(),
+                p_pin: String(parsed.pin_hash || parsed.pin).trim()
             });
 
             if (!error && data && data.length > 0) {
                 setCustomer(data[0]);
                 localStorage.setItem('shopy_customer', JSON.stringify(data[0]));
+            } else if (error) {
+                console.error('Refresh customer error:', error);
             }
         } catch (err) {
             console.error('Failed to refresh customer:', err);
@@ -132,6 +137,35 @@ export const CustomerProvider = ({ children }) => {
         setCustomer(null);
         localStorage.removeItem('shopy_customer');
     };
+
+    useEffect(() => {
+        if (!customer?.phone) return;
+
+        const channel = supabase
+            .channel(`customer_updates_${customer.phone}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'website_customers',
+                    filter: `phone=eq.${customer.phone}`
+                },
+                (payload) => {
+                    console.log('Real-time customer update:', payload);
+                    // Update state directly for instant feedback (coins, name, etc)
+                    if (payload.new) {
+                        setCustomer(prev => ({ ...prev, ...payload.new }));
+                        localStorage.setItem('shopy_customer', JSON.stringify({ ...customer, ...payload.new }));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [customer?.phone]);
 
     return (
         <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading, refreshCustomer }}>

@@ -245,6 +245,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     />
                     <NavItem icon={<MapPin size={18} strokeWidth={1.5} />} label="Delivery" path="/admin/website/delivery" active={location.pathname === '/admin/website/delivery'} />
                     {role === 'admin' && (
+                        <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Customers" path="/admin/website/customers" active={location.pathname === '/admin/website/customers'} />
+                    )}
+                    {role === 'admin' && (
                         <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Website Reports" path="/admin/website/reports" active={location.pathname === '/admin/website/reports'} />
                     )}
                     {role === 'admin' && (

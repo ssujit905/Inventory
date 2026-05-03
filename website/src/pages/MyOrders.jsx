@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { useCustomer } from '../context/CustomerContext';
+import { useSettings } from '../context/SettingsContext';
 import { supabase } from '../lib/supabase';
 import { 
     Package, Phone, Lock, ChevronRight, 
@@ -9,9 +10,12 @@ import {
     Star, RotateCcw, Camera, Trash2, CheckCircle2, Loader2,
     ArrowLeft, Share2
 } from 'lucide-react';
+import { useNotification } from '../context/NotificationContext';
 
 const MyOrders = () => {
     const { customer, login, logout, register, updateProfile, loading: authLoading, refreshCustomer } = useCustomer();
+    const { settings } = useSettings();
+    const { showNotification } = useNotification();
     const location = useLocation();
     const navigate = useNavigate();
     
@@ -69,6 +73,15 @@ const MyOrders = () => {
     const [confirmPin, setConfirmPin] = useState('');
     const [pinLoading, setPinLoading] = useState(false);
     const [pinMsg, setPinMsg] = useState({ text: '', type: '' });
+
+    // Reset PIN State
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetPhone, setResetPhone] = useState('');
+    const [resetOrderNo, setResetOrderNo] = useState('');
+    const [resetTotal, setResetTotal] = useState('');
+    const [resetNewPin, setResetNewPin] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+    const [resetError, setResetError] = useState('');
 
     // Listen for header Settings icon click to open the Change PIN modal
     useEffect(() => {
@@ -134,7 +147,39 @@ const MyOrders = () => {
             } catch (err) { console.error('Share failed:', err); }
         } else {
             navigator.clipboard.writeText(text);
-            alert('Order info copied to clipboard!');
+            showNotification('Order info copied to clipboard!', 'success');
+        }
+    };
+
+    const handleResetPin = async (e) => {
+        e.preventDefault();
+        setResetError('');
+        if (resetNewPin.length !== 4) {
+            setResetError('New PIN must be 4 digits');
+            return;
+        }
+
+        setResetLoading(true);
+        try {
+            const { data: success, error: resetErr } = await supabase.rpc('reset_customer_pin', {
+                p_phone: resetPhone,
+                p_order_number: resetOrderNo,
+                p_total_amount: parseFloat(resetTotal),
+                p_new_pin: resetNewPin
+            });
+
+            if (resetErr || !success) {
+                throw new Error('Verification failed. Please check your order details.');
+            }
+
+            showNotification('PIN reset successfully! You can now login.', 'success');
+            setShowResetModal(false);
+            setPhone(resetPhone);
+            setPin(resetNewPin);
+        } catch (err) {
+            setResetError(err.message);
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -229,7 +274,7 @@ const MyOrders = () => {
             setShowCancelModal(false);
         } catch (err) {
             console.error('Cancel error:', err);
-            alert('Could not cancel order. Please contact support.');
+            showNotification('Could not cancel order. Please contact support.', 'error');
         } finally {
             setIsCancelling(false);
         }
@@ -292,10 +337,10 @@ const MyOrders = () => {
 
             setRatedOrderIds(prev => new Set([...prev, rateData.orderId]));
             setShowRateModal(false);
-            alert("Thanks for your review! 25 Shopy Coins have been added to your pending balance and will be available after the return window closes! ⏳🪙");
+            showNotification("Thanks for your review! 25 Shopy Coins added! ⏳🪙", 'success', 6000);
         } catch (err) {
             console.error('Rating error:', err);
-            alert('Failed to submit rating. Please try again.');
+            showNotification('Failed to submit rating. Please try again.', 'error');
         } finally {
             setIsRating(false);
         }
@@ -332,9 +377,34 @@ const MyOrders = () => {
                             {authLoading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Register' : 'Login')}
                         </button>
                         
-                        <button type="button" onClick={() => setIsRegistering(!isRegistering)} style={{ background: 'none', border: 'none', color: 'var(--text-gray)', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}>
-                            {isRegistering ? 'Already have an account? Login' : 'New here? Create Account'}
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                            <button 
+                                type="button" 
+                                onClick={() => setIsRegistering(!isRegistering)} 
+                                style={{ background: 'none', border: 'none', color: 'var(--text-gray)', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}
+                            >
+                                {isRegistering ? 'Already have an account? Login' : 'New here? Create Account'}
+                            </button>
+
+                            {!isRegistering && (
+                                <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
+                                    <a 
+                                        href={`https://wa.me/${(settings.support_phone || settings.store_phone || '9779845877777').replace(/\D/g, '')}?text=${encodeURIComponent(`Hi Shopy Nepal, I forgot my account PIN. My phone number is: ${phone || '(Not provided)'}. Please help me reset it!`)}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{ 
+                                            color: 'var(--primary-red)', 
+                                            fontSize: '0.8rem', 
+                                            fontWeight: '800', 
+                                            textDecoration: 'underline',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Forgot PIN?
+                                    </a>
+                                </div>
+                            )}
+                        </div>
                     </form>
                 </div>
             </div>

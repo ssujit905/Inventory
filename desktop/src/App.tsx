@@ -17,6 +17,7 @@ import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
 import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
+import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -75,7 +76,7 @@ function App() {
   }
 
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[persistedPath]}>
+    <Router initialEntries={[persistedPath]}>
       <Routes>
         <Route path="/" element={
           !user ? <LoginPage /> : <Navigate to="/admin/dashboard" replace />
@@ -134,6 +135,9 @@ function App() {
         } />
         <Route path="/admin/website/reports" element={
           user && profile?.role === 'admin' ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/customers" element={
+          user && profile?.role === 'admin' ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
         } />
 
 

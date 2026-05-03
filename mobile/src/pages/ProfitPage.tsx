@@ -92,7 +92,7 @@ export default function ProfitPage() {
 
             const { data: packagingData } = await supabase
                 .from('expenses')
-                .select('amount, description, created_at')
+                .select('amount, description, created_at, expense_date')
                 .eq('category', 'packaging')
                 .order('created_at', { ascending: true });
 
@@ -110,22 +110,21 @@ export default function ProfitPage() {
 
             const extractPackagingQty = (description: string | null | undefined): number => {
                 if (!description) return 0;
-                const match = description.match(/qty\s*:\s*(\d+)/i);
+                const match = description.match(/qty\s*[:|]\s*(\d+)/i);
                 return match ? Number(match[1] || 0) : 0;
             };
 
             const packagingHistory = (packagingData || [])
                 .map((p: any) => ({
-                    timeKey: toTimeKey(p.created_at),
+                    timeKey: toTimeKey(p.expense_date || p.created_at),
                     amount: Number(p.amount || 0),
                     unitCost: (() => {
                         const qty = extractPackagingQty(p.description);
                         if (qty > 0) return Number(p.amount || 0) / qty;
-                        // Backward compatibility for older packaging rows without quantity.
-                        return Number(p.amount || 0);
+                        return 0; // If no qty, we can't determine unit cost reliably
                     })()
                 }))
-                .filter((p: any) => p.timeKey)
+                .filter((p: any) => p.timeKey && p.unitCost > 0)
                 .sort((a: any, b: any) => a.timeKey.localeCompare(b.timeKey));
 
             const adSaleIds = new Map<string, Set<string>>();

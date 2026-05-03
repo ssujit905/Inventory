@@ -40,6 +40,41 @@ export default function StockInPage() {
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [selectedLot, setSelectedLot] = useState<{ id: string, sku: string, qty: number } | null>(null);
     const [newCost, setNewCost] = useState<number>(0);
+    
+    // --- DRAFT PERSISTENCE ---
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_stock_in_draft');
+        const savedFormOpen = localStorage.getItem('mobile_stock_in_form_open');
+
+        if (savedFormOpen === 'true') setIsFormOpen(true);
+        if (savedDraft) {
+            try {
+                const d = JSON.parse(savedDraft);
+                setSku(d.sku || '');
+                setDetails(d.details || '');
+                setImageUrl(d.imageUrl || '');
+                setLotNumber(d.lotNumber || '');
+                setEntryDate(d.entryDate || '');
+                setQuantity(d.quantity || 0);
+                setCostPrice(d.costPrice || 0);
+            } catch (e) { console.error('Mobile StockIn draft restore failed'); }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen) {
+            const draft = { sku, details, imageUrl, lotNumber, entryDate, quantity, costPrice };
+            localStorage.setItem('mobile_stock_in_draft', JSON.stringify(draft));
+            localStorage.setItem('mobile_stock_in_form_open', 'true');
+        } else {
+            localStorage.removeItem('mobile_stock_in_form_open');
+        }
+    }, [sku, details, imageUrl, lotNumber, entryDate, quantity, costPrice, isFormOpen]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mobile_stock_in_draft');
+        localStorage.removeItem('mobile_stock_in_form_open');
+    };
 
     // Derived State
 
@@ -190,6 +225,7 @@ export default function StockInPage() {
             if (transError) throw transError;
 
             setMessage({ type: 'success', text: 'Stock received successfully!' });
+            clearDraft();
             await fetchRecentTransactions();
             setTimeout(() => setIsFormOpen(false), 800);
         } catch (error: any) {

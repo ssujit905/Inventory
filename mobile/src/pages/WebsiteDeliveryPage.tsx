@@ -32,7 +32,7 @@ export default function WebsiteDeliveryPage() {
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
-        const savedDraft = localStorage.getItem('delivery_branch_draft');
+        const savedDraft = localStorage.getItem('mobile_delivery_branch_draft');
         if (savedDraft) {
             try {
                 setNewBranch(JSON.parse(savedDraft));
@@ -42,13 +42,13 @@ export default function WebsiteDeliveryPage() {
 
     useEffect(() => {
         // Only save if there's actual content to avoid saving empty resets
-        if (newBranch.city || newBranch.coverage_area || newBranch.shipping_fee) {
-            localStorage.setItem('delivery_branch_draft', JSON.stringify(newBranch));
+        if (newBranch.city || newBranch.coverage_area || (newBranch.shipping_fee !== '' && newBranch.shipping_fee !== 0)) {
+            localStorage.setItem('mobile_delivery_branch_draft', JSON.stringify(newBranch));
         }
     }, [newBranch]);
 
     const clearDraft = () => {
-        localStorage.removeItem('delivery_branch_draft');
+        localStorage.removeItem('mobile_delivery_branch_draft');
     };
 
     useEffect(() => { fetchBranches(); }, []);
