@@ -273,6 +273,7 @@ const ProductDetail = () => {
             selectedColor,
             selectedSize,
             quantity: quantity,
+            ad_id: product.ad_id, // Capture the ad assigned to this product
             image: combinedMedia.find(m => m.type === 'image')?.image_url || product.image
         };
         
@@ -860,15 +861,27 @@ const ProductDetail = () => {
                     className="btn btn-primary"
                     style={{
                         flex: 1,
-                        fontSize: '1rem',
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.9rem',
                         fontWeight: '800',
                         borderRadius: '12px',
                         backgroundColor: product.is_sold_out ? '#94a3b8' : 'var(--primary-red)',
                         border: 'none',
-                        cursor: product.is_sold_out ? 'not-allowed' : 'pointer'
+                        cursor: product.is_sold_out ? 'not-allowed' : 'pointer',
+                        lineHeight: '1.2',
+                        padding: '4px 0'
                     }}
                 >
-                    {product.is_sold_out ? 'Sold Out' : (product.is_prebook ? 'Pre-Book' : 'Buy Now')}
+                    {product.is_sold_out ? 'Sold Out' : (
+                        <>
+                            <span style={{ fontSize: '0.95rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
+                            <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>Rs. {activePrice.toLocaleString()}</span>
+                        </>
+                    )}
                 </button>
             </div>
 
@@ -1023,7 +1036,12 @@ const ProductDetail = () => {
                                 }}
                             >
                                 {isSelectionComplete() 
-                                    ? (pickerAction === 'buy' ? (product.is_prebook ? 'Pre-Book Now' : 'Proceed to Buy') : 'Add to Cart') 
+                                    ? (pickerAction === 'buy' ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
+                                            <span style={{ fontSize: '1rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
+                                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>Rs. {(activePrice * quantity).toLocaleString()}</span>
+                                        </div>
+                                    ) : 'Add to Cart') 
                                     : 'Please Select All Options'}
                             </button>
                         </div>

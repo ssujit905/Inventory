@@ -5,7 +5,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown, Globe } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown, Globe, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -42,6 +42,7 @@ type Sale = {
     sold_amount?: number | null;
     return_cost?: number | null;
     ad_id?: string | null;
+    ad?: { description: string } | null;
     created_at: string;
     // We'll derive products from sale_items
     items?: SaleItem[];
@@ -194,7 +195,8 @@ export default function SalesPage() {
                 website_orders!sale_id(
                     id,
                     website_order_items(sku, quantity)
-                )
+                ),
+                ad:expenses!ad_id(description)
             `)
             .order('created_at', { ascending: false })
             .limit(100);
@@ -1046,6 +1048,23 @@ export default function SalesPage() {
                                         />
                                     </div>
 
+                                    <div className="sm:col-span-2 space-y-1.5 pt-1">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                                            <Zap size={10} className="text-amber-500 fill-amber-500" />
+                                            Ads Attribution <span className="text-[9px] font-normal lowercase">(Optional)</span>
+                                        </label>
+                                        <select
+                                            value={adId}
+                                            onChange={e => setAdId(e.target.value)}
+                                            className="w-full px-4 py-3 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100/50 dark:border-amber-900/20 focus:border-amber-500/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        >
+                                            <option value="">-- No Ad Assigned --</option>
+                                            {adsOptions.map(ad => (
+                                                <option key={ad.id} value={ad.id}>{ad.description}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
                                     {/* Products Selection Section - Multi Product */}
                                     <div className="sm:col-span-2 space-y-4">
                                         <div className="flex items-center justify-between px-1">
@@ -1342,6 +1361,20 @@ export default function SalesPage() {
                                             {viewSale.phone1}{viewSale.phone2 ? ` / ${viewSale.phone2}` : ''}
                                         </p>
                                     </div>
+                                    
+                                    {viewSale.ad?.description && (
+                                        <div className="col-span-full bg-amber-50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-black text-amber-600/70 dark:text-amber-400/50 uppercase tracking-widest">Marketing Attribution</p>
+                                                <p className="text-sm font-black text-amber-700 dark:text-amber-300 uppercase mt-0.5">
+                                                    {viewSale.ad.description}
+                                                </p>
+                                            </div>
+                                            <div className="h-10 w-10 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
+                                                <Zap size={20} fill="white" stroke="none" />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div>

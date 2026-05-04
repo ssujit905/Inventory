@@ -78,6 +78,7 @@ export const ProductProvider = ({ children }) => {
                         sizes: p.sizes || '',
                         sold: p.sold_count,
                         sold_count: p.sold_count,
+                        ad_id: p.ad_id, // Ensure ad_id is available in the context
                         variations: productVariants
                     };
                 });

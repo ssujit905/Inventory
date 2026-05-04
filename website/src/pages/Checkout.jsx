@@ -212,7 +212,8 @@ const Checkout = () => {
                 p_shipping_fee: shippingFee,
                 p_total_amount: grandTotal,
                 p_items: orderItems,
-                p_coins_used: appliedCoinDiscount
+                p_coins_used: appliedCoinDiscount,
+                p_ad_id: checkoutItems[0]?.ad_id || null
             });
 
             setCheckoutError(null);

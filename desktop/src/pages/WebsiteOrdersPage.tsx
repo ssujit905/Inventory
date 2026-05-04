@@ -129,7 +129,8 @@ export default function WebsiteOrdersPage() {
                 recorded_by: profile.id,
                 notes: `WEB ORDER: ${selectedOrderForPush.order_number}`,
                 product_id: firstPhysicalId,
-                quantity: totalQty
+                quantity: totalQty,
+                ad_id: selectedOrderForPush.ad_id || null // Pass the ad source to the sales record
             };
 
             let newSale: any = null;

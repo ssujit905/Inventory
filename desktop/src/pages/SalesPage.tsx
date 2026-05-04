@@ -4,7 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, FileDown, Globe } from 'lucide-react';
+import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, FileDown, Globe, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -181,7 +181,8 @@ export default function SalesPage() {
                         website_orders!sale_id(
                             id,
                             website_order_items(sku, quantity)
-                        )
+                        ),
+                        ad:expenses!ad_id(description)
                     `)
                     .order('created_at', { ascending: false })
                     .limit(100)
@@ -826,7 +827,7 @@ export default function SalesPage() {
                                                     </span>
                                                 </div>
                                                 <div className="md:col-span-2 min-w-0 pr-2">
-                                                    <div className="flex items-center gap-1.5">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
                                                         <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
                                                         {sale.is_website && (
                                                             <div className="flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-md border border-sky-100 dark:border-sky-800 animate-pulse">
@@ -1305,6 +1306,19 @@ export default function SalesPage() {
                                             {viewSale.phone1}{viewSale.phone2 ? ` / ${viewSale.phone2}` : ''}
                                         </p>
                                     </div>
+                                    {viewSale.ad?.description && (
+                                        <div className="col-span-full bg-amber-50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-black text-amber-600/70 dark:text-amber-400/50 uppercase tracking-widest">Marketing Attribution</p>
+                                                <p className="text-sm font-black text-amber-700 dark:text-amber-300 uppercase mt-0.5">
+                                                    {viewSale.ad.description}
+                                                </p>
+                                            </div>
+                                            <div className="h-10 w-10 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
+                                                <Zap size={20} fill="white" stroke="none" />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div>

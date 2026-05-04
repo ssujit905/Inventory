@@ -48,6 +48,7 @@ interface WebsiteProduct {
     sold_count: number;
     created_at: string;
     video_url?: string | null;
+    ad_id?: string | null;
     website_product_images: ProductImage[];
 }
 
@@ -65,6 +66,7 @@ export default function WebsiteProductsPage() {
     const [variants, setVariants] = useState<ProductVariant[]>([]);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const [adsOptions, setAdsOptions] = useState<any[]>([]);
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
     const [videoProgress, setVideoProgress] = useState<number | null>(null);
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
@@ -78,6 +80,7 @@ export default function WebsiteProductsPage() {
         sizes: '',
         images: [] as ProductImage[],
         video_url: '',
+        ad_id: '' as string | null,
         video_file: undefined as File | undefined,
         video_progress: undefined as number | undefined
     };
@@ -152,6 +155,13 @@ export default function WebsiteProductsPage() {
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
 
+        // Fetch Ads Options
+        const { data: adsData } = await supabase
+            .from('expenses')
+            .select('id, description')
+            .eq('category', 'ads');
+        setAdsOptions(adsData || []);
+
         setLoading(false);
     };
 
@@ -200,6 +210,7 @@ export default function WebsiteProductsPage() {
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
             video_url: p.video_url || '',
+            ad_id: p.ad_id || '',
             video_file: undefined,
             video_progress: undefined
         });
@@ -268,6 +279,7 @@ export default function WebsiteProductsPage() {
                 is_prebook: form.is_prebook,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
+                ad_id: form.ad_id || null,
                 updated_at: new Date().toISOString()
             };
 
@@ -666,6 +678,23 @@ export default function WebsiteProductsPage() {
                                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Delivery Days</label>
                                         <input value={form.delivery_days} onChange={e => setForm(f => ({ ...f, delivery_days: e.target.value }))} placeholder="2-4" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
                                     </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                        Ads Attribution <span className="text-[10px] font-normal text-gray-400 capitalize">(Optional)</span>
+                                    </label>
+                                    <select 
+                                        value={form.ad_id || ''} 
+                                        onChange={e => setForm(f => ({ ...f, ad_id: e.target.value || null }))} 
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                    >
+                                        <option value="">-- No Ad Assigned --</option>
+                                        {adsOptions.map(ad => (
+                                            <option key={ad.id} value={ad.id}>{ad.description}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-gray-400 mt-1 font-medium italic">Assigning an ad here will automatically attribute all website orders for this product to that ad campaign.</p>
                                 </div>
 
                                 <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2">
