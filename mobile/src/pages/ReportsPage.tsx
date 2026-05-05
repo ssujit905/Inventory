@@ -368,7 +368,8 @@ export default function ReportsPage() {
                 return {
                     name: format(month, 'MMM'),
                     grossProfit: gp,
-                    netProfit: gp - ops
+                    netProfit: gp - ops,
+                    operations: ops
                 };
             });
 
@@ -484,6 +485,38 @@ export default function ReportsPage() {
                                     />
                                     <Area type="monotone" dataKey="grossProfit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#profitGradient)" name="Gross Profit" />
                                     <Area type="monotone" dataKey="netProfit" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#netProfitGradient)" name="Net Profit" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Operational Expenses Trend */}
+                    <div className="bg-white dark:bg-gray-900 rounded-[2rem] p-6 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+                        <div className="mb-6 flex flex-col gap-2">
+                            <h3 className="text-base font-black text-gray-900 dark:text-gray-100 tracking-tight">Operational Cost Trend</h3>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-sm" />
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Op Cost</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[240px] w-full -ml-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={grossProfitMonthlyData}>
+                                    <defs>
+                                        <linearGradient id="opsGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.12} />
+                                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.2} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
+                                    />
+                                    <Area type="monotone" dataKey="operations" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#opsGradient)" name="Op Cost" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>

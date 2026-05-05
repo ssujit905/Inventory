@@ -76,10 +76,12 @@ export default function AdminDashboard() {
             const todayStr = format(now, 'yyyy-MM-dd');
             const yearStart = startOfYear(now);
 
-            const [salesRes, productsRes, websiteOrdersRes] = await Promise.all([
+            const [salesRes, productsRes, websiteOrdersRes, totalDeliveredCount, totalReturnedCount, processingRes, sentRes, monthDeliveredRes, monthReturnedRes] = await Promise.all([
                 supabase
                     .from('sales')
-                    .select('parcel_status, order_date'),
+                    .select('parcel_status, order_date')
+                    .gte('order_date', format(yearStart, 'yyyy-MM-dd'))
+                    .limit(10000), 
                 supabase
                     .from('products')
                     .select(`
@@ -97,7 +99,35 @@ export default function AdminDashboard() {
                 supabase
                     .from('website_orders')
                     .select('id, status')
-                    .or('status.eq.processing,status.eq.pending')
+                    .or('status.eq.processing,status.eq.pending'),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'delivered'),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'returned'),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'processing'),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'sent'),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'delivered')
+                    .gte('order_date', monthStartStr)
+                    .lte('order_date', monthEndStr),
+                supabase
+                    .from('sales')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('parcel_status', 'returned')
+                    .gte('order_date', monthStartStr)
+                    .lte('order_date', monthEndStr)
             ]);
 
             if (salesRes.error) throw salesRes.error;
@@ -105,11 +135,16 @@ export default function AdminDashboard() {
 
             setWebsiteOrdersCount(websiteOrdersRes.data?.length || 0);
 
-            const globalSales = salesRes.data;
+            const globalSales = salesRes.data || [];
             const productsData = productsRes.data;
 
-            const totalDelivered = globalSales?.filter(s => s.parcel_status === 'delivered').length || 0;
-            const totalReturns = globalSales?.filter(s => s.parcel_status === 'returned').length || 0;
+            // Use exact counts from DB for totals
+            const totalDelivered = totalDeliveredCount.count || 0;
+            const totalReturns = totalReturnedCount.count || 0;
+            const processingCount = processingRes.count || 0;
+            const sentCount = sentRes.count || 0;
+            const thisMonthDelivered = monthDeliveredRes.count || 0;
+            const thisMonthReturns = monthReturnedRes.count || 0;
 
             const productRemaining = (productsData || []).map((p: any) => {
                 const totalRemaining = (p.product_lots || []).reduce((sum: number, lot: any) => {
@@ -135,18 +170,26 @@ export default function AdminDashboard() {
             const lowStockCount = productRemaining.filter((p: any) => p.remaining <= p.minStock).length;
             const outOfStockCount = productRemaining.filter((p: any) => p.remaining <= 0).length;
 
-            const monthSales = globalSales?.filter(s =>
-                s.order_date >= monthStartStr && s.order_date <= monthEndStr
-            ) || [];
+            // Robust MTD filtering using JS date objects to handle varying DB formats
+            const monthSales = (globalSales || []).filter(s => {
+                if (!s.order_date) return false;
+                try {
+                    const sDate = new Date(s.order_date);
+                    return sDate >= startOfMonth(now) && sDate <= endOfMonth(now);
+                } catch {
+                    return false;
+                }
+            });
 
-            const thisMonthDelivered = monthSales.filter(s => s.parcel_status === 'delivered').length || 0;
-            const thisMonthReturns = monthSales.filter(s => s.parcel_status === 'returned').length || 0;
-            const processingCount = globalSales?.filter(s => s.parcel_status === 'processing').length || 0;
-            const sentCount = globalSales?.filter(s => s.parcel_status === 'sent').length || 0;
-            const pendingTotal = processingCount + sentCount;
+            // Month-to-date counts (already declared above via DB query)
+            // thisMonthDelivered = monthSales.filter(s => s.parcel_status === 'delivered').length;
+            // thisMonthReturns = monthSales.filter(s => s.parcel_status === 'returned').length;
+            // Overall Success Rate (Lifetime) based on Delivered vs Returned
+            const totalHandled = totalDelivered + totalReturns;
+            const overallSuccessRate = totalHandled > 0 ? (totalDelivered / totalHandled) * 100 : 0;
             const returnRate = totalDelivered > 0 ? (totalReturns / totalDelivered) * 100 : 0;
-            const monthHandled = thisMonthDelivered + thisMonthReturns;
-            const deliverySuccessRate = monthHandled > 0 ? (thisMonthDelivered / monthHandled) * 100 : 0;
+
+            const pendingTotal = processingCount + sentCount;
 
             const last30StartStr = format(subDays(now, 29), 'yyyy-MM-dd');
             const { data: movementRows, error: movementError } = await supabase
@@ -249,7 +292,7 @@ export default function AdminDashboard() {
                 lowStock: lowStockCount,
                 outOfStock: outOfStockCount,
                 returnRate,
-                deliverySuccessRate
+                deliverySuccessRate: overallSuccessRate
             });
             setChartData(trendData);
             setMonthlySalesCount(yearlyData);
@@ -345,9 +388,9 @@ export default function AdminDashboard() {
                                 accent="bg-amber-500"
                             />
                             <StatCard
-                                title="MTD Success Rate"
+                                title="Overall Success"
                                 value={`${stats.deliverySuccessRate.toFixed(1)}%`}
-                                desc="Delivered / (Delivered + Returned)"
+                                desc="Lifetime Success Rate"
                                 icon={<TrendingUp size={20} strokeWidth={1.5} />}
                                 accent="bg-emerald-500"
                             />

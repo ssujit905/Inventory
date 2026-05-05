@@ -393,12 +393,13 @@ export default function ReportsPage() {
 
             const gpTrendData = last12Months.map(month => {
                 const key = format(month, 'yyyy-MM');
-                const gp = monthProfitMap.get(key) || 0;
+                    const gp = monthProfitMap.get(key) || 0;
                 const ops = monthOpsMap.get(key) || 0;
                 return {
                     name: format(month, 'MMM'),
                     grossProfit: gp,
-                    netProfit: gp - ops
+                    netProfit: gp - ops,
+                    operations: ops
                 };
             });
 
@@ -571,6 +572,41 @@ export default function ReportsPage() {
                                     />
                                     <Area type="monotone" dataKey="grossProfit" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#profitGradient)" name="Gross Profit" />
                                     <Area type="monotone" dataKey="netProfit" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#netProfitGradient)" name="Net Profit" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Operational Expenses Trend */}
+                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden lg:col-span-2">
+                        <div className="mb-8 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 font-outfit">Operational Expenditure Trend</h3>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Monthly Operations Cost</p>
+                            </div>
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-2 w-2 rounded-full bg-amber-500 shadow-sm shadow-amber-500/40" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Op Costs</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-[350px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={grossProfitMonthlyData}>
+                                    <defs>
+                                        <linearGradient id="opsGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.12} />
+                                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Area type="monotone" dataKey="operations" stroke="#f59e0b" strokeWidth={4} fillOpacity={1} fill="url(#opsGradient)" name="Op Cost" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
