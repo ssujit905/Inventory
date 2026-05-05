@@ -47,7 +47,7 @@ const SETTING_GROUPS = [
         keys: [
             { key: 'facebook_url', label: 'Facebook URL', placeholder: 'https://facebook.com/...' },
             { key: 'instagram_url', label: 'Instagram URL', placeholder: 'https://instagram.com/...' },
-            { key: 'twitter_url', label: 'Twitter / X URL', placeholder: 'https://twitter.com/...' },
+            { key: 'tiktok_url', label: 'TikTok URL', placeholder: 'https://tiktok.com/@...' },
         ]
     },
     {

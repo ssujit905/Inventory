@@ -1,0 +1,14 @@
+src/App.tsx(78,13): error TS2322: Type '{ children: Element; future: { v7_startTransition: boolean; v7_relativeSplatPath: boolean; }; initialEntries: string[]; }' is not assignable to type 'IntrinsicAttributes & MemoryRouterProps'.
+  Property 'future' does not exist on type 'IntrinsicAttributes & MemoryRouterProps'.
+src/pages/ReportsPage.tsx(23,9): error TS2353: Object literal may only specify known properties, and 'totalRevenue' does not exist in type 'FinanceStats | (() => FinanceStats)'.
+src/pages/ReportsPage.tsx(306,17): error TS2353: Object literal may only specify known properties, and 'totalRevenue' does not exist in type 'SetStateAction<FinanceStats>'.
+src/pages/ReportsPage.tsx(434,38): error TS2339: Property 'totalRevenue' does not exist on type 'FinanceStats'.
+src/pages/ReportsPage.tsx(440,38): error TS2339: Property 'totalCOGS' does not exist on type 'FinanceStats'.
+src/pages/ReportsPage.tsx(447,38): error TS2339: Property 'totalExpenses' does not exist on type 'FinanceStats'.
+src/pages/ReportsPage.tsx(465,38): error TS2339: Property 'grossProfit' does not exist on type 'FinanceStats'.
+src/pages/WebsiteProductsPage.tsx(145,17): error TS2345: Argument of type '{ title: string; description: string; price: string; original_price: string; category: string; city: string; delivery_days: string; is_active: boolean; is_featured: boolean; show_shopinepal: boolean; ... 5 more ...; video_url: string; }' is not assignable to parameter of type 'SetStateAction<{ title: string; description: string; price: string; original_price: string; category: string; city: string; delivery_days: string; is_active: boolean; is_featured: boolean; show_shopinepal: boolean; ... 7 more ...; video_progress: number | undefined; }>'.
+  Type '{ title: string; description: string; price: string; original_price: string; category: string; city: string; delivery_days: string; is_active: boolean; is_featured: boolean; show_shopinepal: boolean; ... 5 more ...; video_url: string; }' is missing the following properties from type '{ title: string; description: string; price: string; original_price: string; category: string; city: string; delivery_days: string; is_active: boolean; is_featured: boolean; show_shopinepal: boolean; ... 7 more ...; video_progress: number | undefined; }': video_file, video_progress
+src/pages/WebsiteProductsPage.tsx(192,17): error TS2353: Object literal may only specify known properties, and 'onUploadProgress' does not exist in type 'FileOptions'.
+src/pages/WebsiteProductsPage.tsx(192,36): error TS7006: Parameter 'progress' implicitly has an 'any' type.
+src/pages/WebsiteProductsPage.tsx(238,25): error TS2353: Object literal may only specify known properties, and 'onUploadProgress' does not exist in type 'FileOptions'.
+src/pages/WebsiteProductsPage.tsx(238,44): error TS7006: Parameter 'progress' implicitly has an 'any' type.

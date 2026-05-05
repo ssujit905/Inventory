@@ -37,6 +37,7 @@ type Sale = {
     sold_amount?: number | null;
     return_cost?: number | null;
     ad_id?: string | null;
+    ad?: { description: string } | null;
     created_at: string;
     is_website?: boolean;
     // We'll derive products from sale_items

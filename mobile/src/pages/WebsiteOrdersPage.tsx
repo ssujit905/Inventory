@@ -234,22 +234,28 @@ export default function WebsiteOrdersPage() {
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
                     <button
                         onClick={() => setFilterStatus('all')}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${filterStatus === 'all' ? 'bg-primary text-white shadow-md' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
+                        className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${filterStatus === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
                     >
-                        All
+                        All <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${filterStatus === 'all' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'}`}>{orders.length}</span>
                     </button>
                     {STATUS_ORDER.map(s => {
                         const cfg = STATUS_CONFIG[s];
                         const isActive = filterStatus === s;
+                        const count = counts[s] || 0;
+                        const isAlert = s === 'processing' && count > 0;
+                        
                         return (
                             <button
                                 key={s}
                                 onClick={() => setFilterStatus(isActive ? 'all' : s)}
-                                className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${isActive ? cfg.color + ' shadow-md border-transparent' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
+                                className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 border ${isActive ? cfg.color + ' shadow-lg border-transparent' : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-100 dark:border-gray-800'}`}
                             >
-                                <span className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-current' : 'bg-gray-300 dark:bg-gray-700'}`} />
                                 {cfg.label}
-                                <span className="opacity-60">({counts[s] || 0})</span>
+                                {count > 0 && (
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${isAlert ? 'bg-rose-500 text-white animate-pulse' : (isActive ? 'bg-current opacity-20 text-white' : 'bg-gray-100 dark:bg-gray-800')}`}>
+                                        {count}
+                                    </span>
+                                )}
                             </button>
                         );
                     })}

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Facebook, Instagram, Twitter, Mail, Phone, MapPin, Youtube, ExternalLink } from 'lucide-react';
+import { Facebook, Instagram, Mail, Phone, MapPin, Youtube, ExternalLink } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 
 const Footer = () => {
@@ -33,7 +33,14 @@ const Footer = () => {
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
                         <SocialIcon href={settings.facebook_url} icon={<Facebook size={18} />} />
                         <SocialIcon href={settings.instagram_url} icon={<Instagram size={18} />} />
-                        <SocialIcon href={settings.twitter_url} icon={<Twitter size={18} />} />
+                        <SocialIcon 
+                            href={settings.tiktok_url} 
+                            icon={
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                    <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.17-2.89-.6-4.13-1.47V15.5c0 1.93-.72 3.84-2.03 5.25-1.31 1.41-3.23 2.32-5.18 2.22-2.18-.11-4.22-1.39-5.32-3.3-1.11-1.91-1.11-4.38-.05-6.32 1.06-1.94 3.07-3.32 5.26-3.48v4.11c-.71.07-1.42.34-1.96.84-.54.5-.88 1.2-.95 1.93-.07.72.13 1.48.56 2.07.43.59 1.08.97 1.78 1.07.71.1 1.46-.07 2.05-.49.59-.42.98-1.07 1.1-1.8.11-.73.11-1.47.11-2.2V0h.01z"/>
+                                </svg>
+                            } 
+                        />
                     </div>
                 </div>
 

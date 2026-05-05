@@ -188,7 +188,7 @@ const MyOrders = () => {
     }, []);
 
     const fetchBranches = async () => {
-        const { data } = await supabase.from('website_delivery_branches').select('city');
+        const { data } = await supabase.from('website_delivery_branches').select('city, delivery_time');
         if (data) setBranches(data);
     };
 
@@ -576,7 +576,10 @@ const MyOrders = () => {
                                     
                                     {['pending', 'processing'].includes(order.status?.toLowerCase()) && (
                                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-gray)' }}>Expect delivery in 2-3 days</span>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-gray)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <Truck size={14} className="text-primary-blue" />
+                                                Expect delivery in {branches.find(b => b.city === order.city)?.delivery_time || '2-4 Days'}
+                                            </span>
                                             <button 
                                                 onClick={() => { setCancellingOrderId(order.id); setShowCancelModal(true); setCancelReason(''); }}
                                                 className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem', background: 'white', color: '#ef4444', border: '1px solid #fecaca', fontWeight: '800' }}>

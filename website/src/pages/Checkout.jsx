@@ -486,12 +486,24 @@ const Checkout = () => {
                                             )}
 
                                             {/* Coverage area info badge */}
-                                            {selectedBranch && selectedBranch.coverage_area && (
-                                                <div style={{ marginTop: '0.625rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0f9ff', borderRadius: '0.75rem', border: '1px solid #bae6fd' }}>
-                                                    <Info size={14} color="#0284c7" style={{ flexShrink: 0 }} />
-                                                    <span style={{ fontSize: '0.8rem', color: '#0369a1', fontWeight: '600' }}>
-                                                        Coverage: {selectedBranch.coverage_area}
-                                                    </span>
+                                            {selectedBranch && (
+                                                <div style={{ marginTop: '0.625rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                    {selectedBranch.coverage_area && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0f9ff', borderRadius: '0.75rem', border: '1px solid #bae6fd' }}>
+                                                            <Info size={14} color="#0284c7" style={{ flexShrink: 0 }} />
+                                                            <span style={{ fontSize: '0.8rem', color: '#0369a1', fontWeight: '600' }}>
+                                                                Coverage: {selectedBranch.coverage_area}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {selectedBranch.delivery_time && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.875rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                                                            <Truck size={14} color="#3b82f6" style={{ flexShrink: 0 }} />
+                                                            <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: '600' }}>
+                                                                Est. Delivery: {selectedBranch.delivery_time}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

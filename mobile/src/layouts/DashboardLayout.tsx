@@ -48,7 +48,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             const { count: orders } = await supabase
                 .from('website_orders')
                 .select('id', { count: 'exact', head: true })
-                .eq('status', 'pending');
+                .eq('status', 'processing');
             setPendingOrdersCount(orders || 0);
 
             const { count: returns } = await supabase
@@ -67,11 +67,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             .subscribe();
 
         return () => {
-            setTimeout(() => {
-                if (channel && (channel as any).state !== 'joining') {
-                    supabase.removeChannel(channel).catch(() => {});
-                }
-            }, 100);
+            supabase.removeChannel(channel);
         };
     }, [role]);
 
@@ -201,7 +197,12 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         onClick={() => setIsMenuOpen(true)}
                         className="p-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors"
                     >
-                        <Menu size={24} strokeWidth={2.5} />
+                        <div className="relative">
+                            <Menu size={24} strokeWidth={2.5} />
+                            {(pendingCostCount > 0 || pendingOrdersCount > 0 || pendingReturnsCount > 0) && (
+                                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
+                            )}
+                        </div>
                     </button>
                 </div>
 

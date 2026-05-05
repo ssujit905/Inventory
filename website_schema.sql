@@ -93,7 +93,7 @@ INSERT INTO website_settings (key, value) VALUES
     ('store_address', 'Kathmandu, Nepal'),
     ('facebook_url', '#'),
     ('instagram_url', '#'),
-    ('twitter_url', '#')
+    ('tiktok_url', '#')
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================

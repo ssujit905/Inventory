@@ -124,14 +124,22 @@ export default function WebsiteReturnsPage() {
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
                     {(['all', 'return', 'exchange', 'message'] as const).map((tab) => {
                         const isActive = activeTab === tab;
-                        const count = tab === 'all' ? requests.length : requests.filter(r => r.type === tab).length;
+                        const matchingRequests = tab === 'all' ? requests : requests.filter(r => r.type === tab);
+                        const count = matchingRequests.length;
+                        const pendingCount = matchingRequests.filter(r => r.status === 'pending').length;
+
                         return (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`flex-shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${isActive ? 'bg-primary text-white shadow-md' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
+                                className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 border ${isActive ? 'bg-primary text-white shadow-lg shadow-primary/20 border-transparent' : 'bg-white dark:bg-gray-900 text-gray-400 border border-gray-100 dark:border-gray-800'}`}
                             >
-                                {tab} <span className="opacity-60">({count})</span>
+                                {tab}
+                                {count > 0 && (
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black ${pendingCount > 0 ? 'bg-rose-500 text-white animate-pulse' : (isActive ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800')}`}>
+                                        {count}
+                                    </span>
+                                )}
                             </button>
                         );
                     })}

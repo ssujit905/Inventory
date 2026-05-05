@@ -35,6 +35,7 @@ interface Order {
     website_order_items: OrderItem[];
     sale_id?: string | null;
     sales?: { parcel_status: string } | null;
+    ad_id?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {

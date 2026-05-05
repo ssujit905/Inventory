@@ -4,7 +4,7 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
-    Package, Loader2, Check, AlertTriangle, Globe, Video
+    Package, Loader2, Check, AlertTriangle, Globe, Video, Zap
 } from 'lucide-react';
 
 interface ProductVariant {
@@ -47,6 +47,7 @@ interface WebsiteProduct {
     sizes: string;
     sold_count: number;
     created_at: string;
+    ad_id?: string | null;
     video_url?: string | null;
     website_product_images: ProductImage[];
 }
@@ -68,6 +69,7 @@ export default function WebsiteProductsPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
     const [videoProgress, setVideoProgress] = useState<number | null>(null);
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
+    const [adsOptions, setAdsOptions] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const emptyForm = {
@@ -79,7 +81,8 @@ export default function WebsiteProductsPage() {
         images: [] as ProductImage[],
         video_url: '',
         video_file: undefined as File | undefined,
-        video_progress: undefined as number | undefined
+        video_progress: undefined as number | undefined,
+        ad_id: ''
     };
     const [form, setForm] = useState(emptyForm);
 
@@ -127,7 +130,19 @@ export default function WebsiteProductsPage() {
         localStorage.removeItem('mobile_web_product_form_open');
     };
 
-    useEffect(() => { fetchProducts(); }, []);
+    useEffect(() => { 
+        fetchProducts(); 
+        fetchAds();
+    }, []);
+
+    const fetchAds = async () => {
+        const { data } = await supabase
+            .from('expenses')
+            .select('id, description')
+            .eq('category', 'ads')
+            .order('description');
+        if (data) setAdsOptions(data);
+    };
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
@@ -202,7 +217,8 @@ export default function WebsiteProductsPage() {
             is_prebook: p.is_prebook,
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
-            video_url: p.video_url || ''
+            video_url: p.video_url || '',
+            ad_id: (p as any).ad_id || ''
         });
         setVariants([]);
         fetchVariants(p.id);
@@ -269,6 +285,7 @@ export default function WebsiteProductsPage() {
                 is_prebook: form.is_prebook,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
+                ad_id: form.ad_id || null,
                 updated_at: new Date().toISOString()
             };
 
@@ -683,6 +700,23 @@ export default function WebsiteProductsPage() {
                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Delivery EST</label>
                                     <input value={form.delivery_days} onChange={e => setForm(f => ({ ...f, delivery_days: e.target.value }))} placeholder="2-4 Days" className="w-full h-11 px-4 rounded-xl border border-transparent bg-gray-50 dark:bg-gray-800/50 text-sm font-medium focus:bg-white dark:focus:bg-gray-800 focus:border-primary/30 outline-none transition-all" />
                                 </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5 text-amber-500">
+                                    <Zap size={10} className="fill-amber-500" />
+                                    Ads Attribution <span className="text-[8px] font-normal lowercase">(Optional)</span>
+                                </label>
+                                <select 
+                                    value={form.ad_id} 
+                                    onChange={e => setForm(f => ({ ...f, ad_id: e.target.value }))} 
+                                    className="w-full h-11 px-4 rounded-xl border border-transparent bg-amber-50/50 dark:bg-amber-900/10 text-sm font-bold text-gray-900 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-800 focus:border-amber-500/30 outline-none transition-all"
+                                >
+                                    <option value="">-- No Ad Assigned --</option>
+                                    {adsOptions.map(ad => (
+                                        <option key={ad.id} value={ad.id}>{ad.description}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div className="flex flex-wrap gap-x-6 gap-y-4 pt-2">
