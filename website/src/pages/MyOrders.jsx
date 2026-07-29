@@ -5,7 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import { supabase } from '../lib/supabase';
 import { 
     Package, Phone, Lock, ChevronRight, 
-    Truck, CheckCircle, Clock, AlertCircle, ShoppingBag,
+    Truck, CheckCircle, Clock, AlertCircle, ShoppingBag, Coins,
     Calendar, MapPin, Info, XCircle, X,
     Star, RotateCcw, Camera, Trash2, CheckCircle2, Loader2,
     ArrowLeft, Share2
@@ -13,13 +13,14 @@ import {
 import { useNotification } from '../context/NotificationContext';
 
 const MyOrders = () => {
-    const { customer, login, logout, register, updateProfile, loading: authLoading, refreshCustomer } = useCustomer();
+    const { customer, login, logout, register, updateProfile, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
     const { settings } = useSettings();
     const { showNotification } = useNotification();
     const location = useLocation();
     const navigate = useNavigate();
     
     const queryTab = new URLSearchParams(location.search).get('tab');
+    const querySetupPin = new URLSearchParams(location.search).get('setup-pin');
     const [activeTab, setActiveTab] = useState(queryTab || 'orders');
     const [activeStatus, setActiveStatus] = useState('Processing');
     const [isRegistering, setIsRegistering] = useState(false);
@@ -66,13 +67,20 @@ const MyOrders = () => {
     const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
     const [returnSuccess, setReturnSuccess] = useState(false);
 
-    // Change PIN State
+    // Change PIN & Settings State
     const [showChangePinModal, setShowChangePinModal] = useState(false);
+    const [settingsTab, setSettingsTab] = useState('pin'); // 'pin' | 'address'
     const [currentPin, setCurrentPin] = useState('');
     const [newPin, setNewPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
     const [pinLoading, setPinLoading] = useState(false);
     const [pinMsg, setPinMsg] = useState({ text: '', type: '' });
+
+    // Address State
+    const [addressCity, setAddressCity] = useState('');
+    const [addressStreet, setAddressStreet] = useState('');
+    const [savingAddress, setSavingAddress] = useState(false);
+    const [addressMsg, setAddressMsg] = useState({ text: '', type: '' });
 
     // Reset PIN State
     const [showResetModal, setShowResetModal] = useState(false);
@@ -83,18 +91,63 @@ const MyOrders = () => {
     const [resetLoading, setResetLoading] = useState(false);
     const [resetError, setResetError] = useState('');
 
-    // Listen for header Settings icon click to open the Change PIN modal
+    // First-time buyer PIN setup (triggered by ?setup-pin=PHONE URL param)
+    const [showSetupPinModal, setShowSetupPinModal] = useState(false);
+    const [setupPinPhone, setSetupPinPhone] = useState('');
+    const [setupPinName, setSetupPinName] = useState('');
+    const [setupPinValue, setSetupPinValue] = useState('');
+    const [setupPinConfirm, setSetupPinConfirm] = useState('');
+    const [setupPinLoading, setSetupPinLoading] = useState(false);
+    const [setupPinError, setSetupPinError] = useState('');
+
+    // Sync customer address into state
+    useEffect(() => {
+        if (customer) {
+            setAddressCity(customer.city || '');
+            setAddressStreet(customer.address || '');
+        }
+    }, [customer]);
+
+    // Fetch delivery branches for Destination select
+    useEffect(() => {
+        const fetchBranches = async () => {
+            const { data } = await supabase
+                .from('website_delivery_branches')
+                .select('*')
+                .order('city', { ascending: true });
+            if (data && data.length > 0) {
+                setBranches(data);
+            }
+        };
+        fetchBranches();
+    }, []);
+
+    // Listen for header Settings icon click to open the Settings modal
     useEffect(() => {
         const openModal = () => {
             setShowChangePinModal(true);
+            setSettingsTab('pin');
             setPinMsg({ text: '', type: '' });
+            setAddressMsg({ text: '', type: '' });
             setCurrentPin('');
             setNewPin('');
             setConfirmPin('');
+            if (customer) {
+                setAddressCity(customer.city || '');
+                setAddressStreet(customer.address || '');
+            }
         };
         window.addEventListener('open-change-pin-modal', openModal);
         return () => window.removeEventListener('open-change-pin-modal', openModal);
-    }, []);
+    }, [customer]);
+
+    // Auto-trigger PIN setup modal when arriving from PaymentSuccess with ?setup-pin=PHONE
+    useEffect(() => {
+        if (querySetupPin && !customer) {
+            setSetupPinPhone(decodeURIComponent(querySetupPin));
+            setShowSetupPinModal(true);
+        }
+    }, [querySetupPin, customer]);
 
 
     const handleChangePin = async (e) => {
@@ -131,6 +184,41 @@ const MyOrders = () => {
             setPinMsg({ text: 'Failed to change PIN. Please try again.', type: 'error' });
         } finally {
             setPinLoading(false);
+        }
+    };
+
+    const handleSaveAddress = async (e) => {
+        e.preventDefault();
+        setAddressMsg({ text: '', type: '' });
+        if (!addressCity) {
+            setAddressMsg({ text: 'Please select a destination city.', type: 'error' });
+            return;
+        }
+        if (!addressStreet.trim()) {
+            setAddressMsg({ text: 'Please enter your street address.', type: 'error' });
+            return;
+        }
+
+        setSavingAddress(true);
+        try {
+            const res = await updateProfile({
+                address: addressStreet.trim(),
+                city: addressCity
+            });
+
+            if (res.success) {
+                setAddressMsg({ text: 'Address saved successfully!', type: 'success' });
+                showNotification('Default delivery address saved!', 'success');
+                setTimeout(() => {
+                    setShowChangePinModal(false);
+                }, 1200);
+            } else {
+                setAddressMsg({ text: res.error || 'Failed to save address', type: 'error' });
+            }
+        } catch (err) {
+            setAddressMsg({ text: err.message || 'Error saving address', type: 'error' });
+        } finally {
+            setSavingAddress(false);
         }
     };
 
@@ -346,13 +434,130 @@ const MyOrders = () => {
         }
     };
 
+    const handleSetupPin = async (e) => {
+        e.preventDefault();
+        setSetupPinError('');
+        if (!setupPinName.trim()) {
+            setSetupPinError('Please enter your full name.');
+            return;
+        }
+        if (setupPinValue.length !== 4) {
+            setSetupPinError('PIN must be exactly 4 digits.');
+            return;
+        }
+        if (setupPinValue !== setupPinConfirm) {
+            setSetupPinError('PINs do not match. Please try again.');
+            return;
+        }
+        setSetupPinLoading(true);
+        const res = await setupPin(setupPinPhone, setupPinValue, setupPinName.trim());
+        setSetupPinLoading(false);
+        if (!res.success) {
+            setSetupPinError(res.error || 'Failed to create account. Please try again.');
+        } else {
+            setShowSetupPinModal(false);
+            showNotification('🎉 Account created! Welcome to Shopy Nepal.', 'success', 5000);
+        }
+    };
+
     if (!customer) {
         return (
-            <div className="auth-container" style={{ minHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-                <div style={{ background: 'white', padding: '2.5rem', borderRadius: '2rem', width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: '900', marginBottom: '1.5rem', textAlign: 'center' }}>
-                        {isRegistering ? 'Join Shopy Nepal' : 'Welcome Back'}
-                    </h2>
+            <>
+                {/* ── PIN Setup Modal (first-time buyers) ─────────────────────── */}
+                {showSetupPinModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+                        <div style={{ background: 'white', borderRadius: '2rem', padding: '2.5rem', width: '100%', maxWidth: '420px', boxShadow: '0 30px 80px rgba(0,0,0,0.2)', position: 'relative', animation: 'slideUp 0.3s ease' }}>
+                            {/* Header */}
+                            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+                                <div style={{ margin: '0 auto 1.25rem', display: 'flex', justifyContent: 'center' }}>
+                                    <img
+                                        src="/logo.png"
+                                        alt="Shopy Nepal"
+                                        style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
+                                    />
+                                </div>
+                                <h2 style={{ fontWeight: '900', fontSize: '1.35rem', color: '#111827', margin: '0 0 0.4rem 0' }}>Set Your Account PIN</h2>
+                                <p style={{ color: '#64748b', fontSize: '0.875rem', lineHeight: '1.5' }}>
+                                    Choose a 4-digit PIN to access your orders anytime.
+                                </p>
+                                <div style={{ background: '#f0fdf4', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '0.6rem 1rem', marginTop: '0.75rem', display: 'inline-block' }}>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: '700', color: '#059669', margin: 0 }}>📱 Phone: {setupPinPhone}</p>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleSetupPin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#374151', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Full Name</label>
+                                    <input
+                                        type="text"
+                                        value={setupPinName}
+                                        onChange={e => setSetupPinName(e.target.value)}
+                                        placeholder="e.g. Ram Bahadur Thapa"
+                                        autoFocus
+                                        style={{ width: '100%', padding: '0.9rem 1.25rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '0.95rem', fontWeight: '600', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
+                                        onFocus={e => e.target.style.borderColor = '#ef4444'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#374151', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Choose PIN</label>
+                                    <input
+                                        type="password"
+                                        maxLength={4}
+                                        value={setupPinValue}
+                                        onChange={e => setSetupPinValue(e.target.value.replace(/\D/g, ''))}
+                                        placeholder="• • • •"
+                                        style={{ width: '100%', padding: '0.9rem 1.25rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1.5rem', fontWeight: '900', letterSpacing: '0.5em', textAlign: 'center', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
+                                        onFocus={e => e.target.style.borderColor = '#ef4444'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#374151', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Confirm PIN</label>
+                                    <input
+                                        type="password"
+                                        maxLength={4}
+                                        value={setupPinConfirm}
+                                        onChange={e => setSetupPinConfirm(e.target.value.replace(/\D/g, ''))}
+                                        placeholder="• • • •"
+                                        style={{ width: '100%', padding: '0.9rem 1.25rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1.5rem', fontWeight: '900', letterSpacing: '0.5em', textAlign: 'center', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
+                                        onFocus={e => e.target.style.borderColor = '#ef4444'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                                    />
+                                </div>
+
+                                {setupPinError && (
+                                    <p style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: '700', textAlign: 'center', background: '#fef2f2', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #fecaca' }}>{setupPinError}</p>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={setupPinLoading}
+                                    className="btn btn-primary"
+                                    style={{ padding: '1rem', borderRadius: '12px', fontWeight: '800', fontSize: '0.95rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                >
+                                    {setupPinLoading ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle2 size={18} /> Create My Account</>}
+                                </button>
+                            </form>
+
+                            <div style={{ marginTop: '1.25rem', textAlign: 'center' }}>
+                                <button
+                                    onClick={() => { setShowSetupPinModal(false); }}
+                                    style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.82rem', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                    Skip for now — I'll login later
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Normal Login / Register screen ──────────────────────────── */}
+                <div className="auth-container" style={{ minHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+                    <div style={{ background: 'white', padding: '2.5rem', borderRadius: '2rem', width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)' }}>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: '900', marginBottom: '1.5rem', textAlign: 'center' }}>
+                            {isRegistering ? 'Join Shopy Nepal' : 'Welcome Back'}
+                        </h2>
                     <form onSubmit={isRegistering ? handleRegister : handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {isRegistering && (
                             <input required className="form-input" placeholder="Full Name" value={regName} onChange={e => setRegName(e.target.value)} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '600' }} />
@@ -408,6 +613,7 @@ const MyOrders = () => {
                     </form>
                 </div>
             </div>
+        </>
         );
     }
 
@@ -433,81 +639,127 @@ const MyOrders = () => {
     const statuses = ['Processing', 'Sent', 'Delivered', 'Returned', 'Cancelled'];
 
     return (
-        <div className="section" style={{ background: '#f8fafc', minHeight: '90vh' }}>
+        <div className="section" style={{ background: '#f8fafc', minHeight: '90vh', paddingTop: '1rem', paddingBottom: '3.5rem' }}>
             <style>{`
                 @media (max-width: 768px) {
-                    .account-header-card {
+                    .account-header-card, .wallet-card {
                         margin-left: -1.25rem !important;
                         margin-right: -1.25rem !important;
                         border-radius: 0 !important;
+                    }
+                    .account-header-card {
                         margin-top: -1rem !important; /* Move it slightly up so it's closer to the header */
                     }
                 }
             `}</style>
             <div className="container">
+
                 {/* ── Account Header ── */}
                 <div className="account-header-card" style={{
                     background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                     borderRadius: '1.25rem',
-                    padding: '1.5rem',
-                    marginBottom: '1.5rem',
+                    padding: '0.85rem 1.25rem',
+                    marginBottom: '0.5rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '1rem',
+                    gap: '0.85rem',
                     color: 'white',
-                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.2)'
+                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.2)',
+                    position: 'relative',
+                    overflow: 'hidden'
                 }}>
+                    {/* bg glow */}
+                    <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(20px)', pointerEvents: 'none' }} />
+
                     {/* Avatar */}
                     <div style={{
-                        width: '56px', height: '56px', borderRadius: '50%',
-                        background: '#ffffff',
-                        color: 'var(--primary-red)',
+                        width: '44px', height: '44px', borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '2px solid rgba(255,255,255,0.35)',
+                        color: 'white',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '1.4rem', fontWeight: '900', flexShrink: 0,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        fontSize: '1.1rem', fontWeight: '900', flexShrink: 0
                     }}>
                         {(customer.name || 'U')[0].toUpperCase()}
                     </div>
 
                     {/* Name & Phone */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: '900', fontSize: '1.05rem', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customer.name}</p>
-                        <p style={{ fontSize: '0.8rem', margin: '2px 0 0', opacity: 0.7, fontWeight: '500' }}>+977 {customer.phone}</p>
+                        <p style={{ fontWeight: '900', fontSize: '0.95rem', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customer.name}</p>
+                        <p style={{ fontSize: '0.75rem', margin: '1px 0 0', opacity: 0.65, fontWeight: '500' }}>+977 {customer.phone}</p>
                     </div>
 
-                    {/* Coins */}
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <div style={{
-                            background: 'var(--primary-blue)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '0.75rem',
-                            padding: '0.6rem 1rem',
-                            textAlign: 'center',
-                            flexShrink: 0,
-                            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.3)'
-                        }}>
-                            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Coins</p>
-                            <p style={{ color: 'white', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                🪙 {customer.shopy_coins || 0}
-                            </p>
-                        </div>
+                    {/* Verified badge */}
+                    <div style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '100px', padding: '0.25rem 0.75rem', flexShrink: 0 }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.05em', color: 'white' }}>✓ VERIFIED</span>
+                    </div>
+                </div>
 
-                        {Number(customer.pending_coins) > 0 && (
-                            <div style={{
-                                background: 'rgba(15, 23, 42, 0.6)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '0.75rem',
-                                padding: '0.6rem 1rem',
-                                textAlign: 'center',
-                                flexShrink: 0,
-                                backdropFilter: 'blur(4px)'
-                            }}>
-                                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Pending</p>
-                                <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '1.2rem', fontWeight: '900', margin: '2px 0 0' }}>
-                                    {customer.pending_coins}
-                                </p>
-                            </div>
-                        )}
+                {/* ── My Wallet Card ── */}
+                <div className="wallet-card" style={{
+                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                    borderRadius: '1.25rem',
+                    padding: '0.85rem 1.25rem',
+                    marginBottom: '1.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.85rem',
+                    color: 'white',
+                    boxShadow: '0 4px 20px rgba(15, 23, 42, 0.25)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}>
+                    {/* bg glow */}
+                    <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', filter: 'blur(20px)', pointerEvents: 'none' }} />
+
+                    {/* Golden Coins icon */}
+                    <div style={{
+                        width: '44px', height: '44px', borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #fef08a 0%, #f59e0b 50%, #b45309 100%)',
+                        border: '2px solid #fef08a',
+                        boxShadow: '0 0 14px rgba(245, 158, 11, 0.6), inset 0 2px 4px rgba(255,255,255,0.6)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#451a03', flexShrink: 0
+                    }}>
+                        <Coins size={22} strokeWidth={2.5} style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }} />
+                    </div>
+
+                    {/* Label */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: '900', fontSize: '0.95rem', margin: 0 }}>My Wallet</p>
+                        <p style={{ fontSize: '0.75rem', margin: '1px 0 0', opacity: 0.55, fontWeight: '500' }}>Shopy Coins</p>
+                    </div>
+
+                    {/* Active chip */}
+                    <div style={{
+                        background: 'rgba(255,255,255,0.12)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '0.75rem',
+                        padding: '0.45rem 0.75rem',
+                        minWidth: '60px',
+                        textAlign: 'center',
+                        flexShrink: 0
+                    }}>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.55rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Active</p>
+                        <p style={{ color: 'white', fontSize: '1.05rem', fontWeight: '900', margin: '1px 0 0' }}>
+                            {customer.shopy_coins || 0}
+                        </p>
+                    </div>
+
+                    {/* Pending chip */}
+                    <div style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: '0.75rem',
+                        padding: '0.45rem 0.75rem',
+                        minWidth: '60px',
+                        textAlign: 'center',
+                        flexShrink: 0
+                    }}>
+                        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.55rem', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0, fontWeight: '700' }}>Pending</p>
+                        <p style={{ color: Number(customer.pending_coins) > 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', fontSize: '1.05rem', fontWeight: '900', margin: '1px 0 0' }}>
+                            {customer.pending_coins || 0}
+                        </p>
                     </div>
                 </div>
 
@@ -544,12 +796,26 @@ const MyOrders = () => {
                     ) : (
                         filteredOrders.map(order => {
                             const statusStyle = getStatusStyle(order.status);
+                            const isEsewa = order.payment_method === 'eSewa' || order.notes?.toLowerCase().includes('esewa');
+                            const isPaid = isEsewa || order.notes?.toLowerCase().includes('payment complete');
+
                             return (
                             <div key={order.id} style={{ background: 'white', borderRadius: '1.5rem', border: '1px solid var(--border-color)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                                 <div style={{ padding: '1.25rem', background: '#fafafa', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
-                                        <p style={{ fontSize: '0.7rem', fontWeight: '900', color: 'var(--text-gray)', textTransform: 'uppercase' }}>Order #{order.order_number}</p>
-                                        <p style={{ fontSize: '0.85rem', fontWeight: '800' }}>{new Date(order.created_at).toLocaleDateString()}</p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                            <p style={{ fontSize: '0.7rem', fontWeight: '900', color: 'var(--text-gray)', textTransform: 'uppercase', margin: 0 }}>Order #{order.order_number}</p>
+                                            {isPaid ? (
+                                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '100px', fontSize: '0.65rem', fontWeight: '900', textTransform: 'uppercase', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <CheckCircle2 size={11} /> PAID ({order.payment_method || 'eSewa'})
+                                                </span>
+                                            ) : (
+                                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '100px', fontSize: '0.65rem', fontWeight: '900', textTransform: 'uppercase', background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', display: 'inline-flex', alignItems: 'center' }}>
+                                                    COD
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', fontWeight: '800', marginTop: '0.25rem' }}>{new Date(order.created_at).toLocaleDateString()}</p>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <span style={{ padding: '0.4rem 1rem', borderRadius: '100px', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}` }}>
@@ -580,11 +846,17 @@ const MyOrders = () => {
                                                 <Truck size={14} className="text-primary-blue" />
                                                 Expect delivery in {branches.find(b => b.city === order.city)?.delivery_time || '2-4 Days'}
                                             </span>
-                                            <button 
-                                                onClick={() => { setCancellingOrderId(order.id); setShowCancelModal(true); setCancelReason(''); }}
-                                                className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem', background: 'white', color: '#ef4444', border: '1px solid #fecaca', fontWeight: '800' }}>
-                                                Cancel Order
-                                            </button>
+                                            {!isPaid ? (
+                                                <button 
+                                                    onClick={() => { setCancellingOrderId(order.id); setShowCancelModal(true); setCancelReason(''); }}
+                                                    className="btn" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem', background: 'white', color: '#ef4444', border: '1px solid #fecaca', fontWeight: '800' }}>
+                                                    Cancel Order
+                                                </button>
+                                            ) : (
+                                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#059669', background: '#ecfdf5', padding: '0.3rem 0.75rem', borderRadius: '8px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <CheckCircle2 size={12} /> Payment Confirmed
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
@@ -716,7 +988,7 @@ const MyOrders = () => {
                 </div>
             )}
 
-            {/* Change PIN Modal */}
+            {/* Account Settings Modal */}
             {showChangePinModal && (
                 <div 
                     className="modal-overlay" 
@@ -726,10 +998,13 @@ const MyOrders = () => {
                     <div 
                         className="modal-content" 
                         onClick={e => e.stopPropagation()}
-                        style={{ margin: 'auto', padding: '2rem', maxWidth: '380px', width: '90%', borderRadius: '1.5rem', position: 'relative' }}
+                        style={{ margin: 'auto', padding: '1.75rem', maxWidth: '420px', width: '92%', borderRadius: '1.5rem', position: 'relative' }}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                            <h2 style={{ fontWeight: '900', fontSize: '1.2rem', margin: 0 }}>🔒 Change PIN</h2>
+                        {/* Header & Close Button */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                            <h2 style={{ fontWeight: '900', fontSize: '1.2rem', margin: 0, color: '#0f172a' }}>
+                                ⚙️ Account Settings
+                            </h2>
                             <button 
                                 onClick={() => setShowChangePinModal(false)} 
                                 style={{ background: '#f1f5f9', borderRadius: '50%', padding: '4px', minHeight: '32px', minWidth: '32px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -737,31 +1012,128 @@ const MyOrders = () => {
                                 <X size={20} color="var(--text-gray)" />
                             </button>
                         </div>
-                        <form onSubmit={handleChangePin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Current PIN</label>
-                                <input required type="password" maxLength={4} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} placeholder="Current 4-digit PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>New PIN</label>
-                                <input required type="password" maxLength={4} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} placeholder="New 4-digit PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Confirm New PIN</label>
-                                <input required type="password" maxLength={4} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} placeholder="Confirm new PIN" style={{ width: '100%', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
-                                {confirmPin && confirmPin !== newPin && (
-                                    <p style={{ color: '#ef4444', fontSize: '0.75rem', fontWeight: '700', marginTop: '0.3rem' }}>PINs do not match</p>
-                                )}
-                            </div>
-                            {pinMsg.text && (
-                                <p style={{ color: pinMsg.type === 'success' ? '#16a34a' : '#ef4444', fontSize: '0.85rem', fontWeight: '800', textAlign: 'center', padding: '0.75rem', background: pinMsg.type === 'success' ? '#dcfce7' : '#fee2e2', borderRadius: '10px' }}>
-                                    {pinMsg.type === 'success' ? '✅ ' : '❌ '}{pinMsg.text}
-                                </p>
-                            )}
-                            <button type="submit" disabled={pinLoading} className="btn btn-primary" style={{ width: '100%', padding: '1rem', borderRadius: '12px', fontWeight: '900', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                {pinLoading ? <Loader2 className="animate-spin" size={20} /> : '🔐 Update PIN'}
+
+                        {/* Tab Switcher */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: '#f1f5f9', padding: '4px', borderRadius: '12px', marginBottom: '1.5rem' }}>
+                            <button
+                                type="button"
+                                onClick={() => setSettingsTab('pin')}
+                                style={{
+                                    padding: '0.6rem',
+                                    borderRadius: '10px',
+                                    border: 'none',
+                                    background: settingsTab === 'pin' ? 'white' : 'transparent',
+                                    color: settingsTab === 'pin' ? 'var(--primary-red)' : '#64748b',
+                                    fontWeight: '800',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer',
+                                    boxShadow: settingsTab === 'pin' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justify: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                🔒 Change PIN
                             </button>
-                        </form>
+
+                            <button
+                                type="button"
+                                onClick={() => setSettingsTab('address')}
+                                style={{
+                                    padding: '0.6rem',
+                                    borderRadius: '10px',
+                                    border: 'none',
+                                    background: settingsTab === 'address' ? 'white' : 'transparent',
+                                    color: settingsTab === 'address' ? 'var(--primary-red)' : '#64748b',
+                                    fontWeight: '800',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer',
+                                    boxShadow: settingsTab === 'address' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justify: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                📍 Add Address
+                            </button>
+                        </div>
+
+                        {/* Tab 1: Change PIN Form */}
+                        {settingsTab === 'pin' && (
+                            <form onSubmit={handleChangePin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Current PIN</label>
+                                    <input required type="password" maxLength={4} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} placeholder="Current 4-digit PIN" style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>New PIN</label>
+                                    <input required type="password" maxLength={4} value={newPin} onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))} placeholder="New 4-digit PIN" style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Confirm New PIN</label>
+                                    <input required type="password" maxLength={4} value={confirmPin} onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))} placeholder="Confirm new PIN" style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
+                                    {confirmPin && confirmPin !== newPin && (
+                                        <p style={{ color: '#ef4444', fontSize: '0.75rem', fontWeight: '700', marginTop: '0.3rem' }}>PINs do not match</p>
+                                    )}
+                                </div>
+                                {pinMsg.text && (
+                                    <p style={{ color: pinMsg.type === 'success' ? '#16a34a' : '#ef4444', fontSize: '0.85rem', fontWeight: '800', textAlign: 'center', padding: '0.75rem', background: pinMsg.type === 'success' ? '#dcfce7' : '#fee2e2', borderRadius: '10px' }}>
+                                        {pinMsg.type === 'success' ? '✅ ' : '❌ '}{pinMsg.text}
+                                    </p>
+                                )}
+                                <button type="submit" disabled={pinLoading} className="btn btn-primary" style={{ width: '100%', padding: '0.9rem', borderRadius: '12px', fontWeight: '900', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    {pinLoading ? <Loader2 className="animate-spin" size={20} /> : '🔐 Update PIN'}
+                                </button>
+                            </form>
+                        )}
+
+                        {/* Tab 2: Add/Edit Address Form */}
+                        {settingsTab === 'address' && (
+                            <form onSubmit={handleSaveAddress} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Destination / City</label>
+                                    <select
+                                        required
+                                        value={addressCity}
+                                        onChange={e => setAddressCity(e.target.value)}
+                                        style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '700', fontSize: '0.95rem', outline: 'none' }}
+                                    >
+                                        <option value="">Select Destination Branch/City</option>
+                                        {branches.map(b => (
+                                            <option key={b.id || b.city} value={b.city}>
+                                                {b.city} {b.shipping_fee ? `(Rs. ${b.shipping_fee} Delivery)` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Your Street Address</label>
+                                    <textarea
+                                        required
+                                        rows={3}
+                                        value={addressStreet}
+                                        onChange={e => setAddressStreet(e.target.value)}
+                                        placeholder="Street Name, Tole, Landmark, House No."
+                                        style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600', fontSize: '0.95rem', resize: 'vertical', outline: 'none' }}
+                                    />
+                                </div>
+
+                                {addressMsg.text && (
+                                    <p style={{ color: addressMsg.type === 'success' ? '#16a34a' : '#ef4444', fontSize: '0.85rem', fontWeight: '800', textAlign: 'center', padding: '0.75rem', background: addressMsg.type === 'success' ? '#dcfce7' : '#fee2e2', borderRadius: '10px' }}>
+                                        {addressMsg.type === 'success' ? '✅ ' : '❌ '}{addressMsg.text}
+                                    </p>
+                                )}
+
+                                <button type="submit" disabled={savingAddress} className="btn btn-primary" style={{ width: '100%', padding: '0.9rem', borderRadius: '12px', fontWeight: '900', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    {savingAddress ? <Loader2 className="animate-spin" size={20} /> : '💾 Save Address'}
+                                </button>
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

@@ -93,7 +93,10 @@ INSERT INTO website_settings (key, value) VALUES
     ('store_address', 'Kathmandu, Nepal'),
     ('facebook_url', '#'),
     ('instagram_url', '#'),
-    ('tiktok_url', '#')
+    ('tiktok_url', '#'),
+    ('esewa_environment', 'test'),
+    ('esewa_merchant_code', 'EPAYTEST'),
+    ('esewa_secret_key', '8gBm/:&EnhH.1/q')
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================

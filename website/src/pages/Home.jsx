@@ -47,7 +47,7 @@ const Home = () => {
     }, [flashSaleEndTime]);
 
     // Merge flash sale products with full product details
-    const isFlashSaleTimeValid = flashSaleEndTime ? new Date(flashSaleEndTime.replace(' ', 'T')) > new Date() : false;
+    const isFlashSaleTimeValid = flashSaleEndTime ? new Date(flashSaleEndTime.replace(' ', 'T')) > new Date() : true;
     const isFlashSaleEnabled = settings.flash_sale_enabled === 'true' && isFlashSaleTimeValid;
     const flashSaleProducts = isFlashSaleEnabled ? flashSaleConfig.map(saleItem => {
         const product = products.find(p => p.id === saleItem.id);

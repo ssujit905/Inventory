@@ -1,15 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft, CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
 import { useNotification } from '../context/NotificationContext';
+import { useSettings } from '../context/SettingsContext';
+
+// eSewa HMAC-SHA256 signature generation using Web Crypto API
+const generateEsewaSignature = async (totalAmount, transactionUuid, productCode, secretKey) => {
+    const inputString = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${productCode}`;
+    console.log('[eSewa] Signing string:', inputString);
+    const encoder = new TextEncoder();
+    const cryptoKey = await window.crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secretKey),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    );
+    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(inputString));
+    const base64Sig = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+    console.log('[eSewa] Generated signature:', base64Sig);
+    return base64Sig;
+};
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
     const { customer, login, refreshCustomer } = useCustomer();
     const { showNotification } = useNotification();
+    const { settings = {} } = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -34,6 +54,7 @@ const Checkout = () => {
     const [accountCreated, setAccountCreated] = useState(false);
     const [cartReady, setCartReady] = useState(false);
     const [checkoutError, setCheckoutError] = useState(null);
+    const [txnRef, setTxnRef] = useState('');
 
     // Delivery branches from DB
     const [branches, setBranches] = useState([]);
@@ -78,20 +99,22 @@ const Checkout = () => {
                 }
             }
 
-            // 3. Set form data
+            // 3. Set form data (prioritize saved customer profile address & city)
+            const savedCity = customer?.city || lastOrderDetails?.city || loadedBranches[0]?.city || '';
+            const savedAddress = customer?.address || lastOrderDetails?.address || '';
+
             setFormData(f => ({
                 ...f,
                 fullName: customer?.name || f.fullName,
                 phone: customer?.phone || f.phone,
                 phone2: lastOrderDetails?.phone2 || f.phone2,
-                address: lastOrderDetails?.address || f.address,
-                city: lastOrderDetails?.city || loadedBranches[0]?.city || f.city
+                address: savedAddress || f.address,
+                city: savedCity || f.city
             }));
 
             // Handle branch selection
-            const cityToSelect = lastOrderDetails?.city || loadedBranches[0]?.city;
-            if (cityToSelect) {
-                const branch = loadedBranches.find(b => b.city === cityToSelect);
+            if (savedCity) {
+                const branch = loadedBranches.find(b => b.city === savedCity);
                 if (branch) setSelectedBranch(branch);
             }
 
@@ -134,9 +157,6 @@ const Checkout = () => {
     const grandTotal = checkoutSubtotal + shippingFee - appliedCoinDiscount;
 
     // Meta Pixel: Track Purchase Success
-    // Note: Meta Pixel currency must be ISO 4217 from Meta's allowlist.
-    // NPR (Nepalese Rupee) is NOT in Meta's pixel allowlist — use USD.
-    // content_ids must be an array of strings (not numbers/UUIDs).
     useEffect(() => {
         if (isOrdered && window.fbq) {
             try {
@@ -167,10 +187,14 @@ const Checkout = () => {
             showNotification('Secondary phone must be exactly 10 digits.', 'error');
             return;
         }
+        if (formData.paymentMethod === 'Bank Transfer' && !txnRef.trim()) {
+            showNotification('Please enter your transaction reference number for Bank Transfer.', 'error');
+            return;
+        }
 
         setSaving(true);
         try {
-            // [NEW] REAL-TIME STOCK AUDIT: Fetch the very latest stock before proceeding
+            // 1. Live stock audit
             const { data: latestStock, error: stockError } = await supabase
                 .from('website_variant_stock_view')
                 .select('variant_id, current_stock, sku, is_bundle')
@@ -178,7 +202,6 @@ const Checkout = () => {
 
             if (stockError) throw stockError;
 
-            // Verify each item against live database values
             for (const item of checkoutItems) {
                 const liveItem = latestStock.find(s => s.variant_id === item.variant_id);
                 const currentAvailable = liveItem ? liveItem.current_stock : 0;
@@ -187,11 +210,11 @@ const Checkout = () => {
                     setSaving(false);
                     setCheckoutError(`Wait! The stock for "${item.title}" just changed. Only ${currentAvailable} left. Please adjust your order.`);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
-                    return; // STOP THE PURCHASE
+                    return;
                 }
             }
 
-            // Prepare Items for Atomic RPC
+            // 2. Prepare items
             const orderItems = checkoutItems.map(item => ({
                 variant_id: item.variant_id,
                 quantity: item.quantity,
@@ -201,7 +224,90 @@ const Checkout = () => {
                 sku: item.sku
             }));
 
-            // SINGLE ATOMIC CALL
+            // ── eSewa Payment Flow (Deferred Order Creation) ───────────────────────────
+            if (formData.paymentMethod === 'eSewa') {
+                const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
+                const transactionUuid = `${tempOrderNumber}-${Date.now()}`;
+
+                const secretKey = settings.esewa_secret_key || '8gBm/:&EnhH.1/q';
+                const productCode = settings.esewa_merchant_code || 'EPAYTEST';
+                const configuredEnv = settings.esewa_environment || 'test';
+                const gatewayUrl = configuredEnv === 'live' 
+                    ? 'https://epay.esewa.com.np/api/epay/main/v2/form'
+                    : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
+
+                const fmt = (n) => Number(n).toFixed(2);
+                const totalAmountStr = fmt(grandTotal);
+                const amountStr = fmt(grandTotal - shippingFee);
+                const deliveryChargeStr = fmt(shippingFee);
+
+                const signature = await generateEsewaSignature(
+                    totalAmountStr,
+                    transactionUuid,
+                    productCode,
+                    secretKey
+                );
+
+                // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
+                const pendingOrderData = {
+                    customer_name: formData.fullName,
+                    phone: formData.phone,
+                    phone2: formData.phone2,
+                    address: formData.address,
+                    city: formData.city,
+                    payment_method: 'eSewa',
+                    shipping_fee: shippingFee,
+                    total_amount: grandTotal,
+                    items: orderItems,
+                    coins_used: appliedCoinDiscount,
+                    ad_id: checkoutItems[0]?.ad_id || null,
+                    order_number: tempOrderNumber,
+                    transaction_uuid: transactionUuid,
+                    is_buy_now: isBuyNow
+                };
+                sessionStorage.setItem('pending_esewa_order', JSON.stringify(pendingOrderData));
+
+                console.log(`[eSewa] Submitting form to ${configuredEnv} gateway (${gatewayUrl}) with fields:`, {
+                    amount: amountStr,
+                    total_amount: totalAmountStr,
+                    transaction_uuid: transactionUuid,
+                    product_code: productCode,
+                    product_delivery_charge: deliveryChargeStr,
+                    signature
+                });
+
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = gatewayUrl;
+
+                const fields = {
+                    amount: amountStr,
+                    tax_amount: '0',
+                    total_amount: totalAmountStr,
+                    transaction_uuid: transactionUuid,
+                    product_code: productCode,
+                    product_service_charge: '0',
+                    product_delivery_charge: deliveryChargeStr,
+                    success_url: `${window.location.origin}/payment-success`,
+                    failure_url: `${window.location.origin}/payment-failure`,
+                    signed_field_names: 'total_amount,transaction_uuid,product_code',
+                    signature: signature
+                };
+
+                Object.entries(fields).forEach(([key, val]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = val;
+                    form.appendChild(input);
+                });
+
+                document.body.appendChild(form);
+                form.submit();
+                return;
+            }
+
+            // 3. For Non-eSewa Payments (COD, Bank Transfer): Create order immediately in DB
             const { data: result, error: rpcError } = await supabase.rpc('create_atomic_website_order', {
                 p_customer_name: formData.fullName,
                 p_phone: formData.phone,
@@ -219,29 +325,38 @@ const Checkout = () => {
             setCheckoutError(null);
             if (rpcError) {
                 console.error("Atomic Purchase Error:", rpcError.message);
-                
-                // If coins are out of sync, refresh immediately
                 if (rpcError.message?.includes('COINS')) {
                     refreshCustomer();
                     setCheckoutError("Your coin balance has changed. We've updated your available points.");
                     return;
                 }
-
                 if (rpcError.message?.includes('STOCK')) {
                     const itemName = rpcError.message.split(': ')[1] || 'An item in your cart';
                     setCheckoutError(`Oops! We just ran out of stock for "${itemName}". Please remove it from your cart or adjust the quantity to continue.`);
-                    return; // Stop here, don't clear cart
+                    return;
                 }
                 throw rpcError;
             }
 
             if (result && result.order_number) {
+                // Bank Transfer: save transaction reference into order notes
+                if (formData.paymentMethod === 'Bank Transfer') {
+                    const { error: confirmError } = await supabase.rpc('confirm_website_payment', {
+                        p_order_number: result.order_number,
+                        p_payment_details: `Mobile Banking / Bank Transfer. Reference ID: ${txnRef}`,
+                        p_status: 'unpaid'
+                    });
+                    if (confirmError) {
+                        console.error("Bank Transfer confirmation failed:", confirmError.message);
+                    }
+                }
+
+                // COD & Bank Transfer: show local success screen
                 setOrderNumber(result.order_number);
                 setIsOrdered(true);
                 showNotification('Order placed successfully!', 'success');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 if (!isBuyNow) clearSelectedItems();
-                // Refresh client-side coin balance immediately
                 refreshCustomer();
             } else {
                 throw new Error("Order creation succeeded but no order number was returned.");
@@ -267,17 +382,14 @@ const Checkout = () => {
             });
 
             if (insertError) {
-                // Catch ALL forms of "already exists":
                 // - PostgreSQL duplicate key: code 23505
                 // - Supabase REST HTTP 409 Conflict: status 409
-                // - Various message patterns
                 const isConflict =
                     insertError.code === '23505' ||
                     insertError.status === 409 ||
                     String(insertError.message || '').toLowerCase().match(/duplicate|already exist|conflict|unique/);
 
                 if (isConflict) {
-                    // Phone already registered — try to log in with the PIN they entered
                     const success = await login(formData.phone, pin);
                     if (success) {
                         setAccountCreated(true);
@@ -293,7 +405,6 @@ const Checkout = () => {
                 throw insertError;
             }
 
-            // New account created — log in immediately
             await login(formData.phone, pin);
             setAccountCreated(true);
             showNotification('Account created! Your order is saved.', 'success');
@@ -309,81 +420,77 @@ const Checkout = () => {
             <div className="container">
                 {isOrdered ? (
                     /* ─── SUCCESS SCREEN ─── */
-                    <div style={{ maxWidth: '520px', margin: '2rem auto', textAlign: 'center' }}>
-                        <div style={{ background: 'white', padding: '2.5rem', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-                            <div style={{ fontSize: '64px', marginBottom: '1.25rem' }}>✅</div>
-                            <h1 style={{ fontSize: '1.75rem', fontWeight: '900', marginBottom: '0.5rem' }}>Order Confirmed!</h1>
-                            <p style={{ color: '#64748b', lineHeight: '1.7', marginBottom: '0.5rem' }}>
-                                Thank you, <strong>{(formData.fullName || 'Customer').split(' ')[0]}</strong>!
-                            </p>
-                            <p style={{ color: '#64748b', lineHeight: '1.7', marginBottom: '2rem' }}>
-                                Order <strong style={{ color: '#1e293b' }}>{orderNumber}</strong> · Delivery to <strong style={{ color: '#1e293b' }}>{formData.city}</strong>.<br />
-                                We'll call <strong style={{ color: '#1e293b' }}>{formData.phone}</strong> to confirm.
-                            </p>
-
-                            {!accountCreated && !customer ? (
-                                <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid #e2e8f0', textAlign: 'left' }}>
-                                    <h3 style={{ fontWeight: '800', fontSize: '1rem', marginBottom: '0.5rem' }}>🔒 Track Your Order</h3>
-                                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem', lineHeight: '1.5' }}>
-                                        Set a 4-digit PIN to save your profile. 
-                                        <strong style={{ color: '#ef4444', display: 'block', marginTop: '0.5rem' }}>
-                                            Already have an account? Enter your PIN to link this order instantly.
-                                        </strong>
-                                    </p>
-                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                        <input
-                                            type="password"
-                                            maxLength={4}
-                                            placeholder="PIN"
-                                            value={pin}
-                                            onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                                            className="form-control"
-                                            style={{ width: '100px', textAlign: 'center', letterSpacing: '4px', fontSize: '1.2rem', fontWeight: '800' }}
-                                        />
-                                        <button
-                                            onClick={handleCreateAccount}
-                                            disabled={creatingAccount || pin.length < 4}
-                                            className="btn btn-primary"
-                                            style={{ flex: 1 }}
-                                        >
-                                            {creatingAccount ? 'Saving…' : 'Save PIN'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div style={{ background: '#ecfdf5', padding: '1.25rem', borderRadius: '1.25rem', color: '#065f46', display: 'flex', gap: '1rem', alignItems: 'center', textAlign: 'left' }}>
-                                    <span style={{ fontSize: '1.5rem' }}>✨</span>
-                                    <div>
-                                        <strong style={{ display: 'block' }}>Order Saved to History!</strong>
-                                        <span style={{ fontSize: '0.85rem' }}>You're logged in as {customer?.name || 'Customer'}.</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="success-actions">
-                                <button
-                                    onClick={() => navigate('/my-orders')}
-                                    disabled={!accountCreated && !customer}
-                                    className="btn btn-primary"
-                                    title={(!accountCreated && !customer) ? "Please save your PIN first" : ""}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '1rem', 
-                                        fontWeight: '800',
-                                        opacity: (!accountCreated && !customer) ? 0.5 : 1,
-                                        cursor: (!accountCreated && !customer) ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    Track Your Orders
-                                </button>
-                                <button
-                                    onClick={() => navigate('/')}
-                                    className="btn"
-                                    style={{ flex: 1, padding: '1rem', background: '#f1f5f9', color: '#475569', fontWeight: '800' }}
-                                >
-                                    Continue Shopping
-                                </button>
+                    <div style={{ maxWidth: '600px', margin: '3rem auto', padding: '2.5rem', background: 'white', borderRadius: '2rem', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(0,0,0,0.04)' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                            <div style={{ width: '70px', height: '70px', background: '#ecfdf5', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                                <CheckCircle size={44} />
                             </div>
+                            <h1 style={{ fontWeight: '900', color: '#111827', fontSize: '1.8rem', margin: '0 0 0.5rem 0' }}>Order Confirmed!</h1>
+                            <p style={{ color: '#10b981', fontWeight: '700', fontSize: '0.95rem' }}>
+                                Thank you, {(formData.fullName || 'Customer').split(' ')[0]}! Your order has been placed.
+                            </p>
+                        </div>
+
+                        {formData.paymentMethod === 'Bank Transfer' && (
+                            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '1rem', padding: '1rem', marginBottom: '1.5rem', textAlign: 'left' }}>
+                                <p style={{ fontWeight: '800', color: '#1d4ed8', marginBottom: '0.25rem', fontSize: '0.9rem' }}>🏦 Bank Transfer Pending Verification</p>
+                                <p style={{ fontSize: '0.8rem', color: '#1e40af' }}>Your order is placed. We will verify your transfer (Ref: <strong>{txnRef}</strong>) and confirm within 24 hours.</p>
+                            </div>
+                        )}
+
+                        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid #f1f5f9', marginBottom: '2rem', textAlign: 'left' }}>
+                            <h3 style={{ margin: '0 0 1rem 0', fontWeight: '800', fontSize: '1rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>Order Details</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', fontSize: '0.875rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#64748b' }}>Order Number</span>
+                                    <strong style={{ color: '#0f172a' }}>{orderNumber}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#64748b' }}>Payment Method</span>
+                                    <strong style={{ color: '#0f172a' }}>{formData.paymentMethod || 'Cash on Delivery'}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#64748b' }}>Total Amount</span>
+                                    <strong style={{ color: '#059669', fontSize: '1rem' }}>Rs. {grandTotal.toLocaleString()}</strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
+                                    <span style={{ color: '#64748b' }}>Customer Name</span>
+                                    <span style={{ color: '#0f172a', fontWeight: '600' }}>{formData.fullName}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#64748b' }}>Contact Phone</span>
+                                    <span style={{ color: '#0f172a', fontWeight: '600' }}>{formData.phone}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#64748b' }}>Delivery Address</span>
+                                    <span style={{ color: '#0f172a', fontWeight: '600', textAlign: 'right' }}>{formData.address}, {formData.city}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <button
+                                onClick={() => {
+                                    if (customer) {
+                                        navigate('/my-orders');
+                                    } else {
+                                        const phone = formData.phone || '';
+                                        navigate(`/my-orders?setup-pin=${encodeURIComponent(phone)}`);
+                                    }
+                                }}
+                                className="btn btn-primary"
+                                style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: '700' }}
+                            >
+                                <ShoppingBag size={18} /> View My Orders <ArrowRight size={16} />
+                            </button>
+
+                            <button
+                                onClick={() => navigate('/shop')}
+                                className="btn btn-secondary"
+                                style={{ width: '100%', padding: '1rem', fontWeight: '700' }}
+                            >
+                                Continue Shopping
+                            </button>
                         </div>
                     </div>
                 ) : (
@@ -461,7 +568,7 @@ const Checkout = () => {
                                             </div>
                                         </div>
 
-                                        {/* City Dropdown — loaded from DB */}
+                                        {/* City Dropdown */}
                                         <div>
                                             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '700', marginBottom: '0.4rem' }}>
                                                 <MapPin size={14} style={{ display: 'inline', marginRight: '0.4rem' }} />
@@ -485,7 +592,6 @@ const Checkout = () => {
                                                 </select>
                                             )}
 
-                                            {/* Coverage area info badge */}
                                             {selectedBranch && (
                                                 <div style={{ marginTop: '0.625rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                     {selectedBranch.coverage_area && (
@@ -522,17 +628,104 @@ const Checkout = () => {
                                     </div>
                                 </div>
 
-                                {/* Payment */}
+                                {/* Payment Method */}
                                 <div style={{ background: 'white', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid #e2e8f0' }}>
                                     <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.05rem', fontWeight: '800' }}>
                                         <CreditCard size={20} color="#ef4444" /> Payment Method
                                     </h3>
-                                    <div style={{ padding: '1rem 1.25rem', border: '2px solid #ef4444', borderRadius: '1rem', background: '#fff1f2', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                        <input type="radio" checked readOnly style={{ width: '18px', height: '18px', accentColor: '#ef4444' }} />
-                                        <div>
-                                            <p style={{ fontWeight: '800', fontSize: '1rem', marginBottom: '0.2rem' }}>Cash on Delivery (COD)</p>
-                                            <p style={{ fontSize: '0.8rem', color: '#b91c1c' }}>Pay when your parcel arrives at your door</p>
-                                        </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+                                        {/* COD */}
+                                        <label style={{
+                                            padding: '1rem 1.25rem',
+                                            border: formData.paymentMethod === 'COD' ? '2px solid #ef4444' : '1px solid #e2e8f0',
+                                            borderRadius: '1rem',
+                                            background: formData.paymentMethod === 'COD' ? '#fff1f2' : 'white',
+                                            display: 'flex', alignItems: 'center', gap: '1rem',
+                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                        }}>
+                                            <input type="radio" name="paymentMethod" value="COD"
+                                                checked={formData.paymentMethod === 'COD'}
+                                                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                                style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: 'pointer' }} />
+                                            <div>
+                                                <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Cash on Delivery (COD)</p>
+                                                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay with cash when your parcel is delivered</p>
+                                            </div>
+                                        </label>
+
+                                        {/* eSewa */}
+                                        <label style={{
+                                            padding: '1rem 1.25rem',
+                                            border: formData.paymentMethod === 'eSewa' ? '2px solid #60b524' : '1px solid #e2e8f0',
+                                            borderRadius: '1rem',
+                                            background: formData.paymentMethod === 'eSewa' ? '#f4fbf0' : 'white',
+                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                <input type="radio" name="paymentMethod" value="eSewa"
+                                                    checked={formData.paymentMethod === 'eSewa'}
+                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                                    style={{ width: '18px', height: '18px', accentColor: '#60b524', cursor: 'pointer' }} />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
+                                                    <div>
+                                                        <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>eSewa (Online Payment)</p>
+                                                        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay instantly via secure eSewa gateway</p>
+                                                    </div>
+                                                    <img src="https://cdn.esewa.com.np/ui/images/esewa_logo.png" alt="eSewa"
+                                                        style={{ height: '22px', objectFit: 'contain', flexShrink: 0 }}
+                                                        onError={(e) => { e.target.style.display = 'none'; }} />
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        {/* Bank Transfer */}
+                                        <label style={{
+                                            padding: '1rem 1.25rem',
+                                            border: formData.paymentMethod === 'Bank Transfer' ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                                            borderRadius: '1rem',
+                                            background: formData.paymentMethod === 'Bank Transfer' ? '#eff6ff' : 'white',
+                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                <input type="radio" name="paymentMethod" value="Bank Transfer"
+                                                    checked={formData.paymentMethod === 'Bank Transfer'}
+                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                                    style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                                <div>
+                                                    <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Mobile Banking / Bank Transfer</p>
+                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Transfer to our bank account and provide reference ID</p>
+                                                </div>
+                                            </div>
+
+                                            {formData.paymentMethod === 'Bank Transfer' && (
+                                                <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '1rem', cursor: 'default' }}>
+                                                    <p style={{ fontWeight: '800', fontSize: '0.85rem', color: '#1e3a8a', marginBottom: '0.75rem' }}>Our Bank Details:</p>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.82rem', color: '#334155', marginBottom: '1rem' }}>
+                                                        <div><strong>Bank Name:</strong> Global IME Bank</div>
+                                                        <div><strong>Account Holder:</strong> Shopy Nepal Pvt. Ltd.</div>
+                                                        <div><strong>Account Number:</strong> 0123456789012345</div>
+                                                        <div><strong>Branch:</strong> Kathmandu</div>
+                                                    </div>
+                                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.4rem' }}>
+                                                        Transaction Reference / Voucher Number *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. TXN-9238471"
+                                                        value={txnRef}
+                                                        onChange={(e) => setTxnRef(e.target.value)}
+                                                        className="form-control"
+                                                        style={{ fontSize: '0.85rem' }}
+                                                    />
+                                                    <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.35rem' }}>
+                                                        Transfer <strong>Rs. {grandTotal.toLocaleString()}</strong> to the above account, then enter the reference number.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -597,7 +790,9 @@ const Checkout = () => {
                                     className="btn btn-primary"
                                     style={{ width: '100%', padding: '1rem', fontSize: '1.05rem', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                                 >
-                                    {saving ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing…</> : 'Confirm Order'}
+                                    {saving ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing…</> : (
+                                        formData.paymentMethod === 'eSewa' ? '🔒 Pay with eSewa →' : 'Confirm Order'
+                                    )}
                                 </button>
 
                                 <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem' }}>

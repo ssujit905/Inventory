@@ -90,7 +90,7 @@ export const CustomerProvider = ({ children }) => {
             const { data, error } = await supabase.rpc('update_customer_profile', {
                 p_phone: customer.phone,
                 p_pin: customer.pin_hash || customer.pin,
-                p_name: updates.name,
+                p_name: updates.name || customer?.name || '',
                 p_address: updates.address,
                 p_city: updates.city
             });
@@ -138,6 +138,40 @@ export const CustomerProvider = ({ children }) => {
         localStorage.removeItem('shopy_customer');
     };
 
+    /**
+     * First-time buyer PIN setup.
+     * Called after eSewa checkout when the user clicks "View My Orders".
+     * Creates a new account OR sets the PIN on an existing phone-matched account.
+     */
+    const setupPin = async (phone, pin, name = null, address = null, city = null) => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.rpc('setup_customer_pin', {
+                p_phone: String(phone).trim(),
+                p_pin: String(pin).trim(),
+                p_name: name || null,
+                p_address: address || null,
+                p_city: city || null
+            });
+
+            if (error || !data?.success) {
+                throw new Error(data?.error || error?.message || 'Failed to set up account');
+            }
+
+            const customerData = data.customer;
+            // Store pin in local state (same as login)
+            const enriched = { ...customerData, pin_hash: pin };
+            setCustomer(enriched);
+            localStorage.setItem('shopy_customer', JSON.stringify(enriched));
+            return { success: true };
+        } catch (err) {
+            console.error('setupPin error:', err);
+            return { success: false, error: err.message };
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (!customer?.phone) return;
 
@@ -168,7 +202,7 @@ export const CustomerProvider = ({ children }) => {
     }, [customer?.phone]);
 
     return (
-        <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading, refreshCustomer }}>
+        <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading, refreshCustomer, setupPin }}>
             {children}
         </CustomerContext.Provider>
     );

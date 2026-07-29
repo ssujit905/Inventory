@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
-import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2 } from 'lucide-react';
+import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard } from 'lucide-react';
 
 interface Setting {
     key: string;
@@ -58,6 +58,23 @@ const SETTING_GROUPS = [
         keys: [
             { key: 'flash_sale_enabled', label: 'Flash Sale Mode', type: 'toggle' },
             { key: 'flash_sale_end', label: 'Sale End Time', type: 'datetime', placeholder: 'Select end time...' },
+        ]
+    },
+    {
+        title: '💳 eSewa Payment Gateway',
+        icon: <CreditCard size={16} className="text-emerald-500" />,
+        keys: [
+            {
+                key: 'esewa_environment',
+                label: 'Payment Mode / Environment',
+                type: 'select',
+                options: [
+                    { label: 'Test Mode (Sandbox - rc-epay.esewa.com.np)', value: 'test' },
+                    { label: 'Live Mode (Production - epay.esewa.com.np)', value: 'live' }
+                ]
+            },
+            { key: 'esewa_merchant_code', label: 'eSewa Merchant Code (Product Code)', placeholder: 'EPAYTEST' },
+            { key: 'esewa_secret_key', label: 'eSewa Secret Key', placeholder: '8gBm/:&EnhH.1/q', type: 'password' },
         ]
     }
 ];
@@ -219,6 +236,24 @@ export default function WebsiteSettingsPage() {
         setSettings(s => ({ ...s, [key]: value }));
     };
 
+    const handleToggleField = (key: string) => {
+        if (isReadOnly) return;
+        const currentVal = settings[key] === 'true';
+        const nextVal = currentVal ? 'false' : 'true';
+        
+        if (key === 'flash_sale_enabled' && nextVal === 'true') {
+            const currentEnd = settings['flash_sale_end'];
+            const isPast = currentEnd ? new Date(currentEnd.replace(' ', 'T')) <= new Date() : true;
+            if (isPast) {
+                const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                const pad = (n: number) => n.toString().padStart(2, '0');
+                const defaultEnd = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())} ${pad(future.getHours())}:${pad(future.getMinutes())}`;
+                update('flash_sale_end', defaultEnd);
+            }
+        }
+        update(key, nextVal);
+    };
+
     if (loading) return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="flex h-64 items-center justify-center">
@@ -336,9 +371,31 @@ export default function WebsiteSettingsPage() {
                                             placeholder={field.placeholder}
                                             className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
                                         />
+                                    ) : (field as any).type === 'select' ? (
+                                        <select
+                                            value={settings[field.key] || ''}
+                                            onChange={e => !isReadOnly && update(field.key, e.target.value)}
+                                            disabled={isReadOnly}
+                                            className={`w-full h-11 px-4 rounded-xl border text-sm font-bold focus:ring-2 focus:ring-primary/30 outline-none cursor-pointer ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                        >
+                                            {(field as any).options?.map((opt: any) => (
+                                                <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (field as any).type === 'password' ? (
+                                        <input
+                                            type="password"
+                                            value={settings[field.key] || ''}
+                                            onChange={e => !isReadOnly && update(field.key, e.target.value)}
+                                            readOnly={isReadOnly}
+                                            placeholder={field.placeholder}
+                                            className={`w-full h-11 px-4 rounded-xl border text-sm font-mono focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                        />
                                     ) : (field as any).type === 'toggle' ? (
                                         <div 
-                                            onClick={() => !isReadOnly && update(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
+                                            onClick={() => handleToggleField(field.key)}
                                             className={`flex items-center gap-3 ${isReadOnly ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                         >
                                             <div className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${settings[field.key] === 'true' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}>

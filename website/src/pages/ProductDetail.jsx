@@ -57,7 +57,7 @@ const ProductDetail = () => {
     const { settings } = useSettings();
     const flashSaleEndTime = settings.flash_sale_end;
     const isFlashSaleTimeValid = useMemo(() => {
-        if (!flashSaleEndTime) return false;
+        if (!flashSaleEndTime) return true;
         return new Date(flashSaleEndTime.replace(' ', 'T')) > new Date();
     }, [flashSaleEndTime]);
 

@@ -155,6 +155,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
     const handleTouchStart = (e: React.TouchEvent<HTMLElement>) => {
         if (isMenuOpen || isRefreshing) return;
+        
+        // Don't trigger pull-to-refresh if we're interacting with a modal or fixed overlay
+        if ((e.target as HTMLElement).closest('.fixed.inset-0')) return;
+
         const target = e.currentTarget;
         const atTop = target.scrollTop <= 0;
         setCanPull(atTop);
@@ -163,6 +167,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
     const handleTouchMove = (e: React.TouchEvent<HTMLElement>) => {
         if (!canPull || startY === null || isRefreshing) return;
+        
+        if ((e.target as HTMLElement).closest('.fixed.inset-0')) return;
+
         const delta = e.touches[0].clientY - startY;
         if (delta <= 0) {
             setPullDistance(0);

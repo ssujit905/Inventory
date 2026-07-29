@@ -633,7 +633,12 @@ export default function WebsiteProductsPage() {
             </div>
 
             {showForm && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm overflow-y-auto">
+                <div 
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm overflow-y-auto"
+                    onTouchStart={e => e.stopPropagation()}
+                    onTouchMove={e => e.stopPropagation()}
+                    onTouchEnd={e => e.stopPropagation()}
+                >
                     <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
                         {/* Global Progress Tracking Header */}
                         {(videoProgress !== null || imageProgress !== null) && (

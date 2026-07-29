@@ -36,10 +36,13 @@ type Sale = {
     cod_amount: number;
     sold_amount?: number | null;
     return_cost?: number | null;
+    payment_status?: string | null;
+    notes?: string | null;
     ad_id?: string | null;
     ad?: { description: string } | null;
     created_at: string;
     is_website?: boolean;
+    website_orders?: any[];
     // We'll derive products from sale_items
     items?: SaleItem[];
 };
@@ -181,6 +184,8 @@ export default function SalesPage() {
                         ),
                         website_orders!sale_id(
                             id,
+                            payment_method,
+                            notes,
                             website_order_items(sku, quantity)
                         ),
                         ad:expenses!ad_id(description)
@@ -831,10 +836,19 @@ export default function SalesPage() {
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         <div className="text-sm font-black text-gray-900 dark:text-gray-100 truncate">{sale.customer_name}</div>
                                                         {sale.is_website && (
-                                                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-md border border-sky-100 dark:border-sky-800 animate-pulse">
+                                                            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-md border border-sky-100 dark:border-sky-800">
                                                                 <Globe size={10} strokeWidth={3} />
                                                                 <span className="text-[8px] font-black uppercase tracking-tighter">Web</span>
                                                             </div>
+                                                        )}
+                                                        {(sale.payment_status === 'paid' || sale.notes?.toLowerCase().includes('esewa') || sale.website_orders?.[0]?.payment_method === 'eSewa') ? (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-md text-[8px] font-black uppercase tracking-wider">
+                                                                <CheckCircle2 size={9} /> PAID (eSewa)
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md text-[8px] font-black uppercase tracking-wider">
+                                                                UNPAID
+                                                            </span>
                                                         )}
                                                     </div>
                                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 line-clamp-1">
@@ -1283,6 +1297,7 @@ export default function SalesPage() {
                                             {viewSale.parcel_status}
                                         </span>
                                     </div>
+
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Destination</p>
                                         <p className="text-sm font-black text-gray-900 dark:text-gray-100">
@@ -1295,6 +1310,7 @@ export default function SalesPage() {
                                             Rs. {Number(viewSale.cod_amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </p>
                                     </div>
+
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</p>
                                         <p className="text-sm font-black text-gray-900 dark:text-gray-100">
@@ -1302,11 +1318,32 @@ export default function SalesPage() {
                                         </p>
                                     </div>
                                     <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment Status</p>
+                                        {(viewSale.payment_status === 'paid' || viewSale.notes?.toLowerCase().includes('esewa') || viewSale.website_orders?.[0]?.payment_method === 'eSewa') ? (
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 mt-1">
+                                                <CheckCircle2 size={12} /> PAID ({viewSale.website_orders?.[0]?.payment_method || 'eSewa'})
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 mt-1">
+                                                UNPAID (COD)
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contact</p>
                                         <p className="text-sm font-black text-gray-900 dark:text-gray-100">
                                             {viewSale.phone1}{viewSale.phone2 ? ` / ${viewSale.phone2}` : ''}
                                         </p>
                                     </div>
+                                    {viewSale.notes ? (
+                                        <div className="bg-emerald-50 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
+                                            <p className="text-[10px] font-black text-emerald-600/70 dark:text-emerald-400/50 uppercase tracking-widest">Payment Notes & Details</p>
+                                            <p className="text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 mt-1 whitespace-pre-line">
+                                                {viewSale.notes}
+                                            </p>
+                                        </div>
+                                    ) : <div></div>}
                                     {viewSale.ad?.description && (
                                         <div className="col-span-full bg-amber-50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex items-center justify-between">
                                             <div>
