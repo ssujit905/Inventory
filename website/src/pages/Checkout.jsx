@@ -25,6 +25,26 @@ const generateEsewaSignature = async (totalAmount, transactionUuid, productCode,
     return base64Sig;
 };
 
+// Fonepay HMAC-SHA512 signature generation using Web Crypto API
+const generateFonepaySignature = async (pid, md, prn, amt, crn, dt, r1, r2, ru, secretKey) => {
+    const inputString = `${pid},${md},${prn},${amt},${crn},${dt},${r1},${r2},${ru}`;
+    console.log('[Fonepay] Hashing string:', inputString);
+    const encoder = new TextEncoder();
+    const cryptoKey = await window.crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secretKey),
+        { name: 'HMAC', hash: 'SHA-512' },
+        false,
+        ['sign']
+    );
+    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(inputString));
+    const hexSig = Array.from(new Uint8Array(signatureBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    console.log('[Fonepay] Generated signature:', hexSig);
+    return hexSig;
+};
+
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
     const { customer, login, refreshCustomer } = useCustomer();
@@ -292,6 +312,106 @@ const Checkout = () => {
                     failure_url: `${window.location.origin}/payment-failure`,
                     signed_field_names: 'total_amount,transaction_uuid,product_code',
                     signature: signature
+                };
+
+                Object.entries(fields).forEach(([key, val]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = val;
+                    form.appendChild(input);
+                });
+
+                document.body.appendChild(form);
+                form.submit();
+                return;
+            }
+
+            // ── Fonepay Payment Flow (Deferred Order Creation) ───────────────────────────
+            if (formData.paymentMethod === 'Fonepay') {
+                const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
+                const secretKey = settings.fonepay_secret_key || 'test_secret_key';
+                const merchantId = settings.fonepay_merchant_id || 'TESTMERCHANT';
+                const configuredEnv = settings.fonepay_environment || 'test';
+                const gatewayUrl = configuredEnv === 'live' 
+                    ? 'https://merchantapi.fonepay.com/api/merchantRequest'
+                    : 'https://dev-merchantapi.fonepay.com/api/merchantRequest';
+
+                const fmt = (n) => Number(n).toFixed(2);
+                const totalAmountStr = fmt(grandTotal);
+
+                // Date in MM/DD/YYYY format
+                const today = new Date();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                const dateStr = `${mm}/${dd}/${yyyy}`;
+
+                const md = 'P'; // Purchase
+                const crn = 'NPR';
+                const r1 = `Order ${tempOrderNumber}`;
+                const r2 = `Shipping Rs. ${fmt(shippingFee)}`;
+                const returnUrl = `${window.location.origin}/payment-success`;
+
+                const signature = await generateFonepaySignature(
+                    merchantId,
+                    md,
+                    tempOrderNumber,
+                    totalAmountStr,
+                    crn,
+                    dateStr,
+                    r1,
+                    r2,
+                    returnUrl,
+                    secretKey
+                );
+
+                // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
+                const pendingOrderData = {
+                    customer_name: formData.fullName,
+                    phone: formData.phone,
+                    phone2: formData.phone2,
+                    address: formData.address,
+                    city: formData.city,
+                    payment_method: 'Fonepay',
+                    shipping_fee: shippingFee,
+                    total_amount: grandTotal,
+                    items: orderItems,
+                    coins_used: appliedCoinDiscount,
+                    ad_id: checkoutItems[0]?.ad_id || null,
+                    order_number: tempOrderNumber,
+                    is_buy_now: isBuyNow
+                };
+                sessionStorage.setItem('pending_fonepay_order', JSON.stringify(pendingOrderData));
+
+                console.log(`[Fonepay] Submitting form to ${configuredEnv} gateway (${gatewayUrl}) with fields:`, {
+                    PID: merchantId,
+                    MD: md,
+                    PRN: tempOrderNumber,
+                    AMT: totalAmountStr,
+                    CRN: crn,
+                    DT: dateStr,
+                    R1: r1,
+                    R2: r2,
+                    RU: returnUrl,
+                    DV: signature
+                });
+
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = gatewayUrl;
+
+                const fields = {
+                    PID: merchantId,
+                    MD: md,
+                    PRN: tempOrderNumber,
+                    AMT: totalAmountStr,
+                    CRN: crn,
+                    DT: dateStr,
+                    R1: r1,
+                    R2: r2,
+                    RU: returnUrl,
+                    DV: signature
                 };
 
                 Object.entries(fields).forEach(([key, val]) => {
@@ -680,6 +800,30 @@ const Checkout = () => {
                                             </div>
                                         </label>
 
+                                        {/* Fonepay */}
+                                        <label style={{
+                                            padding: '1rem 1.25rem',
+                                            border: formData.paymentMethod === 'Fonepay' ? '2px solid #dc2626' : '1px solid #e2e8f0',
+                                            borderRadius: '1rem',
+                                            background: formData.paymentMethod === 'Fonepay' ? '#fdf2f2' : 'white',
+                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                <input type="radio" name="paymentMethod" value="Fonepay"
+                                                    checked={formData.paymentMethod === 'Fonepay'}
+                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                                    style={{ width: '18px', height: '18px', accentColor: '#dc2626', cursor: 'pointer' }} />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
+                                                    <div>
+                                                        <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Fonepay (Mobile Banking / QR)</p>
+                                                        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay directly using your mobile banking app</p>
+                                                    </div>
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: '900', background: '#dc2626', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fonepay</span>
+                                                </div>
+                                            </div>
+                                        </label>
+
                                         {/* Bank Transfer */}
                                         <label style={{
                                             padding: '1rem 1.25rem',
@@ -791,7 +935,7 @@ const Checkout = () => {
                                     style={{ width: '100%', padding: '1rem', fontSize: '1.05rem', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                                 >
                                     {saving ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing…</> : (
-                                        formData.paymentMethod === 'eSewa' ? '🔒 Pay with eSewa →' : 'Confirm Order'
+                                        formData.paymentMethod === 'eSewa' ? '🔒 Pay with eSewa →' : formData.paymentMethod === 'Fonepay' ? '🔒 Pay with Fonepay →' : 'Confirm Order'
                                     )}
                                 </button>
 

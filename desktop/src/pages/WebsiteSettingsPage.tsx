@@ -76,6 +76,23 @@ const SETTING_GROUPS = [
             { key: 'esewa_merchant_code', label: 'eSewa Merchant Code (Product Code)', placeholder: 'EPAYTEST' },
             { key: 'esewa_secret_key', label: 'eSewa Secret Key', placeholder: '8gBm/:&EnhH.1/q', type: 'password' },
         ]
+    },
+    {
+        title: '📱 Fonepay Payment Gateway',
+        icon: <CreditCard size={16} className="text-red-500" />,
+        keys: [
+            {
+                key: 'fonepay_environment',
+                label: 'Payment Mode / Environment',
+                type: 'select',
+                options: [
+                    { label: 'Test Mode (Sandbox - dev-merchantapi.fonepay.com)', value: 'test' },
+                    { label: 'Live Mode (Production - merchantapi.fonepay.com)', value: 'live' }
+                ]
+            },
+            { key: 'fonepay_merchant_id', label: 'Fonepay Merchant ID (Product ID / PID)', placeholder: 'TESTMERCHANT' },
+            { key: 'fonepay_secret_key', label: 'Fonepay Secret Key', placeholder: 'Enter your Fonepay secret key', type: 'password' },
+        ]
     }
 ];
 

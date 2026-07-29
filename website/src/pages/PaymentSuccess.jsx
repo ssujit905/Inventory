@@ -39,6 +39,30 @@ const verifyEsewaResponseSignature = async (paymentDetails, secretKey) => {
     return computedSignature === paymentDetails.signature;
 };
 
+/**
+ * Verify Fonepay response signature using HMAC-SHA512.
+ */
+const verifyFonepayResponseSignature = async (paymentDetails, secretKey) => {
+    const { PID, PRN, BID, AMT, UID, UTN, P_STAT } = paymentDetails;
+    const message = `${PID},${PRN},${BID},${AMT},${UID},${UTN},${P_STAT}`;
+    console.log('[Fonepay Verify] Signing string:', message);
+    const encoder = new TextEncoder();
+    const cryptoKey = await window.crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secretKey),
+        { name: 'HMAC', hash: 'SHA-512' },
+        false,
+        ['sign']
+    );
+    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+    const computedSignature = Array.from(new Uint8Array(signatureBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+    console.log('[Fonepay Verify] Signature match:', computedSignature === paymentDetails.DV);
+    return computedSignature === paymentDetails.DV;
+};
+
 const PaymentSuccess = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -57,122 +81,200 @@ const PaymentSuccess = () => {
 
         const verifyPayment = async () => {
             const dataParam = searchParams.get('data');
-            if (!dataParam) {
+            const prnParam = searchParams.get('PRN'); // Fonepay Product Reference Number
+
+            if (!dataParam && !prnParam) {
                 setErrorMsg('Invalid payment response. Missing payment details.');
                 setLoading(false);
                 return;
             }
 
             try {
-                // Decode base64 parameters from eSewa redirect
-                const decodedString = atob(dataParam);
-                const paymentDetails = JSON.parse(decodedString);
-
-                const { transaction_uuid, transaction_code, total_amount, status, product_code, signature } = paymentDetails;
-
-                if (status !== 'COMPLETE') {
-                    setErrorMsg(`Payment was not completed. Status: ${status}`);
-                    setLoading(false);
-                    return;
-                }
-
-                // Verify the eSewa response signature
-                // Use signed_field_names from the response (eSewa specifies the exact fields/order)
-                const secretKey = settings.esewa_secret_key || '8gBm/:&EnhH.1/q';
-                const isSignatureValid = await verifyEsewaResponseSignature(paymentDetails, secretKey);
-
-                if (!isSignatureValid) {
-                    console.error('Invalid payment signature:', { received: signature });
-                    setErrorMsg('Security check failed. The payment signature is invalid.');
-                    setLoading(false);
-                    return;
-                }
-
-                // Extract the real order number by stripping the unique timestamp suffix
-                const realOrderNumber = transaction_uuid.includes('-')
-                    ? transaction_uuid.substring(0, transaction_uuid.lastIndexOf('-'))
-                    : transaction_uuid;
-
-                // NOTE: The transaction_uuid contains a temp order number we generated client-side.
-                // The real DB order number is returned by create_atomic_website_order.
-                // We track the confirmed order number separately.
-                // Retrieve pending order payload from sessionStorage
-                const rawPending = sessionStorage.getItem('pending_esewa_order');
-                const cacheKey = `last_esewa_success_${realOrderNumber}`;
-                const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_esewa_success');
-
                 let orderSummary = null;
 
-                if (rawPending) {
-                    const pending = JSON.parse(rawPending);
-                    const { data: createRes, error: createError } = await supabase.rpc('create_atomic_website_order', {
-                        p_customer_name: pending.customer_name,
-                        p_phone: pending.phone,
-                        p_phone2: pending.phone2,
-                        p_address: pending.address,
-                        p_city: pending.city,
-                        p_payment_method: 'eSewa',
-                        p_shipping_fee: pending.shipping_fee,
-                        p_total_amount: pending.total_amount,
-                        p_items: pending.items,
-                        p_coins_used: pending.coins_used,
-                        p_ad_id: pending.ad_id
-                    });
+                if (dataParam) {
+                    // ─── ESEWA FLOW ───
+                    const decodedString = atob(dataParam);
+                    const paymentDetails = JSON.parse(decodedString);
+                    const { transaction_uuid, transaction_code, total_amount, status } = paymentDetails;
 
-                    if (createError) {
-                        console.error('Failed to create atomic website order on payment success:', createError.message);
-                        throw new Error('Payment was verified but the order could not be created: ' + createError.message);
+                    if (status !== 'COMPLETE') {
+                        setErrorMsg(`Payment was not completed. Status: ${status}`);
+                        setLoading(false);
+                        return;
                     }
 
-                    const confirmedOrderNumber = createRes?.order_number || realOrderNumber;
-                    const storedOrderId = createRes?.order_id;
-                    console.log('[PaymentSuccess] created orderId:', storedOrderId, 'orderNumber:', confirmedOrderNumber);
+                    const secretKey = settings.esewa_secret_key || '8gBm/:&EnhH.1/q';
+                    const isSignatureValid = await verifyEsewaResponseSignature(paymentDetails, secretKey);
 
-                    // Mark both website_orders and sales as PAID using the real DB order number
-                    const cleanAmount = String(total_amount).replace(/,/g, '');
-                    const paymentNote = `eSewa Payment Complete.\nTxn Code: ${transaction_code}\nTotal Paid: Rs. ${cleanAmount}`;
-
-                    const { error: rpcError } = await supabase.rpc('confirm_website_payment', {
-                        p_order_number: confirmedOrderNumber,
-                        p_payment_details: paymentNote,
-                        p_status: 'paid'
-                    });
-
-                    if (rpcError) {
-                        console.error('RPC confirm payment failed:', rpcError.message);
+                    if (!isSignatureValid) {
+                        console.error('Invalid eSewa payment signature:', { received: paymentDetails.signature });
+                        setErrorMsg('Security check failed. The payment signature is invalid.');
+                        setLoading(false);
+                        return;
                     }
 
-                    orderSummary = {
-                        orderNumber: confirmedOrderNumber,
-                        customerName: pending.customer_name,
-                        phone: pending.phone,
-                        address: pending.address,
-                        city: pending.city,
-                        totalAmount: Number(pending.total_amount),
-                        txnCode: transaction_code
-                    };
+                    const realOrderNumber = transaction_uuid.includes('-')
+                        ? transaction_uuid.substring(0, transaction_uuid.lastIndexOf('-'))
+                        : transaction_uuid;
 
-                    sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
-                    sessionStorage.setItem('last_esewa_success', JSON.stringify(orderSummary));
-                    sessionStorage.removeItem('pending_esewa_order');
-                } else if (cachedSummary) {
-                    orderSummary = JSON.parse(cachedSummary);
+                    const rawPending = sessionStorage.getItem('pending_esewa_order');
+                    const cacheKey = `last_esewa_success_${realOrderNumber}`;
+                    const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_esewa_success');
+
+                    if (rawPending) {
+                        const pending = JSON.parse(rawPending);
+                        const { data: createRes, error: createError } = await supabase.rpc('create_atomic_website_order', {
+                            p_customer_name: pending.customer_name,
+                            p_phone: pending.phone,
+                            p_phone2: pending.phone2,
+                            p_address: pending.address,
+                            p_city: pending.city,
+                            p_payment_method: 'eSewa',
+                            p_shipping_fee: pending.shipping_fee,
+                            p_total_amount: pending.total_amount,
+                            p_items: pending.items,
+                            p_coins_used: pending.coins_used,
+                            p_ad_id: pending.ad_id
+                        });
+
+                        if (createError) throw new Error('Payment was verified but order could not be created: ' + createError.message);
+
+                        const confirmedOrderNumber = createRes?.order_number || realOrderNumber;
+                        const cleanAmount = String(total_amount).replace(/,/g, '');
+                        const paymentNote = `eSewa Payment Complete.\nTxn Code: ${transaction_code}\nTotal Paid: Rs. ${cleanAmount}`;
+
+                        await supabase.rpc('confirm_website_payment', {
+                            p_order_number: confirmedOrderNumber,
+                            p_payment_details: paymentNote,
+                            p_status: 'paid'
+                        });
+
+                        orderSummary = {
+                            orderNumber: confirmedOrderNumber,
+                            customerName: pending.customer_name,
+                            phone: pending.phone,
+                            address: pending.address,
+                            city: pending.city,
+                            totalAmount: Number(pending.total_amount),
+                            txnCode: transaction_code,
+                            paymentMethod: 'eSewa'
+                        };
+
+                        sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
+                        sessionStorage.setItem('last_esewa_success', JSON.stringify(orderSummary));
+                        sessionStorage.removeItem('pending_esewa_order');
+                    } else if (cachedSummary) {
+                        orderSummary = JSON.parse(cachedSummary);
+                    } else {
+                        const cleanAmount = String(total_amount).replace(/,/g, '');
+                        orderSummary = {
+                            orderNumber: realOrderNumber,
+                            customerName: 'Customer',
+                            phone: 'N/A',
+                            address: 'N/A',
+                            city: '',
+                            totalAmount: Number(cleanAmount) || 0,
+                            txnCode: transaction_code,
+                            paymentMethod: 'eSewa'
+                        };
+                    }
+                    showNotification('eSewa Payment verified successfully!', 'success');
+
                 } else {
-                    // Fallback for re-visits where session was cleared
-                    const cleanAmount = String(total_amount).replace(/,/g, '');
-                    orderSummary = {
-                        orderNumber: realOrderNumber,
-                        customerName: 'Customer',
-                        phone: 'N/A',
-                        address: 'N/A',
-                        city: '',
-                        totalAmount: Number(cleanAmount) || 0,
-                        txnCode: transaction_code
+                    // ─── FONEPAY FLOW ───
+                    const fonepayDetails = {
+                        PRN: searchParams.get('PRN'),
+                        PID: searchParams.get('PID'),
+                        BID: searchParams.get('BID'),
+                        AMT: searchParams.get('AMT'),
+                        UID: searchParams.get('UID'),
+                        UTN: searchParams.get('UTN'),
+                        P_STAT: searchParams.get('P_STAT'),
+                        DV: searchParams.get('DV')
                     };
+
+                    const { PRN, BID, AMT, UTN, P_STAT } = fonepayDetails;
+
+                    if (P_STAT !== 'SUCCESS' && P_STAT !== 'COMPLETED') {
+                        setErrorMsg(`Payment was not completed. Status: ${P_STAT}`);
+                        setLoading(false);
+                        return;
+                    }
+
+                    const secretKey = settings.fonepay_secret_key || 'test_secret_key';
+                    const isSignatureValid = await verifyFonepayResponseSignature(fonepayDetails, secretKey);
+
+                    if (!isSignatureValid) {
+                        console.error('Invalid Fonepay signature:', { received: fonepayDetails.DV });
+                        setErrorMsg('Security check failed. The Fonepay signature is invalid.');
+                        setLoading(false);
+                        return;
+                    }
+
+                    const rawPending = sessionStorage.getItem('pending_fonepay_order');
+                    const cacheKey = `last_fonepay_success_${PRN}`;
+                    const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_fonepay_success');
+
+                    if (rawPending) {
+                        const pending = JSON.parse(rawPending);
+                        const { data: createRes, error: createError } = await supabase.rpc('create_atomic_website_order', {
+                            p_customer_name: pending.customer_name,
+                            p_phone: pending.phone,
+                            p_phone2: pending.phone2,
+                            p_address: pending.address,
+                            p_city: pending.city,
+                            p_payment_method: 'Fonepay',
+                            p_shipping_fee: pending.shipping_fee,
+                            p_total_amount: pending.total_amount,
+                            p_items: pending.items,
+                            p_coins_used: pending.coins_used,
+                            p_ad_id: pending.ad_id
+                        });
+
+                        if (createError) throw new Error('Payment verified but order could not be created: ' + createError.message);
+
+                        const confirmedOrderNumber = createRes?.order_number || PRN;
+                        const paymentNote = `Fonepay Payment Complete.\nUTN Ref: ${UTN}\nBill ID: ${BID}\nTotal Paid: Rs. ${AMT}`;
+
+                        await supabase.rpc('confirm_website_payment', {
+                            p_order_number: confirmedOrderNumber,
+                            p_payment_details: paymentNote,
+                            p_status: 'paid'
+                        });
+
+                        orderSummary = {
+                            orderNumber: confirmedOrderNumber,
+                            customerName: pending.customer_name,
+                            phone: pending.phone,
+                            address: pending.address,
+                            city: pending.city,
+                            totalAmount: Number(pending.total_amount),
+                            txnCode: UTN,
+                            paymentMethod: 'Fonepay'
+                        };
+
+                        sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
+                        sessionStorage.setItem('last_fonepay_success', JSON.stringify(orderSummary));
+                        sessionStorage.removeItem('pending_fonepay_order');
+                    } else if (cachedSummary) {
+                        orderSummary = JSON.parse(cachedSummary);
+                    } else {
+                        orderSummary = {
+                            orderNumber: PRN,
+                            customerName: 'Customer',
+                            phone: 'N/A',
+                            address: 'N/A',
+                            city: '',
+                            totalAmount: Number(AMT) || 0,
+                            txnCode: UTN,
+                            paymentMethod: 'Fonepay'
+                        };
+                    }
+                    showNotification('Fonepay Payment verified successfully!', 'success');
                 }
 
                 setOrderInfo(orderSummary);
-                showNotification('eSewa Payment verified successfully!', 'success');
             } catch (err) {
                 console.error('Payment verification error:', err);
                 setErrorMsg(err.message || 'Verification failed. Please contact support.');
@@ -188,7 +290,7 @@ const PaymentSuccess = () => {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
                 <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid #e2e8f0', borderTopColor: '#60b524', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                <h3 style={{ fontWeight: '800', color: '#1e293b' }}>Verifying eSewa Payment...</h3>
+                <h3 style={{ fontWeight: '800', color: '#1e293b' }}>Verifying Payment...</h3>
                 <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Please do not close this window or refresh the page.</p>
             </div>
         );
@@ -217,7 +319,7 @@ const PaymentSuccess = () => {
                     <CheckCircle size={44} />
                 </div>
                 <h1 style={{ fontWeight: '900', color: '#111827', fontSize: '1.8rem', margin: '0 0 0.5rem 0' }}>Payment Successful!</h1>
-                <p style={{ color: '#10b981', fontWeight: '700', fontSize: '0.95rem' }}>Thank you! Your transaction via eSewa is complete.</p>
+                <p style={{ color: '#10b981', fontWeight: '700', fontSize: '0.95rem' }}>Thank you! Your transaction via {orderInfo.paymentMethod || 'eSewa'} is complete.</p>
             </div>
 
             <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid #f1f5f9', marginBottom: '2rem' }}>
@@ -228,7 +330,7 @@ const PaymentSuccess = () => {
                         <strong style={{ color: '#0f172a' }}>{orderInfo.orderNumber}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#64748b' }}>eSewa Reference Code</span>
+                        <span style={{ color: '#64748b' }}>{orderInfo.paymentMethod || 'eSewa'} Reference Code</span>
                         <strong style={{ color: '#0f172a' }}>{orderInfo.txnCode}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
