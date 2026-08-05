@@ -30,7 +30,8 @@ export default function WebsiteCustomersPage() {
     const [selectedCustomer, setSelectedCustomer] = useState<WebsiteCustomer | null>(null);
     const [newPin, setNewPin] = useState('');
     const [newCoins, setNewCoins] = useState(0);
-    const [updating, setUpdating] = useState(false);
+    const [updatingCoins, setUpdatingCoins] = useState(false);
+    const [resettingPin, setResettingPin] = useState(false);
 
     useEffect(() => {
         fetchCustomers();
@@ -53,36 +54,56 @@ export default function WebsiteCustomersPage() {
         setTimeout(() => setToast(null), 3000);
     };
 
-    const handleUpdateCustomer = async () => {
+    const handleUpdateCoins = async () => {
         if (!selectedCustomer) return;
-        setUpdating(true);
+        setUpdatingCoins(true);
         try {
-            const updates: any = {
-                shopy_coins: newCoins,
+            const updates = {
+                shopy_coins: Number(newCoins),
                 updated_at: new Date().toISOString()
             };
-            
-            if (newPin.trim()) {
-                if (newPin.length !== 4 || isNaN(Number(newPin))) {
-                    throw new Error('PIN must be exactly 4 digits');
-                }
-                updates.pin_hash = newPin;
-            }
-
             const { error } = await supabase
                 .from('website_customers')
                 .update(updates)
                 .eq('phone', selectedCustomer.phone);
 
             if (error) throw error;
-            
-            showToast('Customer updated successfully');
-            setIsEditModalOpen(false);
-            fetchCustomers();
+
+            const updatedCustomer = { ...selectedCustomer, ...updates };
+            setCustomers(previous => previous.map(customer =>
+                customer.phone === selectedCustomer.phone ? updatedCustomer : customer
+            ));
+            setSelectedCustomer(updatedCustomer);
+            showToast('Coins updated successfully');
         } catch (err: any) {
             showToast(err.message, 'error');
         } finally {
-            setUpdating(false);
+            setUpdatingCoins(false);
+        }
+    };
+
+    const handleResetPin = async () => {
+        if (!selectedCustomer) return;
+        if (newPin.length !== 4 || !/^[0-9]{4}$/.test(newPin)) {
+            showToast('PIN must be exactly 4 digits', 'error');
+            return;
+        }
+
+        setResettingPin(true);
+        try {
+            const { data: reset, error: resetError } = await supabase.rpc('admin_reset_customer_pin', {
+                p_phone: selectedCustomer.phone,
+                p_new_pin: newPin
+            });
+            if (resetError) throw resetError;
+            if (!reset) throw new Error('PIN reset was denied. Run secure_customer_sessions.sql, then sign in with an admin or staff account.');
+
+            setNewPin('');
+            showToast('PIN reset successfully');
+        } catch (err: any) {
+            showToast(err.message, 'error');
+        } finally {
+            setResettingPin(false);
         }
     };
 
@@ -219,7 +240,7 @@ export default function WebsiteCustomersPage() {
 
                                 <div className="pt-2 border-t border-gray-50 dark:border-gray-800 flex justify-between items-center text-[10px] text-gray-400 font-bold uppercase tracking-widest">
                                     <span>Joined {new Date(customer.created_at).toLocaleDateString()}</span>
-                                    <span className="text-primary font-black">PIN: {customer.pin_hash}</span>
+                                    <span className="text-gray-400 font-black">PIN protected</span>
                                 </div>
                             </div>
                         ))}
@@ -254,7 +275,7 @@ export default function WebsiteCustomersPage() {
                                             className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl outline-none transition-all font-bold text-sm"
                                         />
                                     </div>
-                                    <p className="text-[9px] text-gray-400 font-medium ml-1 italic">Current: {selectedCustomer.pin_hash}</p>
+                                    <p className="text-[9px] text-gray-400 font-medium ml-1 italic">For security, the current PIN cannot be viewed.</p>
                                 </div>
 
                                 <div className="space-y-2">
@@ -271,7 +292,16 @@ export default function WebsiteCustomersPage() {
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex gap-3">
+                            <div className="pt-4 flex flex-col gap-3">
+                                <button
+                                    disabled={resettingPin || !newPin.trim()}
+                                    onClick={handleResetPin}
+                                    className="w-full py-4 bg-gray-900 dark:bg-gray-700 text-white font-black rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 transition-all uppercase text-xs tracking-widest"
+                                >
+                                    {resettingPin ? <Loader2 className="animate-spin" size={18} /> : <Key size={18} />}
+                                    Reset PIN
+                                </button>
+                                <div className="flex gap-3">
                                 <button
                                     onClick={() => setIsEditModalOpen(false)}
                                     className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 font-black rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all uppercase text-xs tracking-widest"
@@ -279,13 +309,14 @@ export default function WebsiteCustomersPage() {
                                     Cancel
                                 </button>
                                 <button
-                                    disabled={updating}
-                                    onClick={handleUpdateCustomer}
+                                    disabled={updatingCoins}
+                                    onClick={handleUpdateCoins}
                                     className="flex-2 py-4 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/30 flex items-center justify-center gap-3 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 transition-all uppercase text-xs tracking-widest px-8"
                                 >
-                                    {updating ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-                                    Save Changes
+                                    {updatingCoins ? <Loader2 className="animate-spin" size={18} /> : <Coins size={18} />}
+                                    Save Coins
                                 </button>
+                                </div>
                             </div>
                         </div>
                     </div>

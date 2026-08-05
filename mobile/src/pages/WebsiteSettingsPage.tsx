@@ -74,7 +74,6 @@ const SETTING_GROUPS = [
                 ]
             },
             { key: 'esewa_merchant_code', label: 'eSewa Merchant Code (Product Code)', placeholder: 'EPAYTEST' },
-            { key: 'esewa_secret_key', label: 'eSewa Secret Key', placeholder: '8gBm/:&EnhH.1/q', type: 'password' },
         ]
     },
     {
@@ -86,12 +85,11 @@ const SETTING_GROUPS = [
                 label: 'Payment Mode / Environment',
                 type: 'select',
                 options: [
-                    { label: 'Test Mode (Sandbox - dev-merchantapi.fonepay.com)', value: 'test' },
-                    { label: 'Live Mode (Production - merchantapi.fonepay.com)', value: 'live' }
+                    { label: 'Test Mode (Sandbox - dev-clientapi.fonepay.com)', value: 'test' },
+                    { label: 'Live Mode (Production - clientapi.fonepay.com)', value: 'live' }
                 ]
             },
             { key: 'fonepay_merchant_id', label: 'Fonepay Merchant ID (Product ID / PID)', placeholder: 'TESTMERCHANT' },
-            { key: 'fonepay_secret_key', label: 'Fonepay Secret Key', placeholder: 'Enter your Fonepay secret key', type: 'password' },
         ]
     }
 ];
@@ -141,6 +139,10 @@ export default function WebsiteSettingsPage() {
         if (savedDraft && !loading) {
             try {
                 const { settings: dSettings, flashSaleProducts: dFlash } = JSON.parse(savedDraft);
+                if (dSettings) {
+                    delete dSettings.esewa_secret_key;
+                    delete dSettings.fonepay_secret_key;
+                }
                 if (dSettings) setSettings(prev => ({ ...prev, ...dSettings }));
                 if (dFlash) setFlashSaleProducts(dFlash);
             } catch (e) { console.error('Settings draft restore failed'); }
@@ -149,7 +151,8 @@ export default function WebsiteSettingsPage() {
 
     useEffect(() => {
         if (!loading && Object.keys(settings).length > 0) {
-            const draft = { settings, flashSaleProducts };
+            const { esewa_secret_key, fonepay_secret_key, ...safeSettings } = settings;
+            const draft = { settings: safeSettings, flashSaleProducts };
             localStorage.setItem('website_settings_draft', JSON.stringify(draft));
         }
     }, [settings, flashSaleProducts, loading]);

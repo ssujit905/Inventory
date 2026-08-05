@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { MapPin, Truck } from 'lucide-react';
+import { MapPin, Sparkles } from 'lucide-react';
 
 const ProductCard = ({ product }) => {
 
@@ -22,7 +22,7 @@ const ProductCard = ({ product }) => {
             flexDirection: 'column',
             position: 'relative',
             border: '1px solid transparent',
-            borderBottom: '3px solid #000'
+            borderBottom: isSoldOut ? '3px solid var(--primary-red)' : '3px solid #000'
         }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -46,39 +46,20 @@ const ProductCard = ({ product }) => {
                         aspectRatio: '1',
                         objectFit: 'cover',
                         display: 'block',
-                        opacity: isSoldOut ? 0.4 : 1,
-                        filter: isSoldOut ? 'grayscale(0.8)' : 'none'
+                        opacity: isSoldOut ? 0.62 : 1,
+                        filter: isSoldOut ? 'grayscale(0.65) contrast(0.9)' : 'none'
                     }}
                 />
 
                 {isSoldOut && (
-                    <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.4)',
-                        zIndex: 2
-                    }}>
-                        <span style={{
-                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                            color: '#64748b',
-                            padding: '6px 14px',
-                            fontWeight: '800',
-                            fontSize: '0.7rem',
-                            borderRadius: '8px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.1em',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                            border: '1px solid #e2e8f0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}>
-                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
-                            Sold Out
-                        </span>
+                    <div className="sold-out-overlay">
+                        <div className="sold-out-card-badge">
+                            <span className="sold-out-icon"><Sparkles size={14} strokeWidth={2.4} /></span>
+                            <span>
+                                <strong>Sold out</strong>
+                                <small>Back soon</small>
+                            </span>
+                        </div>
                     </div>
                 )}
             </Link>

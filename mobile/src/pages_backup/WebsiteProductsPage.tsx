@@ -157,7 +157,9 @@ export default function WebsiteProductsPage() {
             is_prebook: p.is_prebook,
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
-            video_url: p.video_url || ''
+            video_url: p.video_url || '',
+            video_file: undefined,
+            video_progress: undefined
         });
         setVariants([]);
         fetchVariants(p.id);
@@ -185,18 +187,15 @@ export default function WebsiteProductsPage() {
         const ext = file.name.split('.').pop();
         const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         
-        // Supabase v2 supports onUploadProgress in the options
+        // supabase-js storage does not expose byte-level upload progress.
+        onProgress?.(10);
         const { error } = await supabaseWithTimeout(
-            supabase.storage.from('website-images').upload(path, file, {
-                onUploadProgress: (progress) => {
-                    const pct = Math.round((progress.loaded / progress.total) * 100);
-                    if (onProgress) onProgress(pct);
-                }
-            }),
+            supabase.storage.from('website-images').upload(path, file),
             120000 // Give large images up to 2 mins
         );
         
         if (error) throw error;
+        onProgress?.(100);
         const { data } = supabase.storage.from('website-images').getPublicUrl(path);
         return data.publicUrl;
     };
@@ -232,13 +231,9 @@ export default function WebsiteProductsPage() {
                 setVideoProgress(0); // Dedicated state start
                 const ext = form.video_file.name.split('.').pop();
                 const path = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+                setVideoProgress(10);
                 const { error: vidErr } = await supabaseWithTimeout(
-                    supabase.storage.from('website-images').upload(path, form.video_file, {
-                        onUploadProgress: (progress) => {
-                            const pct = Math.round((progress.loaded / progress.total) * 100);
-                            setVideoProgress(pct);
-                        }
-                    }),
+                    supabase.storage.from('website-images').upload(path, form.video_file),
                     300000 // 5 mins for video
                 );
                 if (vidErr) throw vidErr;

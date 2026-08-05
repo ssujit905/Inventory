@@ -4,7 +4,7 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
-    Package, Loader2, Check, AlertTriangle, Globe, Video, Zap
+    Package, Loader2, Check, AlertTriangle, Globe, Video
 } from 'lucide-react';
 
 interface ProductVariant {
@@ -44,10 +44,12 @@ interface WebsiteProduct {
     is_cod: boolean;
     is_prepaid: boolean;
     is_prebook: boolean;
+    allow_cod: boolean;
+    allow_esewa: boolean;
+    allow_fonepay: boolean;
     sizes: string;
     sold_count: number;
     created_at: string;
-    ad_id?: string | null;
     video_url?: string | null;
     website_product_images: ProductImage[];
 }
@@ -69,7 +71,6 @@ export default function WebsiteProductsPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
     const [videoProgress, setVideoProgress] = useState<number | null>(null);
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
-    const [adsOptions, setAdsOptions] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const emptyForm = {
@@ -77,12 +78,12 @@ export default function WebsiteProductsPage() {
         category: 'General', city: 'Kathmandu', delivery_days: '2-4',
         is_active: true, is_featured: false, show_shopinepal: true, 
         is_cod: true, is_prepaid: false, is_prebook: false,
+        allow_cod: true, allow_esewa: true, allow_fonepay: true,
         sizes: '',
         images: [] as ProductImage[],
         video_url: '',
         video_file: undefined as File | undefined,
-        video_progress: undefined as number | undefined,
-        ad_id: ''
+        video_progress: undefined as number | undefined
     };
     const [form, setForm] = useState(emptyForm);
 
@@ -130,19 +131,7 @@ export default function WebsiteProductsPage() {
         localStorage.removeItem('mobile_web_product_form_open');
     };
 
-    useEffect(() => { 
-        fetchProducts(); 
-        fetchAds();
-    }, []);
-
-    const fetchAds = async () => {
-        const { data } = await supabase
-            .from('expenses')
-            .select('id, description')
-            .eq('category', 'ads')
-            .order('description');
-        if (data) setAdsOptions(data);
-    };
+    useEffect(() => { fetchProducts(); }, []);
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
@@ -163,9 +152,10 @@ export default function WebsiteProductsPage() {
             setProducts(data || []);
         }
 
-        // Also fetch inventory items for mapping
+        // Use the same live stock view as the desktop app so a variant mapping
+        // immediately shows the real quantity available for its SKU.
         const { data: inv, error: invErr } = await supabaseWithTimeout(
-            supabase.from('products').select('id, name, sku, description, image_url')
+            supabase.from('inventory_stock_view').select('id, name, sku, available_stock')
         );
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
@@ -215,10 +205,14 @@ export default function WebsiteProductsPage() {
             is_cod: p.is_cod,
             is_prepaid: p.is_prepaid,
             is_prebook: p.is_prebook,
+            allow_cod: p.allow_cod ?? true,
+            allow_esewa: p.allow_esewa ?? true,
+            allow_fonepay: p.allow_fonepay ?? true,
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
             video_url: p.video_url || '',
-            ad_id: (p as any).ad_id || ''
+            video_file: undefined,
+            video_progress: undefined
         });
         setVariants([]);
         fetchVariants(p.id);
@@ -246,24 +240,25 @@ export default function WebsiteProductsPage() {
         const ext = file.name.split('.').pop();
         const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         
-        // Supabase v2 supports onUploadProgress in the options
+        // supabase-js storage does not expose byte-level upload progress.
+        // Keep the UI responsive with start/finish progress states instead.
+        onProgress?.(10);
         const { error } = await supabaseWithTimeout(
-            supabase.storage.from('website-images').upload(path, file, {
-                onUploadProgress: (progress) => {
-                    const pct = Math.round((progress.loaded / progress.total) * 100);
-                    if (onProgress) onProgress(pct);
-                }
-            }),
+            supabase.storage.from('website-images').upload(path, file),
             120000 // Give large images up to 2 mins
         );
         
         if (error) throw error;
+        onProgress?.(100);
         const { data } = supabase.storage.from('website-images').getPublicUrl(path);
         return data.publicUrl;
     };
 
     const handleSave = async () => {
         if (!form.title.trim()) return showToast('Title is required', 'error');
+        if (!form.allow_cod && !form.allow_esewa && !form.allow_fonepay) {
+            return showToast('Choose at least one payment method for this product', 'error');
+        }
         setSaving(true);
         try {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
@@ -283,9 +278,11 @@ export default function WebsiteProductsPage() {
                 is_cod: form.is_cod,
                 is_prepaid: form.is_prepaid,
                 is_prebook: form.is_prebook,
+                allow_cod: form.allow_cod,
+                allow_esewa: form.allow_esewa,
+                allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
-                ad_id: form.ad_id || null,
                 updated_at: new Date().toISOString()
             };
 
@@ -294,13 +291,9 @@ export default function WebsiteProductsPage() {
                 setVideoProgress(0); // Dedicated state start
                 const ext = form.video_file.name.split('.').pop();
                 const path = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+                setVideoProgress(10);
                 const { error: vidErr } = await supabaseWithTimeout(
-                    supabase.storage.from('website-images').upload(path, form.video_file, {
-                        onUploadProgress: (progress) => {
-                            const pct = Math.round((progress.loaded / progress.total) * 100);
-                            setVideoProgress(pct);
-                        }
-                    }),
+                    supabase.storage.from('website-images').upload(path, form.video_file),
                     300000 // 5 mins for video
                 );
                 if (vidErr) throw vidErr;
@@ -707,23 +700,6 @@ export default function WebsiteProductsPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5 text-amber-500">
-                                    <Zap size={10} className="fill-amber-500" />
-                                    Ads Attribution <span className="text-[8px] font-normal lowercase">(Optional)</span>
-                                </label>
-                                <select 
-                                    value={form.ad_id} 
-                                    onChange={e => setForm(f => ({ ...f, ad_id: e.target.value }))} 
-                                    className="w-full h-11 px-4 rounded-xl border border-transparent bg-amber-50/50 dark:bg-amber-900/10 text-sm font-bold text-gray-900 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-800 focus:border-amber-500/30 outline-none transition-all"
-                                >
-                                    <option value="">-- No Ad Assigned --</option>
-                                    {adsOptions.map(ad => (
-                                        <option key={ad.id} value={ad.id}>{ad.description}</option>
-                                    ))}
-                                </select>
-                            </div>
-
                             <div className="flex flex-wrap gap-x-6 gap-y-4 pt-2">
                                 <label className="flex items-center gap-3 cursor-pointer group">
                                     <div className="relative flex items-center">
@@ -767,6 +743,27 @@ export default function WebsiteProductsPage() {
                                     </div>
                                     <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest group-hover:text-gray-700">Pre-book</span>
                                 </label>
+                            </div>
+
+                            <div className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4 dark:border-violet-900/40 dark:bg-violet-950/20">
+                                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">Allowed payment methods</p>
+                                <div className="flex flex-col gap-3">
+                                    {[
+                                        ['allow_cod', 'Cash on Delivery'],
+                                        ['allow_esewa', 'eSewa'],
+                                        ['allow_fonepay', 'Fonepay']
+                                    ].map(([field, label]) => (
+                                        <label key={field} className="flex items-center justify-between text-sm font-bold text-gray-700 dark:text-gray-200">
+                                            {label}
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(form[field as keyof typeof form])}
+                                                onChange={e => setForm(f => ({ ...f, [field]: e.target.checked }))}
+                                                className="h-5 w-5 accent-primary"
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
 
                             <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-8">
@@ -965,17 +962,24 @@ export default function WebsiteProductsPage() {
                                                         )}
                                                     </div>
 
-                                                    {v.current_stock !== undefined && (
-                                                        <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800/50">
-                                                            <div className={`w-2.5 h-2.5 rounded-full ${v.current_stock > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'}`} />
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Inventory Status</span>
-                                                                <span className={`text-xs font-black ${v.current_stock > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                                    {v.current_stock} Units Available in Stock
-                                                                </span>
+                                                    {(() => {
+                                                        const stock = v.inventory_product_id
+                                                            ? inventoryItems.find(item => item.id.toString() === v.inventory_product_id.toString())?.available_stock
+                                                            : v.current_stock;
+                                                        if (stock === undefined) return null;
+
+                                                        return (
+                                                            <div className="flex items-center gap-3 p-4 bg-white dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800/50">
+                                                                <div className={`w-2.5 h-2.5 rounded-full ${stock > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'}`} />
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Inventory Status</span>
+                                                                    <span className={`text-xs font-black ${stock > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                                        {stock} Units Available in Stock
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         );

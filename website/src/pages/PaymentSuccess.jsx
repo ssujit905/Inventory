@@ -3,71 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, ArrowRight, ShoppingBag, Calendar, CreditCard, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useNotification } from '../context/NotificationContext';
-import { useSettings } from '../context/SettingsContext';
 import { useCustomer } from '../context/CustomerContext';
-
-/**
- * Verify eSewa response signature.
- * eSewa includes a `signed_field_names` field in its response that specifies
- * exactly which fields (and in what order) were used to build the HMAC.
- * We MUST use that dynamic field list — not a hardcoded one.
- */
-const verifyEsewaResponseSignature = async (paymentDetails, secretKey) => {
-    const signedFieldNames = paymentDetails.signed_field_names;
-    if (!signedFieldNames) {
-        console.warn('[eSewa] No signed_field_names in response — cannot verify signature.');
-        return false;
-    }
-    // Build the message string from the fields eSewa specified
-    const message = signedFieldNames
-        .split(',')
-        .map(field => `${field}=${paymentDetails[field]}`)
-        .join(',');
-
-    const encoder = new TextEncoder();
-    const cryptoKey = await window.crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secretKey),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
-    const computedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-
-    console.log('[eSewa Verify] Signature match:', computedSignature === paymentDetails.signature);
-    return computedSignature === paymentDetails.signature;
-};
-
-/**
- * Verify Fonepay response signature using HMAC-SHA512.
- */
-const verifyFonepayResponseSignature = async (paymentDetails, secretKey) => {
-    const { PID, PRN, BID, AMT, UID, UTN, P_STAT } = paymentDetails;
-    const message = `${PID},${PRN},${BID},${AMT},${UID},${UTN},${P_STAT}`;
-    console.log('[Fonepay Verify] Signing string:', message);
-    const encoder = new TextEncoder();
-    const cryptoKey = await window.crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secretKey),
-        { name: 'HMAC', hash: 'SHA-512' },
-        false,
-        ['sign']
-    );
-    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
-    const computedSignature = Array.from(new Uint8Array(signatureBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-
-    console.log('[Fonepay Verify] Signature match:', computedSignature === paymentDetails.DV);
-    return computedSignature === paymentDetails.DV;
-};
 
 const PaymentSuccess = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { showNotification } = useNotification();
-    const { settings = {} } = useSettings();
     const { customer } = useCustomer();
     const [loading, setLoading] = useState(true);
     const [orderInfo, setOrderInfo] = useState(null);
@@ -104,8 +45,10 @@ const PaymentSuccess = () => {
                         return;
                     }
 
-                    const secretKey = settings.esewa_secret_key || '8gBm/:&EnhH.1/q';
-                    const isSignatureValid = await verifyEsewaResponseSignature(paymentDetails, secretKey);
+                    const { data: verification, error: verificationError } = await supabase.functions.invoke('payment-gateway', {
+                        body: { action: 'verify-esewa-response', paymentDetails }
+                    });
+                    const isSignatureValid = !verificationError && verification?.valid === true;
 
                     if (!isSignatureValid) {
                         console.error('Invalid eSewa payment signature:', { received: paymentDetails.signature });
@@ -202,8 +145,10 @@ const PaymentSuccess = () => {
                         return;
                     }
 
-                    const secretKey = settings.fonepay_secret_key || 'test_secret_key';
-                    const isSignatureValid = await verifyFonepayResponseSignature(fonepayDetails, secretKey);
+                    const { data: verification, error: verificationError } = await supabase.functions.invoke('payment-gateway', {
+                        body: { action: 'verify-fonepay-response', paymentDetails: fonepayDetails }
+                    });
+                    const isSignatureValid = !verificationError && verification?.valid === true;
 
                     if (!isSignatureValid) {
                         console.error('Invalid Fonepay signature:', { received: fonepayDetails.DV });
@@ -224,7 +169,7 @@ const PaymentSuccess = () => {
                             p_phone2: pending.phone2,
                             p_address: pending.address,
                             p_city: pending.city,
-                            p_payment_method: 'Fonepay',
+                            p_payment_method: 'Bank Transfer',
                             p_shipping_fee: pending.shipping_fee,
                             p_total_amount: pending.total_amount,
                             p_items: pending.items,
@@ -251,7 +196,7 @@ const PaymentSuccess = () => {
                             city: pending.city,
                             totalAmount: Number(pending.total_amount),
                             txnCode: UTN,
-                            paymentMethod: 'Fonepay'
+                            paymentMethod: 'Bank Transfer'
                         };
 
                         sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
@@ -268,10 +213,10 @@ const PaymentSuccess = () => {
                             city: '',
                             totalAmount: Number(AMT) || 0,
                             txnCode: UTN,
-                            paymentMethod: 'Fonepay'
+                            paymentMethod: 'Bank Transfer'
                         };
                     }
-                    showNotification('Fonepay Payment verified successfully!', 'success');
+                    showNotification('Bank Transfer Payment verified successfully!', 'success');
                 }
 
                 setOrderInfo(orderSummary);

@@ -44,7 +44,6 @@ export default function StaffManagementPage() {
                 const d = JSON.parse(savedDraft);
                 setNewName(d.newName || '');
                 setNewEmail(d.newEmail || '');
-                setNewPassword(d.newPassword || '');
                 setNewRole(d.newRole || 'staff');
                 setNewPermissions(d.newPermissions || 'read_only');
             } catch (e) { console.error('Staff draft restore failed'); }
@@ -53,7 +52,8 @@ export default function StaffManagementPage() {
 
     useEffect(() => {
         if (isAddModalOpen) {
-            const draft = { newName, newEmail, newPassword, newRole, newPermissions };
+            // Never persist a staff password in browser storage.
+            const draft = { newName, newEmail, newRole, newPermissions };
             localStorage.setItem('staff_entry_draft', JSON.stringify(draft));
             localStorage.setItem('staff_entry_form_open', 'true');
         } else {

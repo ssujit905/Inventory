@@ -169,9 +169,9 @@ const MyOrders = () => {
         setPinLoading(true);
         try {
             // Update PIN via RPC
-            const { data: success, error: updateError } = await supabase.rpc('change_customer_pin', {
-                p_phone: String(customer.phone),
-                p_old_pin: String(currentPin),
+            const { data: success, error: updateError } = await supabase.rpc('customer_change_pin', {
+                p_token: sessionStorage.getItem('shopy_customer_session'),
+                p_current_pin: String(currentPin),
                 p_new_pin: String(newPin)
             });
 
@@ -292,18 +292,16 @@ const MyOrders = () => {
     const fetchOrders = async () => {
         setLoadingOrders(true);
         try {
-            const { data: res, error: ordersError } = await supabase.rpc('get_customer_orders', {
-                p_phone: customer.phone,
-                p_pin: customer.pin_hash || customer.pin
+            const { data: res, error: ordersError } = await supabase.rpc('customer_orders', {
+                p_token: sessionStorage.getItem('shopy_customer_session')
             });
 
             if (ordersError || !res.success) throw ordersError || new Error(res.error);
             setOrders(res.orders || []);
 
             // Securely fetch returns via RPC
-            const { data: retRes, error: retError } = await supabase.rpc('get_customer_returns', {
-                p_phone: customer.phone,
-                p_pin: customer.pin_hash || customer.pin
+            const { data: retRes, error: retError } = await supabase.rpc('customer_returns', {
+                p_token: sessionStorage.getItem('shopy_customer_session')
             });
             
             if (!retError && retRes.success) {
@@ -409,9 +407,8 @@ const MyOrders = () => {
     const confirmRateProduct = async () => {
         setIsRating(true);
         try {
-            const { data: success, error: rateError } = await supabase.rpc('submit_product_rating', {
-                p_phone: customer.phone,
-                p_pin: customer.pin_hash || customer.pin,
+            const { data: success, error: rateError } = await supabase.rpc('customer_submit_rating', {
+                p_token: sessionStorage.getItem('shopy_customer_session'),
                 p_order_id: rateData.orderId,
                 p_product_id: rateData.productId,
                 p_rating: rateValue,

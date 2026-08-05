@@ -1,13 +1,18 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const { sendMessage } = require('./messenger');
 const supabase = require('./supabase');
 
 const app = express();
-app.use(bodyParser.json());
+app.use(bodyParser.json({
+    verify: (req, _res, buffer) => {
+        req.rawBody = buffer;
+    }
+}));
 app.use(cors());
 
 // In-memory sessions
@@ -150,6 +155,21 @@ app.get('/webhook', (req, res) => {
     } else {
         res.sendStatus(403);
     }
+});
+
+// Verify that POSTs really came from Meta before processing a Messenger event.
+// Set FACEBOOK_APP_SECRET in production; leaving it unset preserves local testing.
+app.use('/webhook', (req, res, next) => {
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+    if (!appSecret || req.method !== 'POST') return next();
+
+    const received = req.get('x-hub-signature-256');
+    const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(req.rawBody || '').digest('hex')}`;
+
+    if (!received || received.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected))) {
+        return res.sendStatus(403);
+    }
+    next();
 });
 
 app.post('/webhook', (req, res) => {

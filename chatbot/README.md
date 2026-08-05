@@ -22,6 +22,7 @@ A rule-based Facebook Messenger chatbot built with Node.js that starts on the fi
    Open `.env` and fill in your Messenger credentials:
    - `VERIFY_TOKEN`: Any string (you'll set this in FB Developer Portal).
    - `PAGE_ACCESS_TOKEN`: From your Facebook Page settings.
+   - `FACEBOOK_APP_SECRET`: Your Meta app secret. Required in production to verify webhook signatures.
 
 3. **Start the Server**:
    ```bash

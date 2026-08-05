@@ -1,55 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft, CheckCircle, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft, CheckCircle, ShoppingBag, ArrowRight, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
 import { useNotification } from '../context/NotificationContext';
-import { useSettings } from '../context/SettingsContext';
-
-// eSewa HMAC-SHA256 signature generation using Web Crypto API
-const generateEsewaSignature = async (totalAmount, transactionUuid, productCode, secretKey) => {
-    const inputString = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${productCode}`;
-    console.log('[eSewa] Signing string:', inputString);
-    const encoder = new TextEncoder();
-    const cryptoKey = await window.crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secretKey),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(inputString));
-    const base64Sig = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-    console.log('[eSewa] Generated signature:', base64Sig);
-    return base64Sig;
-};
-
-// Fonepay HMAC-SHA512 signature generation using Web Crypto API
-const generateFonepaySignature = async (pid, md, prn, amt, crn, dt, r1, r2, ru, secretKey) => {
-    const inputString = `${pid},${md},${prn},${amt},${crn},${dt},${r1},${r2},${ru}`;
-    console.log('[Fonepay] Hashing string:', inputString);
-    const encoder = new TextEncoder();
-    const cryptoKey = await window.crypto.subtle.importKey(
-        'raw',
-        encoder.encode(secretKey),
-        { name: 'HMAC', hash: 'SHA-512' },
-        false,
-        ['sign']
-    );
-    const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(inputString));
-    const hexSig = Array.from(new Uint8Array(signatureBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-    console.log('[Fonepay] Generated signature:', hexSig);
-    return hexSig;
-};
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
-    const { customer, login, refreshCustomer } = useCustomer();
+    const { customer, register, refreshCustomer } = useCustomer();
     const { showNotification } = useNotification();
-    const { settings = {} } = useSettings();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -66,6 +26,18 @@ const Checkout = () => {
         ? (buyNowItem.price * buyNowItem.quantity)
         : cartTotal;
 
+    // A cart can only use payment methods accepted by every product in it.
+    // Products created before this feature retain all methods because undefined means allowed.
+    const paymentAvailability = {
+        COD: checkoutItems.every(item => item.allow_cod !== false),
+        eSewa: checkoutItems.every(item => item.allow_esewa !== false),
+        'Bank Transfer': checkoutItems.every(item => item.allow_fonepay !== false)
+    };
+    const availablePaymentMethods = Object.entries(paymentAvailability)
+        .filter(([, isAvailable]) => isAvailable)
+        .map(([method]) => method);
+    const paymentAvailabilityKey = `${paymentAvailability.COD}-${paymentAvailability.eSewa}-${paymentAvailability['Bank Transfer']}`;
+
     const [isOrdered, setIsOrdered] = useState(false);
     const [orderNumber, setOrderNumber] = useState('');
     const [saving, setSaving] = useState(false);
@@ -75,6 +47,7 @@ const Checkout = () => {
     const [cartReady, setCartReady] = useState(false);
     const [checkoutError, setCheckoutError] = useState(null);
     const [txnRef, setTxnRef] = useState('');
+    const [paymentRedirecting, setPaymentRedirecting] = useState(false);
 
     // Delivery branches from DB
     const [branches, setBranches] = useState([]);
@@ -90,6 +63,21 @@ const Checkout = () => {
         city: '',
         paymentMethod: 'COD'
     });
+
+    // A native payment-form POST can place this page in the browser's back/forward cache.
+    // Clear the transient gateway overlay when a shopper returns with the Back button.
+    useEffect(() => {
+        const clearPaymentRedirect = () => setPaymentRedirecting(false);
+        window.addEventListener('pageshow', clearPaymentRedirect);
+        return () => window.removeEventListener('pageshow', clearPaymentRedirect);
+    }, []);
+
+    useEffect(() => {
+        setFormData(current => {
+            if (paymentAvailability[current.paymentMethod]) return current;
+            return { ...current, paymentMethod: availablePaymentMethods[0] || '' };
+        });
+    }, [paymentAvailabilityKey]);
 
     // Load delivery branches and autofill customer data
     useEffect(() => {
@@ -207,8 +195,8 @@ const Checkout = () => {
             showNotification('Secondary phone must be exactly 10 digits.', 'error');
             return;
         }
-        if (formData.paymentMethod === 'Bank Transfer' && !txnRef.trim()) {
-            showNotification('Please enter your transaction reference number for Bank Transfer.', 'error');
+        if (!paymentAvailability[formData.paymentMethod]) {
+            showNotification('The selected payment method is not available for this product.', 'error');
             return;
         }
 
@@ -246,27 +234,31 @@ const Checkout = () => {
 
             // ── eSewa Payment Flow (Deferred Order Creation) ───────────────────────────
             if (formData.paymentMethod === 'eSewa') {
+                // Paint the handoff state before the browser starts cryptographic work and submits the gateway form.
+                setPaymentRedirecting(true);
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
                 const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
                 const transactionUuid = `${tempOrderNumber}-${Date.now()}`;
-
-                const secretKey = settings.esewa_secret_key || '8gBm/:&EnhH.1/q';
-                const productCode = settings.esewa_merchant_code || 'EPAYTEST';
-                const configuredEnv = settings.esewa_environment || 'test';
-                const gatewayUrl = configuredEnv === 'live' 
-                    ? 'https://epay.esewa.com.np/api/epay/main/v2/form'
-                    : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
 
                 const fmt = (n) => Number(n).toFixed(2);
                 const totalAmountStr = fmt(grandTotal);
                 const amountStr = fmt(grandTotal - shippingFee);
                 const deliveryChargeStr = fmt(shippingFee);
-
-                const signature = await generateEsewaSignature(
-                    totalAmountStr,
-                    transactionUuid,
-                    productCode,
-                    secretKey
-                );
+                const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
+                    body: {
+                        action: 'create-esewa-payment',
+                        totalAmount: totalAmountStr,
+                        amount: amountStr,
+                        deliveryCharge: deliveryChargeStr,
+                        transactionUuid,
+                        successUrl: `${window.location.origin}/payment-success`,
+                        failureUrl: `${window.location.origin}/payment-failure`
+                    }
+                });
+                if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
+                    throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the eSewa payment.');
+                }
 
                 // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
                 const pendingOrderData = {
@@ -287,34 +279,11 @@ const Checkout = () => {
                 };
                 sessionStorage.setItem('pending_esewa_order', JSON.stringify(pendingOrderData));
 
-                console.log(`[eSewa] Submitting form to ${configuredEnv} gateway (${gatewayUrl}) with fields:`, {
-                    amount: amountStr,
-                    total_amount: totalAmountStr,
-                    transaction_uuid: transactionUuid,
-                    product_code: productCode,
-                    product_delivery_charge: deliveryChargeStr,
-                    signature
-                });
-
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = gatewayUrl;
+                form.action = gatewayPayment.gatewayUrl;
 
-                const fields = {
-                    amount: amountStr,
-                    tax_amount: '0',
-                    total_amount: totalAmountStr,
-                    transaction_uuid: transactionUuid,
-                    product_code: productCode,
-                    product_service_charge: '0',
-                    product_delivery_charge: deliveryChargeStr,
-                    success_url: `${window.location.origin}/payment-success`,
-                    failure_url: `${window.location.origin}/payment-failure`,
-                    signed_field_names: 'total_amount,transaction_uuid,product_code',
-                    signature: signature
-                };
-
-                Object.entries(fields).forEach(([key, val]) => {
+                Object.entries(gatewayPayment.fields).forEach(([key, val]) => {
                     const input = document.createElement('input');
                     input.type = 'hidden';
                     input.name = key;
@@ -327,16 +296,9 @@ const Checkout = () => {
                 return;
             }
 
-            // ── Fonepay Payment Flow (Deferred Order Creation) ───────────────────────────
-            if (formData.paymentMethod === 'Fonepay') {
+            // ── Bank Transfer / Fonepay Payment Flow (Deferred Order Creation) ───────────────────────────
+            if (formData.paymentMethod === 'Bank Transfer') {
                 const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
-                const secretKey = settings.fonepay_secret_key || 'test_secret_key';
-                const merchantId = settings.fonepay_merchant_id || 'TESTMERCHANT';
-                const configuredEnv = settings.fonepay_environment || 'test';
-                const gatewayUrl = configuredEnv === 'live' 
-                    ? 'https://merchantapi.fonepay.com/api/merchantRequest'
-                    : 'https://dev-merchantapi.fonepay.com/api/merchantRequest';
-
                 const fmt = (n) => Number(n).toFixed(2);
                 const totalAmountStr = fmt(grandTotal);
 
@@ -347,24 +309,15 @@ const Checkout = () => {
                 const yyyy = today.getFullYear();
                 const dateStr = `${mm}/${dd}/${yyyy}`;
 
-                const md = 'P'; // Purchase
-                const crn = 'NPR';
                 const r1 = `Order ${tempOrderNumber}`;
                 const r2 = `Shipping Rs. ${fmt(shippingFee)}`;
                 const returnUrl = `${window.location.origin}/payment-success`;
-
-                const signature = await generateFonepaySignature(
-                    merchantId,
-                    md,
-                    tempOrderNumber,
-                    totalAmountStr,
-                    crn,
-                    dateStr,
-                    r1,
-                    r2,
-                    returnUrl,
-                    secretKey
-                );
+                const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
+                    body: { action: 'create-fonepay-payment', amount: totalAmountStr, prn: tempOrderNumber, date: dateStr, r1, r2, returnUrl }
+                });
+                if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
+                    throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the Fonepay payment.');
+                }
 
                 // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
                 const pendingOrderData = {
@@ -373,7 +326,7 @@ const Checkout = () => {
                     phone2: formData.phone2,
                     address: formData.address,
                     city: formData.city,
-                    payment_method: 'Fonepay',
+                    payment_method: 'Bank Transfer',
                     shipping_fee: shippingFee,
                     total_amount: grandTotal,
                     items: orderItems,
@@ -384,37 +337,11 @@ const Checkout = () => {
                 };
                 sessionStorage.setItem('pending_fonepay_order', JSON.stringify(pendingOrderData));
 
-                console.log(`[Fonepay] Submitting form to ${configuredEnv} gateway (${gatewayUrl}) with fields:`, {
-                    PID: merchantId,
-                    MD: md,
-                    PRN: tempOrderNumber,
-                    AMT: totalAmountStr,
-                    CRN: crn,
-                    DT: dateStr,
-                    R1: r1,
-                    R2: r2,
-                    RU: returnUrl,
-                    DV: signature
-                });
-
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = gatewayUrl;
+                form.action = gatewayPayment.gatewayUrl;
 
-                const fields = {
-                    PID: merchantId,
-                    MD: md,
-                    PRN: tempOrderNumber,
-                    AMT: totalAmountStr,
-                    CRN: crn,
-                    DT: dateStr,
-                    R1: r1,
-                    R2: r2,
-                    RU: returnUrl,
-                    DV: signature
-                };
-
-                Object.entries(fields).forEach(([key, val]) => {
+                Object.entries(gatewayPayment.fields).forEach(([key, val]) => {
                     const input = document.createElement('input');
                     input.type = 'hidden';
                     input.name = key;
@@ -482,6 +409,7 @@ const Checkout = () => {
                 throw new Error("Order creation succeeded but no order number was returned.");
             }
         } catch (err) {
+            setPaymentRedirecting(false);
             showNotification('Order failed: ' + (err.message || 'Please try again'), 'error');
         } finally {
             setSaving(false);
@@ -493,39 +421,8 @@ const Checkout = () => {
         if (pin.length < 4) return showNotification('Please enter a 4-digit PIN', 'warning');
         setCreatingAccount(true);
         try {
-            const { error: insertError } = await supabase.from('website_customers').insert({
-                phone: formData.phone,
-                name: formData.fullName,
-                pin_hash: pin,
-                address: formData.address,
-                city: formData.city
-            });
-
-            if (insertError) {
-                // - PostgreSQL duplicate key: code 23505
-                // - Supabase REST HTTP 409 Conflict: status 409
-                const isConflict =
-                    insertError.code === '23505' ||
-                    insertError.status === 409 ||
-                    String(insertError.message || '').toLowerCase().match(/duplicate|already exist|conflict|unique/);
-
-                if (isConflict) {
-                    const success = await login(formData.phone, pin);
-                    if (success) {
-                        setAccountCreated(true);
-                        showNotification('Welcome back! Order linked to your account.', 'success');
-                    } else {
-                        showNotification(
-                            'This number is already registered. Please enter your correct PIN to link this order.',
-                            'error'
-                        );
-                    }
-                    return;
-                }
-                throw insertError;
-            }
-
-            await login(formData.phone, pin);
+            const result = await register(formData.fullName, formData.phone, pin, formData.address, formData.city);
+            if (!result.success) throw new Error(result.error || 'Could not create account');
             setAccountCreated(true);
             showNotification('Account created! Your order is saved.', 'success');
         } catch (err) {
@@ -537,6 +434,39 @@ const Checkout = () => {
 
     return (
         <div className="section">
+            {paymentRedirecting && (
+                <div
+                    role="status"
+                    aria-live="assertive"
+                    aria-label="Connecting to eSewa secure payment gateway"
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 10000,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '1.5rem', background: 'rgba(15, 23, 42, 0.72)',
+                        backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)'
+                    }}
+                >
+                    <div style={{
+                        width: 'min(100%, 360px)', padding: '2rem', textAlign: 'center',
+                        background: '#fff', borderRadius: '1.5rem',
+                        boxShadow: '0 24px 64px rgba(0, 0, 0, 0.3)',
+                        border: '1px solid rgba(255,255,255,0.7)'
+                    }}>
+                        <div style={{
+                            width: '64px', height: '64px', margin: '0 auto 1.25rem',
+                            borderRadius: '1.1rem', background: '#f1faed',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <Loader2 size={32} color="#3dbb00" style={{ animation: 'spin 0.9s linear infinite' }} />
+                        </div>
+                        <img src="/esewa-seeklogo.png" alt="eSewa" style={{ height: '30px', maxWidth: '130px', objectFit: 'contain', marginBottom: '0.9rem' }} />
+                        <h2 style={{ margin: '0 0 0.55rem', color: '#172033', fontSize: '1.25rem', fontWeight: '900' }}>Connecting to eSewa</h2>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem', lineHeight: 1.55, fontWeight: '600' }}>
+                            Please wait. We’re securely preparing your payment—do not refresh or close this page.
+                        </p>
+                    </div>
+                </div>
+            )}
             <div className="container">
                 {isOrdered ? (
                     /* ─── SUCCESS SCREEN ─── */
@@ -762,15 +692,22 @@ const Checkout = () => {
                                             borderRadius: '1rem',
                                             background: formData.paymentMethod === 'COD' ? '#fff1f2' : 'white',
                                             display: 'flex', alignItems: 'center', gap: '1rem',
-                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                            cursor: paymentAvailability.COD ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease',
+                                            opacity: paymentAvailability.COD ? 1 : 0.5
                                         }}>
                                             <input type="radio" name="paymentMethod" value="COD"
                                                 checked={formData.paymentMethod === 'COD'}
                                                 onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                                style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: 'pointer' }} />
-                                            <div>
-                                                <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Cash on Delivery (COD)</p>
-                                                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay with cash when your parcel is delivered</p>
+                                                disabled={!paymentAvailability.COD}
+                                                style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: paymentAvailability.COD ? 'pointer' : 'not-allowed' }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
+                                                <div>
+                                                    <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Cash on Delivery (COD)</p>
+                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{paymentAvailability.COD ? 'Pay with cash when your parcel is delivered' : 'Not available for the selected product'}</p>
+                                                </div>
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fff1f2', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <Banknote size={22} color="#ef4444" />
+                                                </div>
                                             </div>
                                         </label>
 
@@ -780,95 +717,49 @@ const Checkout = () => {
                                             border: formData.paymentMethod === 'eSewa' ? '2px solid #60b524' : '1px solid #e2e8f0',
                                             borderRadius: '1rem',
                                             background: formData.paymentMethod === 'eSewa' ? '#f4fbf0' : 'white',
-                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
-                                            cursor: 'pointer', transition: 'all 0.2s ease'
+                                            display: 'flex', alignItems: 'center', gap: '1rem',
+                                            cursor: paymentAvailability.eSewa ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease',
+                                            opacity: paymentAvailability.eSewa ? 1 : 0.5
                                         }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <input type="radio" name="paymentMethod" value="eSewa"
-                                                    checked={formData.paymentMethod === 'eSewa'}
-                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                                    style={{ width: '18px', height: '18px', accentColor: '#60b524', cursor: 'pointer' }} />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
-                                                    <div>
-                                                        <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>eSewa (Online Payment)</p>
-                                                        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay instantly via secure eSewa gateway</p>
-                                                    </div>
-                                                    <img src="https://cdn.esewa.com.np/ui/images/esewa_logo.png" alt="eSewa"
-                                                        style={{ height: '22px', objectFit: 'contain', flexShrink: 0 }}
-                                                        onError={(e) => { e.target.style.display = 'none'; }} />
-                                                </div>
-                                            </div>
-                                        </label>
-
-                                        {/* Fonepay */}
-                                        <label style={{
-                                            padding: '1rem 1.25rem',
-                                            border: formData.paymentMethod === 'Fonepay' ? '2px solid #dc2626' : '1px solid #e2e8f0',
-                                            borderRadius: '1rem',
-                                            background: formData.paymentMethod === 'Fonepay' ? '#fdf2f2' : 'white',
-                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
-                                            cursor: 'pointer', transition: 'all 0.2s ease'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <input type="radio" name="paymentMethod" value="Fonepay"
-                                                    checked={formData.paymentMethod === 'Fonepay'}
-                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                                    style={{ width: '18px', height: '18px', accentColor: '#dc2626', cursor: 'pointer' }} />
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
-                                                    <div>
-                                                        <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Fonepay (Mobile Banking / QR)</p>
-                                                        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Pay directly using your mobile banking app</p>
-                                                    </div>
-                                                    <span style={{ fontSize: '0.7rem', fontWeight: '900', background: '#dc2626', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fonepay</span>
-                                                </div>
-                                            </div>
-                                        </label>
-
-                                        {/* Bank Transfer */}
-                                        <label style={{
-                                            padding: '1rem 1.25rem',
-                                            border: formData.paymentMethod === 'Bank Transfer' ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                                            borderRadius: '1rem',
-                                            background: formData.paymentMethod === 'Bank Transfer' ? '#eff6ff' : 'white',
-                                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
-                                            cursor: 'pointer', transition: 'all 0.2s ease'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <input type="radio" name="paymentMethod" value="Bank Transfer"
-                                                    checked={formData.paymentMethod === 'Bank Transfer'}
-                                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                                    style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                            <input type="radio" name="paymentMethod" value="eSewa"
+                                                checked={formData.paymentMethod === 'eSewa'}
+                                                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                                disabled={!paymentAvailability.eSewa}
+                                                style={{ width: '18px', height: '18px', accentColor: '#60b524', cursor: paymentAvailability.eSewa ? 'pointer' : 'not-allowed' }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
                                                 <div>
-                                                    <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Mobile Banking / Bank Transfer</p>
-                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>Transfer to our bank account and provide reference ID</p>
+                                                    <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>eSewa</p>
+                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{paymentAvailability.eSewa ? 'Pay instantly via secure eSewa gateway' : 'Not available for the selected product'}</p>
+                                                </div>
+                                                <div style={{ padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <img src="/esewa-seeklogo.png" alt="eSewa"
+                                                        style={{ height: '26px', objectFit: 'contain' }} />
                                                 </div>
                                             </div>
+                                        </label>
 
-                                            {formData.paymentMethod === 'Bank Transfer' && (
-                                                <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '1rem', cursor: 'default' }}>
-                                                    <p style={{ fontWeight: '800', fontSize: '0.85rem', color: '#1e3a8a', marginBottom: '0.75rem' }}>Our Bank Details:</p>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.82rem', color: '#334155', marginBottom: '1rem' }}>
-                                                        <div><strong>Bank Name:</strong> Global IME Bank</div>
-                                                        <div><strong>Account Holder:</strong> Shopy Nepal Pvt. Ltd.</div>
-                                                        <div><strong>Account Number:</strong> 0123456789012345</div>
-                                                        <div><strong>Branch:</strong> Kathmandu</div>
-                                                    </div>
-                                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.4rem' }}>
-                                                        Transaction Reference / Voucher Number *
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="e.g. TXN-9238471"
-                                                        value={txnRef}
-                                                        onChange={(e) => setTxnRef(e.target.value)}
-                                                        className="form-control"
-                                                        style={{ fontSize: '0.85rem' }}
-                                                    />
-                                                    <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.35rem' }}>
-                                                        Transfer <strong>Rs. {grandTotal.toLocaleString()}</strong> to the above account, then enter the reference number.
-                                                    </p>
+                                        {/* Bank Transfer (via Fonepay) */}
+                                        <label style={{
+                                            padding: '1rem 1.25rem',
+                                            border: '1px solid #e2e8f0',
+                                            borderRadius: '1rem',
+                                            background: '#f8fafc',
+                                            display: 'flex', alignItems: 'center', gap: '1rem',
+                                            cursor: 'not-allowed', opacity: paymentAvailability['Bank Transfer'] ? 0.72 : 0.5
+                                        }}>
+                                            <input type="radio" name="paymentMethod" value="Bank Transfer" disabled
+                                                style={{ width: '18px', height: '18px', accentColor: '#dc2626', cursor: 'not-allowed' }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', justifyContent: 'space-between' }}>
+                                                <div>
+                                                    <p style={{ fontWeight: '800', fontSize: '1rem', margin: 0, color: '#1e293b' }}>Bank Transfer</p>
+                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{paymentAvailability['Bank Transfer'] ? 'Automatic Fonepay payment verification is coming soon.' : 'Not available for the selected product'}</p>
                                                 </div>
-                                            )}
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
+                                                    <img src="/fonepay-seeklogo.png" alt="Fonepay"
+                                                        style={{ height: '28px', objectFit: 'contain' }} />
+                                                    <span style={{ padding: '0.2rem 0.5rem', borderRadius: '999px', background: '#fff1f2', color: '#be123c', fontSize: '0.62rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Coming soon</span>
+                                                </div>
+                                            </div>
                                         </label>
                                     </div>
                                 </div>
@@ -935,7 +826,7 @@ const Checkout = () => {
                                     style={{ width: '100%', padding: '1rem', fontSize: '1.05rem', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                                 >
                                     {saving ? <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing…</> : (
-                                        formData.paymentMethod === 'eSewa' ? '🔒 Pay with eSewa →' : formData.paymentMethod === 'Fonepay' ? '🔒 Pay with Fonepay →' : 'Confirm Order'
+                                        formData.paymentMethod === 'eSewa' ? '🔒 Pay with eSewa →' : formData.paymentMethod === 'Bank Transfer' ? '🔒 Pay via Bank Transfer →' : 'Confirm Order'
                                     )}
                                 </button>
 

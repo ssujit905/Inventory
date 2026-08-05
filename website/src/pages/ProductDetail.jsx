@@ -618,20 +618,21 @@ const ProductDetail = () => {
                                 <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
                                 {product.is_sold_out && (
                                     <span style={{
-                                        backgroundColor: '#f8fafc',
-                                        color: '#64748b',
-                                        padding: '4px 10px',
+                                        background: 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)',
+                                        color: '#fff',
+                                        padding: '6px 11px',
                                         fontWeight: '800',
                                         fontSize: '0.65rem',
-                                        borderRadius: '6px',
+                                        borderRadius: '999px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.1em',
-                                        border: '1px solid #e2e8f0',
+                                        border: '1px solid rgba(255,255,255,0.2)',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '4px'
+                                        gap: '6px',
+                                        boxShadow: '0 6px 18px rgba(239,68,68,0.24)'
                                     }}>
-                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+                                        <Sparkles size={12} strokeWidth={2.5} color="#d8b36a" />
                                         Sold Out
                                     </span>
                                 )}
@@ -869,14 +870,19 @@ const ProductDetail = () => {
                         fontSize: '0.9rem',
                         fontWeight: '800',
                         borderRadius: '12px',
-                        backgroundColor: product.is_sold_out ? '#94a3b8' : 'var(--primary-red)',
+                        background: product.is_sold_out ? 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)' : 'var(--primary-red)',
                         border: 'none',
                         cursor: product.is_sold_out ? 'not-allowed' : 'pointer',
                         lineHeight: '1.2',
                         padding: '4px 0'
                     }}
                 >
-                    {product.is_sold_out ? 'Sold Out' : (
+                    {product.is_sold_out ? (
+                        <>
+                            <span style={{ fontSize: '0.95rem' }}>Sold Out</span>
+                            <span style={{ fontSize: '0.72rem', opacity: 0.7, fontWeight: '700', letterSpacing: '0.04em' }}>RESTOCKING SOON</span>
+                        </>
+                    ) : (
                         <>
                             <span style={{ fontSize: '0.95rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
                             <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>Rs. {activePrice.toLocaleString()}</span>

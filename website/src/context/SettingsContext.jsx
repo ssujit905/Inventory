@@ -14,7 +14,10 @@ export const SettingsProvider = ({ children }) => {
             const { data } = await supabase.from('website_settings').select('*');
             if (data) {
                 const map = {};
-                data.forEach(s => { map[s.key] = s.value; });
+                data.forEach(s => {
+                    // Gateway secrets must only exist as Edge Function secrets.
+                    if (!['esewa_secret_key', 'fonepay_secret_key'].includes(s.key)) map[s.key] = s.value;
+                });
                 setSettings(map);
             }
             setSettingsLoading(false);

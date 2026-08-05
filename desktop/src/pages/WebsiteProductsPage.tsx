@@ -44,6 +44,9 @@ interface WebsiteProduct {
     is_cod: boolean;
     is_prepaid: boolean;
     is_prebook: boolean;
+    allow_cod: boolean;
+    allow_esewa: boolean;
+    allow_fonepay: boolean;
     sizes: string;
     sold_count: number;
     created_at: string;
@@ -77,6 +80,7 @@ export default function WebsiteProductsPage() {
         category: 'General', city: 'Kathmandu', delivery_days: '2-4',
         is_active: true, is_featured: false, show_shopinepal: true, 
         is_cod: true, is_prepaid: false, is_prebook: false,
+        allow_cod: true, allow_esewa: true, allow_fonepay: true,
         sizes: '',
         images: [] as ProductImage[],
         video_url: '',
@@ -207,6 +211,9 @@ export default function WebsiteProductsPage() {
             is_cod: p.is_cod,
             is_prepaid: p.is_prepaid,
             is_prebook: p.is_prebook,
+            allow_cod: p.allow_cod ?? true,
+            allow_esewa: p.allow_esewa ?? true,
+            allow_fonepay: p.allow_fonepay ?? true,
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
             video_url: p.video_url || '',
@@ -258,6 +265,9 @@ export default function WebsiteProductsPage() {
 
     const handleSave = async () => {
         if (!form.title.trim()) return showToast('Title is required', 'error');
+        if (!form.allow_cod && !form.allow_esewa && !form.allow_fonepay) {
+            return showToast('Choose at least one payment method for this product', 'error');
+        }
         setSaving(true);
         try {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
@@ -277,6 +287,9 @@ export default function WebsiteProductsPage() {
                 is_cod: form.is_cod,
                 is_prepaid: form.is_prepaid,
                 is_prebook: form.is_prebook,
+                allow_cod: form.allow_cod,
+                allow_esewa: form.allow_esewa,
+                allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
                 ad_id: form.ad_id || null,
@@ -722,6 +735,24 @@ export default function WebsiteProductsPage() {
                                         <input type="checkbox" checked={form.is_prebook} onChange={e => setForm(f => ({ ...f, is_prebook: e.target.checked }))} className="accent-amber-500" />
                                         Pre-booking
                                     </label>
+                                </div>
+
+                                <div className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/50 p-4 dark:border-violet-900/40 dark:bg-violet-950/20">
+                                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-300">Allowed payment methods for this product</p>
+                                    <div className="flex flex-wrap gap-x-6 gap-y-3">
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-200">
+                                            <input type="checkbox" checked={form.allow_cod} onChange={e => setForm(f => ({ ...f, allow_cod: e.target.checked }))} className="accent-emerald-500" />
+                                            Cash on Delivery
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-200">
+                                            <input type="checkbox" checked={form.allow_esewa} onChange={e => setForm(f => ({ ...f, allow_esewa: e.target.checked }))} className="accent-green-600" />
+                                            eSewa
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-200">
+                                            <input type="checkbox" checked={form.allow_fonepay} onChange={e => setForm(f => ({ ...f, allow_fonepay: e.target.checked }))} className="accent-rose-500" />
+                                            Fonepay
+                                        </label>
+                                    </div>
                                 </div>
                                 
                                 

@@ -129,6 +129,7 @@ export default function WebsiteOrdersPage() {
             }
 
             if (saleError) throw saleError;
+            if (!newSale) throw new Error('Unable to create the inventory sale record');
 
             for (const item of selectedOrderForPush.website_order_items) {
                 const physicalId = skuMappings[item.id];
