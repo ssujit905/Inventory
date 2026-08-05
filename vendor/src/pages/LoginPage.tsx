@@ -1,0 +1,120 @@
+import { useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../hooks/useAuthStore';
+import { LogIn, Mail, Lock, AlertCircle, Package } from 'lucide-react';
+
+export default function LoginPage() {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { initialize } = useAuthStore();
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (signInError) throw signInError;
+            await initialize();
+        } catch (err: any) {
+            setError(err.message || 'Failed to sign in');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-md">
+                {/* Brand Logo */}
+                <div className="flex flex-col items-center mb-8">
+                    <img src="/logo.png" alt="Shopy Nepal" className="h-14 w-auto object-contain mb-3" />
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Shopy Nepal Vendor</h1>
+                    <p className="text-gray-400 text-sm font-medium mt-1">Vendor Partner Portal</p>
+                </div>
+
+                {/* Login Card */}
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-8 shadow-sm">
+                    <div className="mb-8">
+                        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Welcome Back</h2>
+                        <p className="text-gray-400 text-xs font-medium mt-1">Securely login to your workstation.</p>
+                    </div>
+
+                    <form onSubmit={handleLogin} className="space-y-6">
+            {/* Global Error Notification */}
+            {error && (
+                <div className="fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl bg-rose-500 text-white text-sm font-black animate-in slide-in-from-right-full duration-500">
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
+                        <AlertCircle size={14} strokeWidth={3} />
+                    </div>
+                    {error}
+                </div>
+            )}
+
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Work Email</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                        <Mail size={16} strokeWidth={1.5} />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        placeholder="name@company.com"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Security Key</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                        <Lock size={16} strokeWidth={1.5} />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 active:scale-[0.98]"
+                        >
+                            {loading ? (
+                                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : (
+                                <>
+                                    <LogIn size={18} strokeWidth={1.5} />
+                                    Authenticate
+                                </>
+                            )}
+                        </button>
+                    </form>
+                </div>
+
+                <p className="text-center mt-8 text-gray-400 text-[10px] font-medium uppercase tracking-widest">
+                    Authorized Access Only • System ID: {Math.random().toString(36).substring(7).toUpperCase()}
+                </p>
+            </div>
+        </div>
+    );
+}

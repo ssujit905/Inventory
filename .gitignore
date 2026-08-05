@@ -29,6 +29,8 @@ release/
 # Mobile Platforms
 mobile/android/
 mobile/ios/
+vendor/android/
+vendor/ios/
 
 # Editor
 .idea/
