@@ -3,13 +3,15 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck, Users } from 'lucide-react';
+import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck, Users, Store, Eye, EyeOff, Save } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Profile = {
     id: string;
     full_name: string | null;
-    role: 'admin' | 'staff';
+    email?: string | null;
+    store_name?: string | null;
+    role: 'admin' | 'staff' | 'vendor';
     permissions: 'read_only' | 'read_write';
     created_at: string;
 };
@@ -27,11 +29,21 @@ export default function StaffManagementPage() {
     // New Staff Modal State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newName, setNewName] = useState('');
+    const [newStoreName, setNewStoreName] = useState('');
     const [newEmail, setNewEmail] = useState('');
     const [newPassword, setNewPassword] = useState('');
-    const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
+    const [newRole, setNewRole] = useState<'admin' | 'staff' | 'vendor'>('staff');
     const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
     const [showPassword, setShowPassword] = useState(false);
+
+    // Edit Modal State
+    const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editEmail, setEditEmail] = useState('');
+    const [editStoreName, setEditStoreName] = useState('');
+    const [editPermissions, setEditPermissions] = useState<'read_only' | 'read_write'>('read_write');
+    const [editNewPassword, setEditNewPassword] = useState('');
+    const [showEditPassword, setShowEditPassword] = useState(false);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -147,6 +159,7 @@ export default function StaffManagementPage() {
                 options: {
                     data: {
                         full_name: newName,
+                        store_name: newRole === 'vendor' ? newStoreName : null,
                         role: newRole,
                         permissions: newPermissions
                     }
@@ -159,21 +172,22 @@ export default function StaffManagementPage() {
             // 2. Insert Profile Entry manually via the admin's session
             const { error: profileError } = await supabase
                 .from('profiles')
-                .insert({
+                .upsert({
                     id: authData.user.id,
                     full_name: newName,
+                    email: newEmail,
+                    store_name: newRole === 'vendor' ? newStoreName : null,
                     role: newRole,
                     permissions: newPermissions
                 });
 
             if (profileError) {
-                // If profile fails, user exists in auth. They can still log in and a default profile will be created by the listener.
                 console.warn('Profile creation failed, but user was created in auth:', profileError);
             }
 
             setMessage({
                 type: 'success',
-                text: `Successfully created ${newRole} account for ${newName}! They can now log in with their credentials.`
+                text: `Successfully created ${newRole === 'vendor' ? 'Vendor Partner' : newRole} account for ${newName}!`
             });
 
             fetchProfiles();
@@ -182,6 +196,7 @@ export default function StaffManagementPage() {
 
             // Clear Form
             setNewName('');
+            setNewStoreName('');
             setNewEmail('');
             setNewPassword('');
             setNewRole('staff');
@@ -201,14 +216,57 @@ export default function StaffManagementPage() {
         }
     };
 
+    const openEditModal = (p: Profile) => {
+        setEditingProfile(p);
+        setEditName(p.full_name || '');
+        setEditEmail(p.email || '');
+        setEditStoreName(p.store_name || '');
+        setEditPermissions(p.permissions);
+        setEditNewPassword('');
+        setShowEditPassword(false);
+    };
+
+    const handleEditSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingProfile) return;
+        setActionLoading(true);
+        setMessage(null);
+
+        try {
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: editName,
+                    email: editEmail,
+                    store_name: editingProfile.role === 'vendor' ? editStoreName : editingProfile.store_name,
+                    permissions: editPermissions,
+                })
+                .eq('id', editingProfile.id);
+
+            if (profileError) throw profileError;
+
+            setMessage({
+                type: 'success',
+                text: `Profile updated for ${editName}.`
+            });
+
+            fetchProfiles();
+            setEditingProfile(null);
+        } catch (error: any) {
+            setMessage({ type: 'error', text: error.message });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     return (
         <DashboardLayout role={currentUserProfile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Staff Management</h1>
-                        <p className="text-gray-400 font-medium text-xs">Manage personnel accounts and system access levels.</p>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Staff & Vendor Management</h1>
+                        <p className="text-gray-400 font-medium text-xs">Manage system admins, staff access, and vendor partners.</p>
                     </div>
                     <button
                         onClick={() => !isReadOnly && setIsAddModalOpen(true)}
@@ -216,7 +274,7 @@ export default function StaffManagementPage() {
                         className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 w-full sm:w-auto ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'}`}
                     >
                         <UserPlus size={16} strokeWidth={2.5} />
-                        {isReadOnly ? 'Read Only Mode' : 'Issue Credentials'}
+                        {isReadOnly ? 'Read Only Mode' : 'Add New Account'}
                     </button>
                 </div>
 
@@ -232,7 +290,7 @@ export default function StaffManagementPage() {
                 {/* Personnel Registry Section Header */}
                 <div className="flex items-center gap-2 px-1">
                     <Users size={14} strokeWidth={1.5} className="text-gray-400" />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Personnel Registry</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Account Registry</h3>
                     <span className="ml-auto text-[10px] font-bold text-gray-300">{profiles.length} Accounts</span>
                 </div>
 
@@ -246,7 +304,7 @@ export default function StaffManagementPage() {
                             <div className="h-12 w-12 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <Users size={20} className="text-gray-400" />
                             </div>
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">No personnel accounts</p>
+                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">No accounts found</p>
                         </div>
                     ) : profiles.map((p, index) => {
                         const displayIndex = profiles.length - index;
@@ -264,20 +322,37 @@ export default function StaffManagementPage() {
                                     </div>
                                     <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.role === 'admin'
                                         ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800'
+                                        : p.role === 'vendor'
+                                        ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400 border border-purple-100 dark:border-purple-800'
                                         : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800'
                                     }`}>
-                                        {p.role}
+                                        {p.role === 'vendor' ? 'Vendor Partner' : p.role}
                                     </div>
                                 </div>
 
                                 {/* Main Info Section */}
                                 <div className="px-3.5 pb-3">
                                     <div className="flex items-center gap-3">
-                                        <div className="h-11 w-11 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-primary font-black text-lg border border-gray-100 dark:border-gray-700">
-                                            {p.full_name?.[0] || 'U'}
+                                        <div className={`h-11 w-11 rounded-xl flex items-center justify-center font-black text-lg border border-gray-100 dark:border-gray-700 ${
+                                            p.role === 'vendor' ? 'bg-purple-50 text-purple-600' : 'bg-gray-50 dark:bg-gray-800 text-primary'
+                                        }`}>
+                                            {p.role === 'vendor' ? <Store size={20} /> : (p.full_name?.[0] || 'U')}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</h3>
+                                                {p.store_name && (
+                                                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-purple-50 text-purple-700">
+                                                        {p.store_name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {p.email && (
+                                                <div className="flex items-center gap-1 mt-0.5">
+                                                    <Mail size={9} className="text-gray-300" />
+                                                    <span className="text-[10px] text-gray-400 font-medium">{p.email}</span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center gap-1.5 text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
                                                 <Shield size={10} className="text-gray-300" />
                                                 ID: {p.id.slice(0, 12)}
@@ -297,9 +372,18 @@ export default function StaffManagementPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex-1 px-3.5 py-2.5 text-right">
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Account Status</p>
-                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-tight mt-0.5">Active Account</p>
+                                    {!isReadOnly && (
+                                        <button
+                                            onClick={() => openEditModal(p)}
+                                            className="px-4 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
+                                        >
+                                            <Edit2 size={12} />
+                                            Edit
+                                        </button>
+                                    )}
+                                    <div className="flex-1 px-3.5 py-2.5 text-right border-l border-gray-50 dark:border-gray-800">
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
+                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-tight mt-0.5">Active</p>
                                     </div>
                                 </div>
                             </div>
@@ -307,14 +391,14 @@ export default function StaffManagementPage() {
                     })}
                 </div>
 
-                {/* Add Staff Modal (Standard Style) */}
+                {/* Add Staff Modal */}
                 {isAddModalOpen && (
                     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[92svh] flex flex-col">
                             <div className="px-5 py-4 sm:px-8 sm:py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50 flex-shrink-0">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add Personnel</h2>
-                                    <p className="text-xs text-gray-400 font-medium">Create secure credentials and ranks</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add New Account</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Create credentials for Staff, Admin, or Vendor</p>
                                 </div>
                                 <button
                                     onClick={() => setIsAddModalOpen(false)}
@@ -345,7 +429,7 @@ export default function StaffManagementPage() {
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Rank</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Role / Rank</label>
                                             <select
                                                 required
                                                 value={newRole}
@@ -353,6 +437,7 @@ export default function StaffManagementPage() {
                                                 className="w-full h-14 px-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 appearance-none"
                                             >
                                                 <option value="staff">Staff</option>
+                                                <option value="vendor">Vendor Partner</option>
                                                 <option value="admin">Admin</option>
                                             </select>
                                         </div>
@@ -364,11 +449,30 @@ export default function StaffManagementPage() {
                                                 onChange={e => setNewPermissions(e.target.value as any)}
                                                 className="w-full h-14 px-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 appearance-none"
                                             >
-                                                <option value="read_only">Read Only</option>
                                                 <option value="read_write">Read & Write</option>
+                                                <option value="read_only">Read Only</option>
                                             </select>
                                         </div>
                                     </div>
+
+                                    {newRole === 'vendor' && (
+                                        <div className="space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-black text-purple-600 uppercase tracking-[0.1em] ml-1">Vendor Store Name *</label>
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-400">
+                                                    <Store size={18} />
+                                                </div>
+                                                <input
+                                                    required={newRole === 'vendor'}
+                                                    type="text"
+                                                    value={newStoreName}
+                                                    onChange={e => setNewStoreName(e.target.value)}
+                                                    className="w-full h-14 pl-12 pr-5 bg-purple-50/50 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                    placeholder="e.g. Himalayan Fashion Hub"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Email Address</label>
@@ -418,6 +522,90 @@ export default function StaffManagementPage() {
                                     className="w-full h-16 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3 mt-4"
                                 >
                                     {actionLoading ? 'Initializing...' : 'Issue Credentials'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit Profile Modal */}
+                {editingProfile && (
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[92svh] flex flex-col">
+                            <div className="px-5 py-4 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+                                <div>
+                                    <h2 className="text-base font-black text-gray-900 dark:text-gray-100">Edit Account</h2>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
+                                        {editingProfile.role === 'vendor' ? 'Vendor Partner' : editingProfile.role}
+                                    </p>
+                                </div>
+                                <button onClick={() => setEditingProfile(null)} className="h-9 w-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-rose-100 hover:text-rose-600 transition-all">
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleEditSave} className="p-5 space-y-4 overflow-y-auto flex-1">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                                    <div className="relative">
+                                        <Edit2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                        <input required type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                                            className="w-full h-14 pl-11 pr-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                        <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
+                                            className="w-full h-14 pl-11 pr-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                            placeholder="email@example.com" />
+                                    </div>
+                                </div>
+
+                                {editingProfile.role === 'vendor' && (
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Store Name</label>
+                                        <div className="relative">
+                                            <Store className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-400" />
+                                            <input type="text" value={editStoreName} onChange={e => setEditStoreName(e.target.value)}
+                                                className="w-full h-14 pl-11 pr-4 bg-purple-50/50 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                placeholder="Store name" />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
+                                    <div className="relative">
+                                        <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                        <select value={editPermissions} onChange={e => setEditPermissions(e.target.value as any)}
+                                            className="w-full h-14 pl-11 pr-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none">
+                                            <option value="read_write">Read & Write Access</option>
+                                            <option value="read_only">Read Only Access</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">New Password <span className="text-gray-300 normal-case font-medium">(leave blank to keep)</span></label>
+                                    <div className="relative">
+                                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                        <input type={showEditPassword ? 'text' : 'password'} value={editNewPassword} onChange={e => setEditNewPassword(e.target.value)}
+                                            className="w-full h-14 pl-11 pr-14 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                            placeholder="New password (optional)" />
+                                        <button type="button" onClick={() => setShowEditPassword(!showEditPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary">
+                                            {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-amber-600 ml-1">Password reset requires Supabase Admin access.</p>
+                                </div>
+
+                                <button type="submit" disabled={actionLoading}
+                                    className="w-full h-14 bg-primary text-white font-black rounded-2xl shadow-lg shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {actionLoading ? 'Saving...' : <><Save size={16} />Save Changes</>}
                                 </button>
                             </form>
                         </div>

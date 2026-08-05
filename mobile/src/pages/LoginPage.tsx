@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { LogIn, Mail, Lock, AlertCircle, Package } from 'lucide-react';
 
@@ -8,7 +7,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { initialize } = useAuthStore();
+    const { signIn } = useAuthStore();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -16,13 +15,7 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (signInError) throw signInError;
-            await initialize();
+            await signIn(email, password);
         } catch (err: any) {
             setError(err.message || 'Failed to sign in');
         } finally {
@@ -50,13 +43,11 @@ export default function LoginPage() {
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-6">
-            {/* Global Error Notification */}
+            {/* Inline Error Message */}
             {error && (
-                <div className="fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl bg-rose-500 text-white text-sm font-black animate-in slide-in-from-right-full duration-500">
-                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
-                        <AlertCircle size={14} strokeWidth={3} />
-                    </div>
-                    {error}
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300">
+                    <AlertCircle size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+                    <p className="text-sm font-semibold">{error}</p>
                 </div>
             )}
 

@@ -3,24 +3,27 @@ import { supabase } from '../lib/supabase'
 import { type Profile } from '../types/database'
 import type { User } from '@supabase/supabase-js'
 
-interface AuthState { // Corrected 'interfactype' to 'interface'
-    user: User | null; // Changed 'any' to 'User'
+interface AuthState {
+    user: User | null;
     profile: Profile | null;
     loading: boolean;
-    initialized: boolean; // Added 'initialized' flag
+    initialized: boolean;
     initialize: () => Promise<void>;
     refreshProfile: () => Promise<void>;
-    signIn: (email: string, password: string) => Promise<void>; // Changed return type
+    signIn: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
 }
 
 let authSubscription: { unsubscribe: () => void } | null = null;
+// Guard flag: while true, the SIGNED_IN listener will NOT redirect the user.
+// This lets signIn() do a role check before the listener fires.
+let signingIn = false;
 
-export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
+export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     profile: null,
     loading: true,
-    initialized: false, // Initial state for 'initialized'
+    initialized: false,
 
     refreshProfile: async () => {
         const user = get().user;
@@ -53,7 +56,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             }
 
             const currentProfile = profile as Profile;
-            
+
+            // Block vendors from the main app during session restore
+            if (currentProfile.role === 'vendor') {
+                await supabase.auth.signOut();
+                set({ user: null, profile: null });
+                return;
+            }
+
             // Handle missing permissions in legacy DB entries
             if (!currentProfile.permissions) {
                 currentProfile.permissions = currentProfile.role === 'admin' ? 'read_write' : 'read_only';
@@ -62,10 +72,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             if (isForceAdmin && (currentProfile.role !== 'admin' || currentProfile.permissions !== 'read_write')) {
                 await supabase
                     .from('profiles')
-                    .update({ 
-                        role: 'admin',
-                        permissions: 'read_write'
-                    })
+                    .update({ role: 'admin', permissions: 'read_write' })
                     .eq('id', user.id);
                 set({ profile: { ...currentProfile, role: 'admin', permissions: 'read_write' } });
                 return;
@@ -78,26 +85,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     },
 
     initialize: async () => {
-        // Prevent multiple simultaneous initializations
-        if (get().initialized && !get().loading) {
-            return;
-        }
+        if (get().initialized && !get().loading) return;
 
         try {
-            console.log('Initializing auth state...');
             set({ initialized: true, loading: true });
 
-            // Add a global safety timeout for the app initialization (10 seconds)
             setTimeout(() => {
                 if (get().loading) {
-                    console.warn('Auth initialization timed out, forcing app to load.');
                     set({ loading: false });
                 }
             }, 10000);
 
-            // Check active session
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
             if (sessionError) throw sessionError;
 
             if (session?.user) {
@@ -106,13 +105,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
             } else {
                 set({ user: null, profile: null });
             }
-            
+
             set({ loading: false });
 
-            // Set up listener for future changes
             if (!authSubscription) {
                 const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-                    console.log('Auth state event:', event);
+                    // While a manual signIn() is in progress, ignore SIGNED_IN events.
+                    // This prevents a redirect before the role check completes.
+                    if (signingIn && event === 'SIGNED_IN') return;
+
                     if (event === 'SIGNED_OUT') {
                         set({ user: null, profile: null, loading: false });
                     } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -132,11 +133,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({ // Added 'get'
     },
 
     signIn: async (email, password) => {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        })
-        if (error) throw error;
+        signingIn = true;
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+
+            if (data?.user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single();
+
+                if (profile?.role === 'vendor') {
+                    // Sign out and throw BEFORE listener can redirect
+                    await supabase.auth.signOut();
+                    throw new Error('This is a Vendor account. Please use the Vendor Portal to login.');
+                }
+
+                // Role is valid — now let the listener/initialize handle the redirect
+                set({ user: data.user });
+                await get().refreshProfile();
+                set({ loading: false });
+            }
+        } finally {
+            signingIn = false;
+        }
     },
 
     signOut: async () => {

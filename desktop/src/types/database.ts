@@ -1,7 +1,9 @@
 export type Profile = {
     id: string;
     full_name: string | null;
-    role: 'admin' | 'staff';
+    email?: string | null;
+    store_name?: string | null;
+    role: 'admin' | 'staff' | 'vendor';
     permissions: 'read_only' | 'read_write';
     created_at: string;
 }
