@@ -80,10 +80,10 @@ $$;
 CREATE POLICY profiles_self_read ON public.profiles FOR SELECT TO authenticated
   USING (id = auth.uid() OR public.is_admin_or_staff());
 CREATE POLICY profiles_self_create_staff ON public.profiles FOR INSERT TO authenticated
-  WITH CHECK ((id = auth.uid() AND role = 'staff') OR public.is_admin_or_staff());
+  WITH CHECK ((id = auth.uid() AND role IN ('staff', 'vendor')) OR public.is_admin_or_staff());
 CREATE POLICY profiles_self_update ON public.profiles FOR UPDATE TO authenticated
   USING (id = auth.uid() OR public.is_admin_or_staff())
-  WITH CHECK ((id = auth.uid() AND role = 'staff') OR public.is_admin_or_staff());
+  WITH CHECK ((id = auth.uid() AND role IN ('staff', 'vendor')) OR public.is_admin_or_staff());
 CREATE POLICY profiles_admin_delete ON public.profiles FOR DELETE TO authenticated
   USING (public.is_admin_or_staff());
 

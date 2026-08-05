@@ -1,5 +1,5 @@
 -- =============================================================================
--- COMPLETE FIX FOR VENDOR PROFILES TABLE SCHEMA
+-- COMPLETE FIX FOR VENDOR PROFILES TABLE SCHEMA & RLS POLICIES
 -- Run this script in your Supabase SQL Editor (SQL Editor -> New Query -> Run)
 -- =============================================================================
 
@@ -38,14 +38,22 @@ END $$;
 
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin', 'staff', 'vendor'));
 
--- 4. Enable RLS and set policies for profiles (Allow users to read/update their own profile)
+-- 4. Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- 5. Fix RLS policies to allow Vendor accounts to update their own profile
+DROP POLICY IF EXISTS profiles_self_read ON public.profiles;
 DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
-CREATE POLICY "Users can read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'staff')));
+CREATE POLICY profiles_self_read ON public.profiles FOR SELECT TO authenticated
+  USING (id = auth.uid() OR public.is_admin_or_staff());
 
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
-
+DROP POLICY IF EXISTS profiles_self_create_staff ON public.profiles;
 DROP POLICY IF EXISTS "Authenticated users can insert profile" ON public.profiles;
-CREATE POLICY "Authenticated users can insert profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+CREATE POLICY profiles_self_create_staff ON public.profiles FOR INSERT TO authenticated
+  WITH CHECK ((id = auth.uid() AND role IN ('staff', 'vendor')) OR public.is_admin_or_staff());
+
+DROP POLICY IF EXISTS profiles_self_update ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY profiles_self_update ON public.profiles FOR UPDATE TO authenticated
+  USING (id = auth.uid() OR public.is_admin_or_staff())
+  WITH CHECK ((id = auth.uid() AND role IN ('staff', 'vendor')) OR public.is_admin_or_staff());
