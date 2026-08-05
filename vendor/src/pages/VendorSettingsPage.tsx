@@ -121,14 +121,7 @@ export default function VendorSettingsPage() {
                     </div>
                 </div>
 
-                {toast && (
-                    <div className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-3 animate-in fade-in zoom-in duration-200 ${
-                        toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
-                    }`}>
-                        {toast.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
-                        {toast.msg}
-                    </div>
-                )}
+
 
                 {loading ? (
                     <div className="flex justify-center items-center py-20">
@@ -278,12 +271,21 @@ export default function VendorSettingsPage() {
                             </div>
                         </div>
 
-                        {/* SAVE BUTTON */}
-                        <div className="flex justify-end pt-2">
+                        {/* SAVE BUTTON & MESSAGE */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+                            {toast ? (
+                                <div className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-3 animate-in fade-in zoom-in duration-200 ${
+                                    toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}>
+                                    {toast.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
+                                    {toast.msg}
+                                </div>
+                            ) : <div />}
+
                             <button
                                 type="submit"
                                 disabled={saving}
-                                className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-black text-sm rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                className="w-full sm:w-auto px-8 py-3.5 bg-primary text-white font-black text-sm rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shrink-0"
                             >
                                 {saving ? (
                                     <>
