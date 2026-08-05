@@ -5,6 +5,16 @@ export type Profile = {
     store_name?: string | null;
     role: 'admin' | 'staff' | 'vendor';
     permissions: 'read_only' | 'read_write';
+    phone?: string | null;
+    whatsapp?: string | null;
+    address?: string | null;
+    city?: string | null;
+    description?: string | null;
+    bank_name?: string | null;
+    bank_account_holder?: string | null;
+    bank_account_number?: string | null;
+    bank_branch?: string | null;
+    esewa_id?: string | null;
     created_at: string;
 }
 

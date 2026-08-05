@@ -1,15 +1,26 @@
--- Run this in your Supabase SQL Editor to fix the missing columns
+-- =============================================================================
+-- COMPLETE FIX FOR VENDOR PROFILES TABLE SCHEMA
+-- Run this script in your Supabase SQL Editor (SQL Editor -> New Query -> Run)
+-- =============================================================================
 
--- 1. Add permissions column to profiles
+-- 1. Add permissions, store_name, and email columns
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS permissions TEXT DEFAULT 'read_only' CHECK (permissions IN ('read_only', 'read_write'));
-
--- 2. Add store_name column
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS store_name TEXT;
-
--- 3. Add email column so it shows in Staff Management
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 
--- 4. Safely drop the existing check constraint on the role column.
+-- 2. Add vendor store settings and payout bank columns
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_account_holder TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_account_number TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bank_branch TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS esewa_id TEXT;
+
+-- 3. Safely update role constraint to include 'vendor'
 DO $$
 DECLARE
     r RECORD;
@@ -25,5 +36,16 @@ BEGIN
     END LOOP;
 END $$;
 
--- 5. Add the new constraint that includes 'vendor'
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin', 'staff', 'vendor'));
+
+-- 4. Enable RLS and set policies for profiles (Allow users to read/update their own profile)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
+CREATE POLICY "Users can read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'staff')));
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+DROP POLICY IF EXISTS "Authenticated users can insert profile" ON public.profiles;
+CREATE POLICY "Authenticated users can insert profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
