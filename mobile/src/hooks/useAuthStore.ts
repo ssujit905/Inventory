@@ -55,13 +55,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
             const currentProfile = profile as Profile;
 
-            // Block vendors from the main app during session restore
-            if (currentProfile.role === 'vendor') {
-                await supabase.auth.signOut();
-                set({ user: null, profile: null });
-                return;
-            }
-
             if (!currentProfile.permissions) {
                 currentProfile.permissions = currentProfile.role === 'admin' ? 'read_write' : 'read_only';
             }
@@ -137,11 +130,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                     .select('role')
                     .eq('id', data.user.id)
                     .single();
-
-                if (profile?.role === 'vendor') {
-                    await supabase.auth.signOut();
-                    throw new Error('This is a Vendor account. Please use the Vendor Portal to login.');
-                }
 
                 set({ user: data.user });
                 await get().refreshProfile();
