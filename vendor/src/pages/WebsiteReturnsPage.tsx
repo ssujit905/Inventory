@@ -63,10 +63,11 @@ export default function WebsiteReturnsPage() {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('website_order_returns')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .select('*');
+
+            const { data, error } = await query.order('created_at', { ascending: false });
             
             if (error) throw error;
             setRequests(data || []);

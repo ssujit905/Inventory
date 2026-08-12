@@ -140,11 +140,16 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        let query = supabase
+            .from('website_products')
+            .select(`*, website_product_images(*)`);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        }
+
         const { data, error } = await supabaseWithTimeout(
-            supabase
-                .from('website_products')
-                .select(`*, website_product_images(*)`)
-                .order('created_at', { ascending: false })
+            query.order('created_at', { ascending: false })
         );
         if (error) {
             showToast(error.message, 'error');
@@ -283,6 +288,7 @@ export default function WebsiteProductsPage() {
                 allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
+                vendor_id: profile?.role === 'vendor' ? profile.id : null,
                 updated_at: new Date().toISOString()
             };
 

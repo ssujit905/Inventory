@@ -92,17 +92,23 @@ export default function StockInPage() {
     );
 
     const fetchRecentTransactions = async () => {
-        const { data, error } = await supabase
+        let query = supabase
             .from('transactions')
             .select(`
                 id,
                 created_at,
                 quantity_changed,
                 type,
-                product:products(name, sku, description),
+                product:products!inner(name, sku, description, vendor_id),
                 lot:product_lots(id, lot_number, cost_price, expiry_date, received_date)
             `)
-            .eq('type', 'in')
+            .eq('type', 'in');
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('product.vendor_id', profile.id);
+        }
+
+        const { data, error } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 
@@ -174,11 +180,11 @@ export default function StockInPage() {
 
         try {
             let productId;
-            const { data: existingProd } = await supabase
-                .from('products')
-                .select('id')
-                .eq('sku', sku)
-                .maybeSingle();
+            let prodQuery = supabase.from('products').select('id').eq('sku', sku);
+            if (profile?.role === 'vendor' && profile?.id) {
+                prodQuery = prodQuery.eq('vendor_id', profile.id);
+            }
+            const { data: existingProd } = await prodQuery.maybeSingle();
 
             if (existingProd) {
                 productId = existingProd.id;
@@ -190,7 +196,8 @@ export default function StockInPage() {
                         sku: sku,
                         description: details,
                         image_url: imageUrl,
-                        min_stock_alert: 10
+                        min_stock_alert: 10,
+                        vendor_id: profile?.role === 'vendor' ? profile.id : null
                     }])
                     .select()
                     .single();
