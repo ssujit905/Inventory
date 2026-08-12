@@ -46,7 +46,7 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('
 -- 5. Enable RLS on profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- 6. Fix RLS policies to allow Vendor accounts to update their own profile
+-- 6. Fix RLS policies on PROFILES table
 DROP POLICY IF EXISTS profiles_self_read ON public.profiles;
 DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
 CREATE POLICY profiles_self_read ON public.profiles FOR SELECT TO authenticated
@@ -62,3 +62,77 @@ DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY profiles_self_update ON public.profiles FOR UPDATE TO authenticated
   USING (id = auth.uid() OR public.is_admin_or_staff())
   WITH CHECK ((id = auth.uid() AND role IN ('staff', 'vendor')) OR public.is_admin_or_staff());
+
+-- 7. Fix RLS policies on PRODUCTS table
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS inventory_team_only ON public.products;
+DROP POLICY IF EXISTS "Vendors can insert their own products" ON public.products;
+DROP POLICY IF EXISTS "Vendors can update their own products" ON public.products;
+DROP POLICY IF EXISTS "Vendors can delete their own products" ON public.products;
+DROP POLICY IF EXISTS "Admins and Staff can insert all products" ON public.products;
+DROP POLICY IF EXISTS "Admins and Staff can update all products" ON public.products;
+DROP POLICY IF EXISTS "Admins and Staff can delete all products" ON public.products;
+
+CREATE POLICY "Authenticated users select products" ON public.products FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY "Vendors and Admin/Staff insert products" ON public.products FOR INSERT TO authenticated
+  WITH CHECK (
+    (vendor_id = auth.uid() AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'vendor'))
+    OR vendor_id IS NULL
+    OR public.is_admin_or_staff()
+  );
+
+CREATE POLICY "Vendors and Admin/Staff update products" ON public.products FOR UPDATE TO authenticated
+  USING (
+    (vendor_id = auth.uid() AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'vendor'))
+    OR vendor_id IS NULL
+    OR public.is_admin_or_staff()
+  )
+  WITH CHECK (
+    (vendor_id = auth.uid() AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'vendor'))
+    OR vendor_id IS NULL
+    OR public.is_admin_or_staff()
+  );
+
+-- 8. Fix RLS policies on PRODUCT_LOTS and TRANSACTIONS tables
+ALTER TABLE public.product_lots ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS inventory_team_only ON public.product_lots;
+
+CREATE POLICY "Authenticated users select lots" ON public.product_lots FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Vendors and Admin/Staff insert lots" ON public.product_lots FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY "Vendors and Admin/Staff update lots" ON public.product_lots FOR UPDATE TO authenticated
+  USING (true);
+
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS inventory_team_only ON public.transactions;
+
+CREATE POLICY "Authenticated users select transactions" ON public.transactions FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Vendors and Admin/Staff insert transactions" ON public.transactions FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+-- 9. Fix RLS policies on WEBSITE_PRODUCTS table
+ALTER TABLE public.website_products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS inventory_team_only ON public.website_products;
+
+CREATE POLICY "Vendors and Admin/Staff select website products" ON public.website_products FOR SELECT TO anon, authenticated
+  USING (is_active = true OR vendor_id = auth.uid() OR public.is_admin_or_staff());
+
+CREATE POLICY "Vendors and Admin/Staff insert website products" ON public.website_products FOR INSERT TO authenticated
+  WITH CHECK (
+    (vendor_id = auth.uid() AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'vendor'))
+    OR vendor_id IS NULL
+    OR public.is_admin_or_staff()
+  );
+
+CREATE POLICY "Vendors and Admin/Staff update website products" ON public.website_products FOR UPDATE TO authenticated
+  USING (
+    (vendor_id = auth.uid() AND EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'vendor'))
+    OR vendor_id IS NULL
+    OR public.is_admin_or_staff()
+  );
