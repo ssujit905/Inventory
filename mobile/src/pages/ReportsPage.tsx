@@ -56,35 +56,52 @@ export default function ReportsPage() {
     const fetchFinanceData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            const [incomeRes, transRes, expensesRes, lotSalesRes, lotsRes] = await Promise.all([
-                supabase.from('income_entries').select('amount, income_date, category'),
-                supabase.from('transactions').select(`
-                    quantity_changed,
-                    lot:product_lots(cost_price),
-                    sale:sales(parcel_status)
-                `).eq('type', 'in'),
-                supabase.from('expenses').select('id, amount, description, expense_date, category, created_at'),
-                supabase.from('transactions').select(`
+            const isVendor = profile?.role === 'vendor' && profile?.id;
+
+            let incomeQuery = supabase.from('income_entries').select('amount, income_date, category');
+            let transInQuery = supabase.from('transactions').select(`
+                quantity_changed,
+                lot:product_lots!inner(cost_price, products!inner(vendor_id)),
+                sale:sales(parcel_status)
+            `).eq('type', 'in');
+            let expensesQuery = supabase.from('expenses').select('id, amount, description, expense_date, category, created_at');
+            let lotSalesQuery = supabase.from('transactions').select(`
+                id,
+                sale_id,
+                quantity_changed,
+                lot:product_lots!inner(
                     id,
-                    sale_id,
-                    quantity_changed,
-                    lot:product_lots(
-                        id,
-                        lot_number,
-                        cost_price,
-                        products(sku)
-                    ),
-                    sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
-                `).eq('type', 'sale'),
-                supabase.from('product_lots').select(`
-                    id,
+                    lot_number,
                     cost_price,
-                    transactions (
-                        type,
-                        quantity_changed,
-                        sales (parcel_status)
-                    )
-                `)
+                    products!inner(sku, vendor_id)
+                ),
+                sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
+            `).eq('type', 'sale');
+            let lotsQuery = supabase.from('product_lots').select(`
+                id,
+                cost_price,
+                products!inner(vendor_id),
+                transactions (
+                    type,
+                    quantity_changed,
+                    sales (parcel_status)
+                )
+            `);
+
+            if (isVendor) {
+                incomeQuery = incomeQuery.eq('recorded_by', profile.id);
+                transInQuery = transInQuery.eq('lot.products.vendor_id', profile.id);
+                expensesQuery = expensesQuery.eq('recorded_by', profile.id);
+                lotSalesQuery = lotSalesQuery.eq('lot.products.vendor_id', profile.id);
+                lotsQuery = lotsQuery.eq('products.vendor_id', profile.id);
+            }
+
+            const [incomeRes, transRes, expensesRes, lotSalesRes, lotsRes] = await Promise.all([
+                incomeQuery,
+                transInQuery,
+                expensesQuery,
+                lotSalesQuery,
+                lotsQuery
             ]);
 
             if (incomeRes.error) throw incomeRes.error;

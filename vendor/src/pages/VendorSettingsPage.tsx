@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
-import { Store, Save, Loader2, Check, AlertTriangle, Phone, Mail, MapPin, Building2, CreditCard, User } from 'lucide-react';
+import { Store, Save, Loader2, Check, AlertTriangle, Phone, Mail, MapPin, Building2, CreditCard, User, ImagePlus } from 'lucide-react';
 
 export default function VendorSettingsPage() {
     const { profile } = useAuthStore();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
     const [vendorForm, setVendorForm] = useState({
@@ -19,6 +20,7 @@ export default function VendorSettingsPage() {
         address: '',
         city: '',
         description: '',
+        avatar_url: '',
         bank_name: '',
         bank_account_holder: '',
         bank_account_number: '',
@@ -51,6 +53,7 @@ export default function VendorSettingsPage() {
                         address: data.address || '',
                         city: data.city || '',
                         description: data.description || '',
+                        avatar_url: data.avatar_url || '',
                         bank_name: data.bank_name || '',
                         bank_account_holder: data.bank_account_holder || '',
                         bank_account_number: data.bank_account_number || '',
@@ -63,6 +66,34 @@ export default function VendorSettingsPage() {
             console.error('Error loading vendor settings:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !profile?.id) return;
+        if (!file.type.startsWith('image/')) {
+            setToast({ msg: 'Please choose an image file', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+        setUploadingAvatar(true);
+        try {
+            const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+            const path = `vendor-avatars/${profile.id}.${ext}`;
+            const { error: upErr } = await supabase.storage
+                .from('website-images')
+                .upload(path, file, { upsert: true });
+            if (upErr) throw upErr;
+            const { data } = supabase.storage.from('website-images').getPublicUrl(path);
+            setVendorForm(f => ({ ...f, avatar_url: data.publicUrl }));
+            setToast({ msg: 'Store logo uploaded! Click Save to apply.', type: 'success' });
+        } catch (err: any) {
+            console.error('Avatar upload failed:', err);
+            setToast({ msg: err.message || 'Failed to upload logo', type: 'error' });
+        } finally {
+            setUploadingAvatar(false);
+            setTimeout(() => setToast(null), 3000);
         }
     };
 
@@ -82,6 +113,7 @@ export default function VendorSettingsPage() {
                     address: vendorForm.address,
                     city: vendorForm.city,
                     description: vendorForm.description,
+                    avatar_url: vendorForm.avatar_url,
                     bank_name: vendorForm.bank_name,
                     bank_account_holder: vendorForm.bank_account_holder,
                     bank_account_number: vendorForm.bank_account_number,
@@ -134,6 +166,43 @@ export default function VendorSettingsPage() {
                             <h2 className="text-base font-black text-gray-900 dark:text-gray-100 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-3">
                                 <Store size={18} className="text-primary" /> Vendor Store Profile
                             </h2>
+
+                            <div className="flex items-center gap-5">
+                                <label className="relative cursor-pointer group shrink-0">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleAvatarUpload}
+                                        disabled={uploadingAvatar}
+                                    />
+                                    {vendorForm.avatar_url ? (
+                                        <img
+                                            src={vendorForm.avatar_url}
+                                            alt="Store logo"
+                                            className="h-20 w-20 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 shadow-sm"
+                                        />
+                                    ) : (
+                                        <div className="h-20 w-20 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border-2 border-dashed border-primary/30">
+                                            <Store size={28} />
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        {uploadingAvatar ? (
+                                            <Loader2 size={20} className="animate-spin text-white" />
+                                        ) : (
+                                            <ImagePlus size={20} className="text-white" />
+                                        )}
+                                    </div>
+                                </label>
+                                <div className="space-y-1">
+                                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Store Logo</p>
+                                    <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                                        Shown on the store card below your products.<br />
+                                        Click the image to upload (PNG, JPG).
+                                    </p>
+                                </div>
+                            </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-1.5">

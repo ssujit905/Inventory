@@ -19,6 +19,7 @@ import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
 import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
 import { useAuthStore } from './hooks/useAuthStore';
+import { warmUpSupabase } from './lib/supabase';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -30,15 +31,23 @@ function App() {
   useEffect(() => {
     initialize();
 
-    // Re-check session when user comes back to the app
+    // Re-warm the Supabase session + connection when the user comes back to the
+    // app, so the first submit after returning works instead of hanging on a
+    // stale connection / expired token.
     const handleFocus = () => {
-      console.log('App focused, verifying session...');
-      initialize();
+      void warmUpSupabase();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void warmUpSupabase();
     };
 
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    window.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   if (loading) {
@@ -99,11 +108,11 @@ function App() {
         } />
 
         <Route path="/admin/income" element={
-          user && profile?.role === 'admin' ? <IncomePage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <IncomePage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/profit" element={
-          user && profile?.role === 'admin' ? <ProfitPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <ProfitPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/sales" element={
@@ -119,13 +128,13 @@ function App() {
         } />
 
         <Route path="/admin/website/products" element={
-          user && profile?.role === 'admin' ? <WebsiteProductsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteProductsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/orders" element={
           user ? <WebsiteOrdersPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/settings" element={
-          user && profile?.role === 'admin' ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/delivery" element={
           user ? <WebsiteDeliveryPage /> : <Navigate to="/" replace />
@@ -134,7 +143,7 @@ function App() {
           user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/reports" element={
-          user && profile?.role === 'admin' ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/customers" element={
           user && profile?.role === 'admin' ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
@@ -142,7 +151,7 @@ function App() {
 
 
         <Route path="/admin/reports" element={
-          user && profile?.role === 'admin' ? <ReportsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <ReportsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/users" element={

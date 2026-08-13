@@ -67,6 +67,10 @@ export default function WebsiteReturnsPage() {
                 .from('website_order_returns')
                 .select('*');
 
+            if (profile?.role === 'vendor') {
+                query = query.eq('vendor_id', profile.id);
+            }
+
             const { data, error } = await query.order('created_at', { ascending: false });
             
             if (error) throw error;

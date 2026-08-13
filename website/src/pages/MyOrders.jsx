@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useLocation, useNavigate, NavLink, Link } from 'react-router-dom';
 import { useCustomer } from '../context/CustomerContext';
 import { useSettings } from '../context/SettingsContext';
 import { supabase } from '../lib/supabase';
@@ -297,7 +297,33 @@ const MyOrders = () => {
             });
 
             if (ordersError || !res.success) throw ordersError || new Error(res.error);
-            setOrders(res.orders || []);
+
+            // Resolve missing product images so order cards always show a photo
+            const ordersWithImages = res.orders || [];
+            const missingIds = [...new Set(
+                ordersWithImages.flatMap(o => (o.items || [])
+                    .filter(i => !i.product_image)
+                    .map(i => i.product_id))
+            )];
+            if (missingIds.length > 0) {
+                const { data: imgs } = await supabase
+                    .from('website_product_images')
+                    .select('product_id, image_url, is_primary')
+                    .in('product_id', missingIds);
+                if (imgs) {
+                    const best = {};
+                    imgs.forEach(img => {
+                        if (!best[img.product_id] || (img.is_primary && !best[img.product_id].is_primary)) {
+                            best[img.product_id] = img;
+                        }
+                    });
+                    ordersWithImages.forEach(o => (o.items || []).forEach(i => {
+                        if (!i.product_image && best[i.product_id]) i.product_image = best[i.product_id].image_url;
+                    }));
+                }
+            }
+
+            setOrders(ordersWithImages);
 
             // Securely fetch returns via RPC
             const { data: retRes, error: retError } = await supabase.rpc('customer_returns', {
@@ -825,9 +851,21 @@ const MyOrders = () => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                         {order.items?.map(item => (
                                             <div key={item.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                                {item.product_image && <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />}
+                                                {item.product_image && item.product_id ? (
+                                                    <Link to={`/product/${item.product_id}`}>
+                                                        <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                    </Link>
+                                                ) : (
+                                                    item.product_image && <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                )}
                                                 <div style={{ flex: 1 }}>
-                                                    <p style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>{item.product_title}</p>
+                                                    {item.product_id ? (
+                                                        <Link to={`/product/${item.product_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                                                            <p style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>{item.product_title}</p>
+                                                        </Link>
+                                                    ) : (
+                                                        <p style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a' }}>{item.product_title}</p>
+                                                    )}
                                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <p style={{ fontSize: '0.75rem', color: 'var(--text-gray)', fontWeight: '600' }}>Qty: {item.quantity}</p>
                                                         {item.sku && <span style={{ fontSize: '0.65rem', padding: '1px 6px', background: '#f1f5f9', borderRadius: '4px', fontWeight: '700', color: 'var(--primary-blue)' }}>{item.sku}</span>}

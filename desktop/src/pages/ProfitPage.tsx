@@ -53,21 +53,29 @@ export default function ProfitPage() {
     const fetchProfitData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            const { data: lotSales, error: lotSalesError } = await supabase
+            let txQuery = supabase
                 .from('transactions')
                 .select(`
                     id,
                     sale_id,
                     quantity_changed,
-                    lot:product_lots(
+                    lot:product_lots!inner(
                         id,
                         lot_number,
                         cost_price,
-                        products(sku)
+                        products!inner(sku, vendor_id)
                     ),
                     sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
                 `)
                 .eq('type', 'sale');
+
+            if (profile?.role === 'vendor' && profile?.id) {
+                txQuery = txQuery.eq('lot.products.vendor_id', profile.id);
+            } else {
+                txQuery = txQuery.is('lot.products.vendor_id', null);
+            }
+
+            const { data: lotSales, error: lotSalesError } = await txQuery;
 
             if (lotSalesError) throw lotSalesError;
 
@@ -85,16 +93,27 @@ export default function ProfitPage() {
                 saleTotals.set(t.sale_id, (saleTotals.get(t.sale_id) || 0) + qty);
             });
 
-            const { data: adsData } = await supabase
+            const { data: rawAdsData } = await supabase
                 .from('expenses')
-                .select('id, amount')
+                .select('id, amount, recorded_by, profile:profiles(role)')
                 .eq('category', 'ads');
 
-            const { data: packagingData } = await supabase
+            const { data: rawPackagingData } = await supabase
                 .from('expenses')
-                .select('amount, description, expense_date')
+                .select('amount, description, expense_date, recorded_by, profile:profiles(role)')
                 .eq('category', 'packaging')
                 .order('expense_date', { ascending: true });
+
+            const isVendorProfile = profile?.role === 'vendor';
+            const scopeExpenses = (rows: any[]) =>
+                (rows || []).filter((e: any) =>
+                    isVendorProfile
+                        ? e.recorded_by === profile.id
+                        : (e.profile?.role ?? null) !== 'vendor'
+                );
+
+            const adsData = scopeExpenses(rawAdsData || []);
+            const packagingData = scopeExpenses(rawPackagingData || []);
 
             const adBudgetMap = new Map<string, number>();
             (adsData || []).forEach((a: any) => adBudgetMap.set(a.id, Number(a.amount || 0)));

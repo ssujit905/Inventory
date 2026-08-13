@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -35,6 +35,26 @@ export default function StockInPage() {
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
 
     // Admin Cost Update State
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -108,9 +128,9 @@ export default function StockInPage() {
             query = query.eq('product.vendor_id', profile.id);
         }
 
-        const { data, error } = await query
+        const { data, error } = await supabaseWithTimeout(query
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(20));
 
         if (error) {
             console.error('Error fetching transactions:', error);
@@ -133,10 +153,12 @@ export default function StockInPage() {
         setLoading(true);
 
         try {
-            const { error } = await supabase
-                .from('product_lots')
-                .update({ cost_price: newCost })
-                .eq('id', selectedLot.id);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('product_lots')
+                    .update({ cost_price: newCost })
+                    .eq('id', selectedLot.id)
+            );
 
             if (error) throw error;
 
@@ -178,56 +200,72 @@ export default function StockInPage() {
         if (!user) return;
         setLoading(true);
 
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             let productId;
             let prodQuery = supabase.from('products').select('id').eq('sku', sku);
             if (profile?.role === 'vendor' && profile?.id) {
                 prodQuery = prodQuery.eq('vendor_id', profile.id);
             }
-            const { data: existingProd } = await prodQuery.maybeSingle();
+            const { data: existingProd } = await supabaseWithTimeout(
+                prodQuery.abortSignal(controller.signal).maybeSingle()
+            );
 
             if (existingProd) {
                 productId = existingProd.id;
             } else {
-                const { data: prodData, error: prodError } = await supabase
-                    .from('products')
-                    .insert([{
-                        name: sku,
-                        sku: sku,
-                        description: details,
-                        image_url: imageUrl,
-                        min_stock_alert: 10,
-                        vendor_id: profile?.role === 'vendor' ? profile.id : null
-                    }])
-                    .select()
-                    .single();
+                const { data: prodData, error: prodError } = await supabaseWithTimeout(
+                    supabase
+                        .from('products')
+                        .insert([{
+                            name: sku,
+                            sku: sku,
+                            description: details,
+                            image_url: imageUrl,
+                            min_stock_alert: 10,
+                            vendor_id: profile?.role === 'vendor' ? profile.id : null
+                        }])
+                        .select()
+                        .abortSignal(controller.signal)
+                        .single()
+                );
 
                 if (prodError) throw prodError;
                 productId = prodData.id;
             }
 
-            const { data: lotData, error: lotError } = await supabase
-                .from('product_lots')
-                .insert([{
-                    product_id: productId,
-                    lot_number: lotNumber,
-                    received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
-                    quantity_remaining: quantity,
-                    cost_price: isAdmin ? costPrice : 0,
-                    created_by: user.id
-                }])
-                .select()
-                .single();
+            const { data: lotData, error: lotError } = await supabaseWithTimeout(
+                supabase
+                    .from('product_lots')
+                    .insert([{
+                        product_id: productId,
+                        lot_number: lotNumber,
+                        received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
+                        quantity_remaining: quantity,
+                        cost_price: isAdmin ? costPrice : 0,
+                        created_by: user.id
+                    }])
+                    .select()
+                    .abortSignal(controller.signal)
+                    .single()
+            );
 
             if (lotError) throw lotError;
 
-            const { error: transError } = await supabase.from('transactions').insert([{
-                product_id: productId,
-                lot_id: lotData.id,
-                type: 'in',
-                quantity_changed: quantity,
-                performed_by: user.id
-            }]);
+            const { error: transError } = await supabaseWithTimeout(
+                supabase
+                    .from('transactions')
+                    .insert([{
+                        product_id: productId,
+                        lot_id: lotData.id,
+                        type: 'in',
+                        quantity_changed: quantity,
+                        performed_by: user.id
+                    }])
+                    .abortSignal(controller.signal)
+            );
 
             if (transError) throw transError;
 
@@ -236,8 +274,15 @@ export default function StockInPage() {
             await fetchRecentTransactions();
             setTimeout(() => setIsFormOpen(false), 800);
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setLoading(false);
         }
     };

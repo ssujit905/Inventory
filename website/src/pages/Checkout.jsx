@@ -82,13 +82,36 @@ const Checkout = () => {
     // Load delivery branches and autofill customer data
     useEffect(() => {
         const fetchBranchesAndAutofill = async () => {
-            // 1. Fetch cities
-            const { data: branchData } = await supabase
+            // 1. Fetch cities, scoped to the order's source:
+            //    a cart made ONLY of items from a single vendor uses that
+            //    vendor's own delivery branches; main-store and mixed carts
+            //    use the main store branches.
+            const cartVendors = checkoutItems.map(item => item.vendor_id || null);
+            const allFromOneVendor = checkoutItems.length > 0
+                && cartVendors.every(v => v !== null)
+                && new Set(cartVendors).size === 1;
+            const singleVendor = allFromOneVendor ? cartVendors[0] : null;
+
+            let branchQuery = supabase
                 .from('website_delivery_branches')
-                .select('*')
-                .order('city', { ascending: true });
-            
-            let loadedBranches = branchData || [];
+                .select('*');
+            if (singleVendor) {
+                branchQuery = branchQuery.eq('vendor_id', singleVendor);
+            } else {
+                branchQuery = branchQuery.is('vendor_id', null);
+            }
+            const { data: scopedData } = await branchQuery.order('city', { ascending: true });
+
+            let loadedBranches = scopedData || [];
+            // Vendor hasn't set up delivery areas yet — fall back to store branches
+            if (singleVendor && loadedBranches.length === 0) {
+                const { data: fallback } = await supabase
+                    .from('website_delivery_branches')
+                    .select('*')
+                    .is('vendor_id', null)
+                    .order('city', { ascending: true });
+                loadedBranches = fallback || [];
+            }
             setBranches(loadedBranches);
 
             // 2. Fetch last order to autofill if logged in

@@ -41,18 +41,26 @@ export default function InventoryPage() {
     const fetchInventory = async (isInitial = true) => {
         if (isInitial) setLoading(true);
         try {
-            const { data: lotsData, error: lotsError } = await supabase
+            let query = supabase
                 .from('product_lots')
                 .select(`
                     id,
                     product_id,
-                    products (name, sku, min_stock_alert),
+                    products!inner (name, sku, min_stock_alert, vendor_id),
                     transactions (
                         type, 
                         quantity_changed,
                         sales (parcel_status)
                     )
                 `);
+
+            if (profile?.role === 'vendor' && profile?.id) {
+                query = query.eq('products.vendor_id', profile.id);
+            } else {
+                query = query.is('products.vendor_id', null);
+            }
+
+            const { data: lotsData, error: lotsError } = await query;
 
             if (lotsError) throw lotsError;
 

@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
@@ -118,6 +118,38 @@ export default function SalesPage() {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+    // When the app window loses focus / sleeps, in-flight requests can hang and
+    // even deadlock the Supabase auth lock. Abort any pending submit as soon as
+    // the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
+
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
         const savedDraft = localStorage.getItem('sale_entry_draft');
@@ -171,25 +203,47 @@ export default function SalesPage() {
 
     const fetchSales = async () => {
         try {
+            const isVendor = profile?.role === 'vendor' && profile?.id;
+            let salesQuery = supabase
+                .from('sales')
+                .select(isVendor ? `
+                    *,
+                    sale_items!inner (
+                        id,
+                        quantity,
+                        sold_amount,
+                        product:products!inner(sku, vendor_id)
+                    ),
+                    website_orders!sale_id(
+                        id,
+                        payment_method,
+                        notes,
+                        website_order_items(sku, quantity)
+                    ),
+                    ad:expenses!ad_id(description)
+                ` : `
+                    *,
+                    sale_items (
+                        id,
+                        quantity,
+                        sold_amount,
+                        product:products(sku, vendor_id)
+                    ),
+                    website_orders!sale_id(
+                        id,
+                        payment_method,
+                        notes,
+                        website_order_items(sku, quantity)
+                    ),
+                    ad:expenses!ad_id(description)
+                `);
+
+            if (isVendor) {
+                salesQuery = salesQuery.eq('sale_items.product.vendor_id', profile.id);
+            }
+
             const { data, error } = await supabaseWithTimeout(
-                supabase
-                    .from('sales')
-                    .select(`
-                        *,
-                        sale_items (
-                            id,
-                            quantity,
-                            sold_amount,
-                            product:products(sku)
-                        ),
-                        website_orders!sale_id(
-                            id,
-                            payment_method,
-                            notes,
-                            website_order_items(sku, quantity)
-                        ),
-                        ad:expenses!ad_id(description)
-                    `)
+                salesQuery
                     .order('created_at', { ascending: false })
                     .limit(100)
             );
@@ -225,6 +279,11 @@ export default function SalesPage() {
                         is_website: !!(sale.website_orders && sale.website_orders.length > 0),
                         items: processedItems
                     };
+                }).filter((sale: any) => {
+                    // Main app shows only main-store sales; any sale containing a
+                    // vendor's product belongs to that vendor's portal.
+                    if (isVendor) return true;
+                    return !(sale.sale_items || []).some((i: any) => i.product?.vendor_id);
                 });
                 setSales(processedSales as any);
             }
@@ -235,7 +294,7 @@ export default function SalesPage() {
 
     const fetchAvailableProducts = async () => {
         // Fetch products with their lots and transactions to calculate true "Remaining"
-        const { data } = await supabase
+        let prodQuery = supabase
             .from('products')
             .select(`
                 id,
@@ -249,6 +308,12 @@ export default function SalesPage() {
                     )
                 )
             `);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            prodQuery = prodQuery.eq('vendor_id', profile.id);
+        }
+
+        const { data } = await prodQuery;
 
         if (data) {
             const options = data.map((p: any) => {
@@ -328,6 +393,12 @@ export default function SalesPage() {
         if (!selectedSale) return;
         setLoading(true);
 
+        // Re-establish a healthy session/connection before writing.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             if (!isAdmin && newStatus === 'delivered' && Number(selectedSale.sold_amount || 0) > 0) {
                 throw new Error('Delivered amount can only be entered once by staff. Ask admin to edit.');
@@ -356,6 +427,7 @@ export default function SalesPage() {
                         return_cost: newStatus === 'returned' ? Number(returnCostInput || 0) : selectedSale.return_cost
                     })
                     .eq('id', selectedSale.id)
+                    .abortSignal(controller.signal)
             );
 
             if (error) throw error;
@@ -372,15 +444,22 @@ export default function SalesPage() {
             setMessage({ type: 'success', text: 'Status updated successfully!' });
 
             // Refresh main list to ensure sync
-            await fetchSales();
+            await supabaseWithTimeout(fetchSales());
 
             setTimeout(() => {
                 setIsStatusModalOpen(false);
                 setMessage(null);
             }, 800);
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Update interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setLoading(false);
         }
     };
@@ -426,6 +505,13 @@ export default function SalesPage() {
 
         setLoading(true);
 
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             // 1. Verify Stock for all items first
             const deductionsToMake: any[] = [];
@@ -437,6 +523,7 @@ export default function SalesPage() {
                         .select('id, product_id, received_date, transactions (type, quantity_changed, sales (parcel_status))')
                         .eq('product_id', item.productId)
                         .order('received_date', { ascending: true })
+                        .abortSignal(controller.signal)
                 );
 
                 if (lotError) throw lotError;
@@ -516,16 +603,20 @@ export default function SalesPage() {
                     .from('sales')
                     .insert([{ ...salePayloadBase, package: packageDetails.trim() || null }])
                     .select('id')
+                    .abortSignal(controller.signal)
                     .single()
             ));
 
             // Backward compatibility: if DB doesn't have `package` column yet, retry without it.
             if (saleError && /column.*package|schema cache|invalid input syntax/i.test(String(saleError.message || ''))) {
-                ({ data: newSale, error: saleError } = await supabase
-                    .from('sales')
-                    .insert([salePayloadBase])
-                    .select('id')
-                    .single());
+                ({ data: newSale, error: saleError } = await supabaseWithTimeout(
+                    supabase
+                        .from('sales')
+                        .insert([salePayloadBase])
+                        .select('id')
+                        .abortSignal(controller.signal)
+                        .single()
+                ));
             }
 
             if (saleError) throw saleError;
@@ -536,38 +627,57 @@ export default function SalesPage() {
                 product_id: i.productId,
                 quantity: i.quantity
             }));
-            const { error: itemsError } = await supabase
-                .from('sale_items')
-                .insert(saleItemsPayload);
+            const { error: itemsError } = await supabaseWithTimeout(
+                supabase
+                    .from('sale_items')
+                    .insert(saleItemsPayload)
+                    .abortSignal(controller.signal)
+            );
 
             if (itemsError) throw itemsError;
 
             // 4. Commit Deductions and Log Transactions
             for (const step of deductionsToMake) {
                 // Update Lot Physical Column (Stock In - Sold - New Deduction)
-                await supabase.from('product_lots')
-                    .update({ quantity_remaining: step.currentPhysical - step.deduction })
-                    .eq('id', step.lotId);
+                const { error: updateLotError } = await supabaseWithTimeout(
+                    supabase.from('product_lots')
+                        .update({ quantity_remaining: step.currentPhysical - step.deduction })
+                        .eq('id', step.lotId)
+                        .abortSignal(controller.signal)
+                );
+                if (updateLotError) throw updateLotError;
 
                 // Log Transaction
-                await supabase.from('transactions').insert([{
-                    product_id: step.productId,
-                    lot_id: step.lotId,
-                    sale_id: newSale.id,
-                    type: 'sale',
-                    quantity_changed: -step.deduction,
-                    performed_by: user.id
-                }]);
+                const { error: transError } = await supabaseWithTimeout(
+                    supabase.from('transactions').insert([{
+                        product_id: step.productId,
+                        lot_id: step.lotId,
+                        sale_id: newSale.id,
+                        type: 'sale',
+                        quantity_changed: -step.deduction,
+                        performed_by: user.id
+                    }])
+                    .abortSignal(controller.signal)
+                );
+                if (transError) throw transError;
             }
 
             setMessage({ type: 'success', text: 'Order created successfully!' });
             clearDraft();
-            fetchSales();
+            await supabaseWithTimeout(fetchSales());
             setTimeout(() => setIsFormOpen(false), 1000);
 
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            console.error('[Sales] submit error:', error);
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setLoading(false);
         }
     };

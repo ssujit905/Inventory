@@ -53,21 +53,27 @@ export default function ProfitPage() {
     const fetchProfitData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            const { data: lotSales, error: lotSalesError } = await supabase
+            let txQuery = supabase
                 .from('transactions')
                 .select(`
                     id,
                     sale_id,
                     quantity_changed,
-                    lot:product_lots(
+                    lot:product_lots!inner(
                         id,
                         lot_number,
                         cost_price,
-                        products(sku)
+                        products!inner(sku, vendor_id)
                     ),
                     sale:sales(id, sold_amount, return_cost, parcel_status, ad_id, order_date, created_at)
                 `)
                 .eq('type', 'sale');
+
+            if (profile?.role === 'vendor' && profile?.id) {
+                txQuery = txQuery.eq('lot.products.vendor_id', profile.id);
+            }
+
+            const { data: lotSales, error: lotSalesError } = await txQuery;
 
             if (lotSalesError) throw lotSalesError;
 

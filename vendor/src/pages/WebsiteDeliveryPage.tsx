@@ -68,10 +68,13 @@ export default function WebsiteDeliveryPage() {
 
     const fetchBranches = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('website_delivery_branches')
-            .select('*')
-            .order('city', { ascending: true });
+        let query = supabase.from('website_delivery_branches').select('*');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else if (profile?.role === 'admin') {
+            query = query.is('vendor_id', null);
+        }
+        const { data, error } = await query.order('city', { ascending: true });
         if (error) showToast(error.message, 'error');
         else setBranches(data || []);
         setLoading(false);
@@ -81,14 +84,16 @@ export default function WebsiteDeliveryPage() {
         e.preventDefault();
         if (!newBranch.city.trim()) return;
         setSaving(true);
+        const branchPayload: any = {
+            city: newBranch.city.trim(),
+            coverage_area: newBranch.coverage_area.trim(),
+            shipping_fee: Number(newBranch.shipping_fee) || 0,
+            delivery_time: newBranch.delivery_time.trim(),
+            vendor_id: profile?.role === 'vendor' ? profile.id : null
+        };
         const { data, error } = await supabase
             .from('website_delivery_branches')
-            .insert({
-                city: newBranch.city.trim(),
-                coverage_area: newBranch.coverage_area.trim(),
-                shipping_fee: Number(newBranch.shipping_fee) || 0,
-                delivery_time: newBranch.delivery_time.trim()
-            })
+            .insert(branchPayload)
             .select()
             .single();
 

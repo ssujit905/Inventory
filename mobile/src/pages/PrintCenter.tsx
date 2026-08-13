@@ -177,6 +177,7 @@ export default function PrintCenter() {
                             {loading ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
                             {loading ? 'Fetching...' : 'Fetch Orders'}
                         </button>
+                        {profile?.role !== 'vendor' && (
                         <button
                             onClick={() => { setTempBusinessName(businessName); setShowSettings(true); }}
                             className="h-10 w-10 flex items-center justify-center text-gray-400 hover:text-gray-900 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl transition-colors shadow-sm"
@@ -184,6 +185,7 @@ export default function PrintCenter() {
                         >
                             <Settings size={18} />
                         </button>
+                        )}
                     </div>
                 </div>
 

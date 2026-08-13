@@ -183,10 +183,25 @@ export default function SalesPage() {
     );
 
     const fetchSales = async () => {
-        // Fetch sales and their associated transactions to identify products
-        const { data } = await supabase
+        const isVendor = profile?.role === 'vendor' && profile?.id;
+        let salesQuery = supabase
             .from('sales')
-            .select(`
+            .select(isVendor ? `
+                *,
+                sale_items!inner (
+                    id,
+                    quantity,
+                    sold_amount,
+                    product:products!inner(sku, vendor_id)
+                ),
+                website_orders!sale_id(
+                    id,
+                    payment_method,
+                    notes,
+                    website_order_items(sku, quantity)
+                ),
+                ad:expenses!ad_id(description)
+            ` : `
                 *,
                 sale_items (
                     id,
@@ -201,7 +216,13 @@ export default function SalesPage() {
                     website_order_items(sku, quantity)
                 ),
                 ad:expenses!ad_id(description)
-            `)
+            `);
+
+        if (isVendor) {
+            salesQuery = salesQuery.eq('sale_items.product.vendor_id', profile.id);
+        }
+
+        const { data } = await salesQuery
             .order('created_at', { ascending: false })
             .limit(100);
 
@@ -235,7 +256,7 @@ export default function SalesPage() {
 
     const fetchAvailableProducts = async () => {
         // Fetch products with their lots and transactions to calculate true "Remaining"
-        const { data } = await supabase
+        let prodQuery = supabase
             .from('products')
             .select(`
                 id,
@@ -249,6 +270,12 @@ export default function SalesPage() {
                     )
                 )
             `);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            prodQuery = prodQuery.eq('vendor_id', profile.id);
+        }
+
+        const { data } = await prodQuery;
 
         if (data) {
             const options = data.map((p: any) => {

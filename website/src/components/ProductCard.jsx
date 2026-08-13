@@ -64,18 +64,17 @@ const ProductCard = ({ product }) => {
                 )}
             </Link>
 
-            <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '0.5rem' }}>
+            <div style={{ padding: '0.6rem 0.65rem 0.55rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '0.4rem' }}>
                 {/* Title */}
                 <Link to={`/product/${product.id}`}>
                     <h3 style={{
-                        fontSize: '0.9rem',
+                        fontSize: '0.85rem',
                         fontWeight: '400',
-                        lineHeight: '1.4',
-                        height: '2.8em',
+                        lineHeight: '1.3',
+                        height: '1.3em',
                         overflow: 'hidden',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
                         color: isSoldOut ? 'var(--text-gray)' : 'var(--text-dark)'
                     }}>
                         {product.title}
@@ -143,7 +142,7 @@ const ProductCard = ({ product }) => {
                 </div>
 
                 {/* Price */}
-                <div style={{ marginTop: '0.25rem' }}>
+                <div style={{ marginTop: '0.1rem' }}>
                     <span style={{
                         fontWeight: '800',
                         fontSize: '1.1rem',
@@ -166,7 +165,7 @@ const ProductCard = ({ product }) => {
                 </div>
 
                 {/* Ship From Location */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '-0.3rem' }}>
                     <MapPin size={13} color="#64748b" />
                     <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>
                         {product.city || 'Kathmandu'}

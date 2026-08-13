@@ -107,7 +107,7 @@ interface Product {
 export default function WebsiteSettingsPage() {
     const { profile } = useAuthStore();
     const [settings, setSettings] = useState<Record<string, string>>({});
-    const [products, setProducts] = useState<Product[]>([]);
+    const [products, setProducts] = useState<any[]>([]);
     const [flashSaleProducts, setFlashSaleProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingProducts, setLoadingProducts] = useState(false);
@@ -115,11 +115,84 @@ export default function WebsiteSettingsPage() {
     const [uploading, setUploading] = useState<string | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [vendorForm, setVendorForm] = useState({
+        store_name: '',
+        contact_person: '',
+        phone: '',
+        whatsapp: '',
+        email: '',
+        address: '',
+        city: '',
+        description: '',
+        bank_name: '',
+        bank_account_holder: '',
+        bank_account_number: '',
+        bank_branch: '',
+        esewa_id: ''
+    });
 
     useEffect(() => { 
-        fetchSettings(); 
-        fetchProducts();
-    }, []);
+        if (profile?.role === 'vendor') {
+            fetchVendorProfile();
+        } else {
+            fetchSettings(); 
+            fetchProducts();
+        }
+    }, [profile]);
+
+    const fetchVendorProfile = async () => {
+        setLoading(true);
+        if (profile?.id) {
+            const { data } = await supabase.from('profiles').select('*').eq('id', profile.id).maybeSingle();
+            if (data) {
+                setVendorForm({
+                    store_name: data.store_name || data.full_name || '',
+                    contact_person: data.full_name || '',
+                    phone: data.phone || '',
+                    whatsapp: data.whatsapp || data.phone || '',
+                    email: data.email || '',
+                    address: data.address || '',
+                    city: data.city || '',
+                    description: data.description || '',
+                    bank_name: data.bank_name || '',
+                    bank_account_holder: data.bank_account_holder || '',
+                    bank_account_number: data.bank_account_number || '',
+                    bank_branch: data.bank_branch || '',
+                    esewa_id: data.esewa_id || ''
+                });
+            }
+        }
+        setLoading(false);
+    };
+
+    const handleSaveVendor = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            if (!profile?.id) return;
+            const { error } = await supabase.from('profiles').update({
+                full_name: vendorForm.contact_person,
+                store_name: vendorForm.store_name,
+                phone: vendorForm.phone,
+                whatsapp: vendorForm.whatsapp,
+                address: vendorForm.address,
+                city: vendorForm.city,
+                description: vendorForm.description,
+                bank_name: vendorForm.bank_name,
+                bank_account_holder: vendorForm.bank_account_holder,
+                bank_account_number: vendorForm.bank_account_number,
+                bank_branch: vendorForm.bank_branch,
+                esewa_id: vendorForm.esewa_id
+            }).eq('id', profile.id);
+
+            if (error) throw error;
+            showToast('Vendor store settings saved successfully!');
+        } catch (err: any) {
+            showToast(err.message || 'Failed to save vendor settings', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const fetchProducts = async () => {
         setLoadingProducts(true);

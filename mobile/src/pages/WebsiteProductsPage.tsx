@@ -140,11 +140,14 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        let wpQuery = supabase.from('website_products').select(`*, website_product_images(*)`);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            wpQuery = wpQuery.eq('vendor_id', profile.id);
+        }
+
         const { data, error } = await supabaseWithTimeout(
-            supabase
-                .from('website_products')
-                .select(`*, website_product_images(*)`)
-                .order('created_at', { ascending: false })
+            wpQuery.order('created_at', { ascending: false })
         );
         if (error) {
             showToast(error.message, 'error');
@@ -154,9 +157,15 @@ export default function WebsiteProductsPage() {
 
         // Use the same live stock view as the desktop app so a variant mapping
         // immediately shows the real quantity available for its SKU.
-        const { data: inv, error: invErr } = await supabaseWithTimeout(
-            supabase.from('inventory_stock_view').select('id, name, sku, available_stock')
-        );
+        // Vendors only see their own products; the main app only sees its own
+        // (no vendor data) so the two SKU links stay fully separate.
+        let invQuery = supabase.from('inventory_stock_view').select('id, name, sku, available_stock');
+        if (profile?.role === 'vendor' && profile?.id) {
+            invQuery = invQuery.eq('vendor_id', profile.id);
+        } else {
+            invQuery = invQuery.is('vendor_id', null);
+        }
+        const { data: inv, error: invErr } = await supabaseWithTimeout(invQuery);
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
 
@@ -259,7 +268,9 @@ export default function WebsiteProductsPage() {
         if (!form.allow_cod && !form.allow_esewa && !form.allow_fonepay) {
             return showToast('Choose at least one payment method for this product', 'error');
         }
+        if (saving) return;
         setSaving(true);
+        let createdProductId: number | null = null;
         try {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
             const computedBasePrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -283,6 +294,7 @@ export default function WebsiteProductsPage() {
                 allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
+                vendor_id: profile?.role === 'vendor' ? profile.id : null,
                 updated_at: new Date().toISOString()
             };
 
@@ -315,6 +327,7 @@ export default function WebsiteProductsPage() {
                 );
                 if (error) throw error;
                 productId = data.id;
+                createdProductId = data.id;
             }
 
             // --- SAVE VARIANTS ---
@@ -469,6 +482,16 @@ export default function WebsiteProductsPage() {
             fetchProducts();
         } catch (err: any) {
             console.error('Save failed:', err);
+            // Roll back: if the product was just created but a later step
+            // (variants, images, bundles) failed, delete it so retrying the
+            // save does not create duplicate products.
+            if (createdProductId) {
+                try {
+                    await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', createdProductId));
+                } catch (rollbackErr) {
+                    console.warn('Failed to roll back created product:', rollbackErr);
+                }
+            }
             showToast(err.message || 'Save failed', 'error');
         } finally {
             setSaving(false);

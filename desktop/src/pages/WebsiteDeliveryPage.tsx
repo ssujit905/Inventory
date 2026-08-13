@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     MapPin, Plus, Trash2, Loader2,
     AlertTriangle, CheckCircle, Truck, Info, Pencil, X, Clock
@@ -32,6 +32,38 @@ export default function WebsiteDeliveryPage() {
         shipping_fee: '' as string | number,
         delivery_time: '2-4 Days'
     });
+
+    // When the app window loses focus / sleeps, in-flight requests can hang and
+    // even deadlock the Supabase auth lock. Abort any pending submit as soon as
+    // the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!saving) return;
+        const t = setTimeout(() => {
+            setSaving(false);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [saving]);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -68,10 +100,13 @@ export default function WebsiteDeliveryPage() {
 
     const fetchBranches = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('website_delivery_branches')
-            .select('*')
-            .order('city', { ascending: true });
+        let query = supabase.from('website_delivery_branches').select('*');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else {
+            query = query.is('vendor_id', null);
+        }
+        const { data, error } = await query.order('city', { ascending: true });
         if (error) showToast(error.message, 'error');
         else setBranches(data || []);
         setLoading(false);
@@ -81,19 +116,36 @@ export default function WebsiteDeliveryPage() {
         e.preventDefault();
         if (!newBranch.city.trim()) return;
         setSaving(true);
-        const { data, error } = await supabase
-            .from('website_delivery_branches')
-            .insert({
-                city: newBranch.city.trim(),
-                coverage_area: newBranch.coverage_area.trim(),
-                shipping_fee: Number(newBranch.shipping_fee) || 0,
-                delivery_time: newBranch.delivery_time.trim()
-            })
-            .select()
-            .single();
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
+        const branchPayload: any = {
+            city: newBranch.city.trim(),
+            coverage_area: newBranch.coverage_area.trim(),
+            shipping_fee: Number(newBranch.shipping_fee) || 0,
+            delivery_time: newBranch.delivery_time.trim(),
+            vendor_id: profile?.role === 'vendor' ? profile.id : null
+        };
+        const { data, error } = await supabaseWithTimeout(
+            supabase
+                .from('website_delivery_branches')
+                .insert(branchPayload)
+                .select()
+                .abortSignal(controller.signal)
+                .single()
+        );
 
         if (error) {
-            showToast(error.message, 'error');
+            if (error?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(error.message, 'error');
+            }
         } else {
             setBranches(prev => [...prev, data].sort((a, b) => a.city.localeCompare(b.city)));
             setNewBranch({ city: '', coverage_area: '', shipping_fee: '', delivery_time: '2-4 Days' });
@@ -101,6 +153,7 @@ export default function WebsiteDeliveryPage() {
             setIsFormOpen(false);
             showToast('Delivery branch added!');
         }
+        if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
         setSaving(false);
     };
 
@@ -118,33 +171,52 @@ export default function WebsiteDeliveryPage() {
 
         setDeleting(id);
         setConfirmingDelete(null);
+
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
         
         try {
-            const { error } = await supabase
-                .from('website_delivery_branches')
-                .delete()
-                .eq('id', id);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_delivery_branches')
+                    .delete()
+                    .eq('id', id)
+                    .abortSignal(controller.signal)
+            );
 
             if (error) {
-                showToast(error.message, 'error');
+                if (error?.message === 'NETWORK_TIMEOUT') {
+                    showToast('Network timeout. Check your connection and try again.', 'error');
+                } else {
+                    showToast(error.message, 'error');
+                }
             } else {
                 setBranches(prev => prev.filter(b => b.id !== id));
                 showToast('Branch deleted successfully');
             }
         } catch (err: any) {
-            showToast(err.message || 'An error occurred while deleting', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Delete interrupted when you left the app. Please try again.', 'error');
+            } else {
+                showToast(err.message || 'An error occurred while deleting', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setDeleting(null);
         }
     };
 
     const handleUpdateField = async (id: number, field: string, value: any) => {
-        const { error } = await supabase
-            .from('website_delivery_branches')
-            .update({ [field]: value })
-            .eq('id', id);
+        const { error } = await supabaseWithTimeout(
+            supabase
+                .from('website_delivery_branches')
+                .update({ [field]: value })
+                .eq('id', id)
+        );
         if (error) {
-            showToast(error.message, 'error');
+            showToast(error?.message === 'NETWORK_TIMEOUT' ? 'Network timeout. Check your connection and try again.' : error.message, 'error');
         } else {
             setBranches(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
             showToast('Field updated');

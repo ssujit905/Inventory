@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -18,6 +18,7 @@ type RecentTransaction = {
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
     const isAdmin = profile?.role === 'admin';
+    const canSeeCost = profile?.role === 'admin' || profile?.role === 'vendor';
     const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
@@ -35,6 +36,38 @@ export default function StockInPage() {
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    // When the app window loses focus / sleeps, in-flight requests can hang and
+    // even deadlock the Supabase auth lock. Abort any pending submit as soon as
+    // the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
 
     // Admin Cost Update State
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -92,19 +125,27 @@ export default function StockInPage() {
     );
 
     const fetchRecentTransactions = async () => {
-        const { data, error } = await supabase
+        let txQuery = supabase
             .from('transactions')
             .select(`
                 id,
                 created_at,
                 quantity_changed,
                 type,
-                product:products(name, sku, description),
+                product:products!inner(name, sku, description, vendor_id),
                 lot:product_lots(id, lot_number, cost_price, expiry_date, received_date)
             `)
-            .eq('type', 'in')
+            .eq('type', 'in');
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            txQuery = txQuery.eq('product.vendor_id', profile.id);
+        } else {
+            txQuery = txQuery.is('product.vendor_id', null);
+        }
+
+        const { data, error } = await supabaseWithTimeout(txQuery
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(20));
 
         if (error) {
             console.error('Error fetching transactions:', error);
@@ -123,14 +164,16 @@ export default function StockInPage() {
 
     const handleUpdateCost = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedLot || !isAdmin) return;
+        if (!selectedLot || !canSeeCost) return;
         setLoading(true);
 
         try {
-            const { error } = await supabase
-                .from('product_lots')
-                .update({ cost_price: newCost })
-                .eq('id', selectedLot.id);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('product_lots')
+                    .update({ cost_price: newCost })
+                    .eq('id', selectedLot.id)
+            );
 
             if (error) throw error;
 
@@ -171,20 +214,34 @@ export default function StockInPage() {
         e.preventDefault();
         if (!user) return;
         setLoading(true);
+        console.log('[StockIn] submit started', new Date().toISOString());
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+        console.log('[StockIn] warm-up complete');
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
 
         try {
             let productId;
-            const { data: existingProd } = await supabaseWithTimeout(
-                supabase
-                    .from('products')
-                    .select('id')
-                    .eq('sku', sku)
-                    .maybeSingle()
+            let prodSearchQuery = supabase.from('products').select('id').eq('sku', sku);
+            if (profile?.role === 'vendor' && profile?.id) {
+                prodSearchQuery = prodSearchQuery.eq('vendor_id', profile.id);
+            } else {
+                prodSearchQuery = prodSearchQuery.is('vendor_id', null);
+            }
+            console.log('[StockIn] step 1/4: lookup SKU');
+            const { data: existingProd, error: searchError } = await supabaseWithTimeout(
+                prodSearchQuery.abortSignal(controller.signal).maybeSingle()
             );
+            if (searchError) throw searchError;
 
             if (existingProd) {
                 productId = existingProd.id;
             } else {
+                console.log('[StockIn] step 2/4: insert product');
                 const { data: prodData, error: prodError } = await supabaseWithTimeout(
                     supabase
                         .from('products')
@@ -193,9 +250,11 @@ export default function StockInPage() {
                             sku: sku,
                             description: details,
                             image_url: imageUrl,
-                            min_stock_alert: 10
+                            min_stock_alert: 10,
+                            vendor_id: profile?.role === 'vendor' ? profile.id : null
                         }])
                         .select()
+                        .abortSignal(controller.signal)
                         .single()
                 );
 
@@ -203,6 +262,7 @@ export default function StockInPage() {
                 productId = prodData.id;
             }
 
+            console.log('[StockIn] step 3/4: insert lot');
             const { data: lotData, error: lotError } = await supabaseWithTimeout(
                 supabase
                     .from('product_lots')
@@ -211,35 +271,51 @@ export default function StockInPage() {
                         lot_number: lotNumber,
                         received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
                         quantity_remaining: quantity,
-                        cost_price: isAdmin ? costPrice : 0,
+                        cost_price: (isAdmin || profile?.role === 'vendor') ? costPrice : 0,
                         created_by: user.id
                     }])
                     .select()
+                    .abortSignal(controller.signal)
                     .single()
             );
 
             if (lotError) throw lotError;
 
+            console.log('[StockIn] step 4/4: insert transaction');
             const { error: transError } = await supabaseWithTimeout(
-                supabase.from('transactions').insert([{
-                    product_id: productId,
-                    lot_id: lotData.id,
-                    type: 'in',
-                    quantity_changed: quantity,
-                    performed_by: user.id
-                }])
+                supabase
+                    .from('transactions')
+                    .insert([{
+                        product_id: productId,
+                        lot_id: lotData.id,
+                        type: 'in',
+                        quantity_changed: quantity,
+                        performed_by: user.id
+                    }])
+                    .abortSignal(controller.signal)
             );
 
             if (transError) throw transError;
 
             setMessage({ type: 'success', text: 'Stock received successfully!' });
             clearDraft();
-            await fetchRecentTransactions();
+            console.log('[StockIn] done, refreshing list');
+            await supabaseWithTimeout(fetchRecentTransactions());
             setTimeout(() => setIsFormOpen(false), 800);
+            console.log('[StockIn] submit finished', new Date().toISOString());
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            console.error('[StockIn] submit error:', error);
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setLoading(false);
+            console.log('[StockIn] loading reset to false');
         }
     };
 
@@ -278,16 +354,16 @@ export default function StockInPage() {
                                     <th className="px-6 py-3">Product / SKU</th>
                                     <th className="px-6 py-3 text-right">Qty</th>
                                     <th className="px-6 py-3">Lot #</th>
-                                    {isAdmin && <th className="px-6 py-3 text-right">Cost (Unit)</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-right">Total Cost</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-center">Status</th>}
-                                    {isAdmin && <th className="px-6 py-3 text-right">Actions</th>}
+                                    {canSeeCost && <th className="px-6 py-3 text-right">Cost (Unit)</th>}
+                                    {canSeeCost && <th className="px-6 py-3 text-right">Total Cost</th>}
+                                    {canSeeCost && <th className="px-6 py-3 text-center">Status</th>}
+                                    {canSeeCost && <th className="px-6 py-3 text-right">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                                 {recentTransactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={isAdmin ? 8 : 4} className="px-6 py-20 text-center">
+                                        <td colSpan={canSeeCost ? 8 : 4} className="px-6 py-20 text-center">
                                             <div className="flex flex-col items-center gap-3 opacity-30">
                                                 <Package size={40} strokeWidth={1.5} />
                                                 <p className="text-xs font-bold uppercase tracking-widest">No intake records</p>
@@ -323,17 +399,17 @@ export default function StockInPage() {
                                                     {tx.lot?.lot_number}
                                                 </div>
                                             </td>
-                                            {isAdmin && (
+                                            {canSeeCost && (
                                                 <td className="px-6 py-4 text-right font-semibold text-gray-700 dark:text-gray-300">
                                                     Rs. {(tx.lot?.cost_price || 0).toLocaleString()}
                                                 </td>
                                             )}
-                                            {isAdmin && (
+                                            {canSeeCost && (
                                                 <td className="px-6 py-4 text-right font-bold text-gray-900 dark:text-gray-100">
                                                     Rs. {(tx.quantity_changed * (tx.lot?.cost_price || 0)).toLocaleString()}
                                                 </td>
                                             )}
-                                            {isAdmin && (
+                                            {canSeeCost && (
                                                 <td className="px-6 py-4 text-center">
                                                     {tx.lot?.cost_price > 0 ? (
                                                         <span className="inline-flex px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 rounded text-[9px] font-bold uppercase border border-emerald-100 dark:border-emerald-900/30">Verified</span>
@@ -342,7 +418,7 @@ export default function StockInPage() {
                                                     )}
                                                 </td>
                                             )}
-                                            {isAdmin && (
+                                            {canSeeCost && (
                                                 <td className="px-6 py-4 text-right">
                                                     {!isReadOnly && (
                                                         <button
@@ -444,7 +520,7 @@ export default function StockInPage() {
                                         />
                                     </div>
 
-                                    {isAdmin && (
+                                    {canSeeCost && (
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Unit Cost (Rs.)</label>
                                             <div className="relative group">
@@ -474,7 +550,7 @@ export default function StockInPage() {
                                     </div>
                                 </div>
 
-                                {isAdmin && quantity > 0 && costPrice > 0 && (
+                                {canSeeCost && quantity > 0 && costPrice > 0 && (
                                     <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 flex justify-between items-center group">
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Transaction Value</span>

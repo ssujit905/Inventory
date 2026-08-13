@@ -83,17 +83,23 @@ export default function PrintCenter() {
         setSelectedIds(new Set())
 
         try {
-            const { data, error } = await supabase
-                .from('sales')
-                .select(`
+let query = supabase
+            .from('sales')
+            .select(`
           *,
-          sale_items (
+          sale_items!inner (
             quantity,
-            product:products(sku)
+            product:products!inner(sku, vendor_id)
           )
         `)
-                .eq('order_date', date)
-                .order('created_at', { ascending: true })
+            .eq('order_date', date)
+            .order('created_at', { ascending: true })
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('sale_items.product.vendor_id', profile.id)
+        } else {
+            query = query.is('sale_items.product.vendor_id', null)
+        }
+        const { data, error } = await query
 
             if (error) {
                 console.error('Fetch error:', error)
@@ -177,6 +183,7 @@ export default function PrintCenter() {
                             {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
                             Fetch Orders
                         </button>
+                        {profile?.role !== 'vendor' && (
                         <button
                             onClick={() => { setTempBusinessName(businessName); setShowSettings(true); }}
                             className="p-2.5 text-gray-400 hover:text-gray-900 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl transition-colors shadow-sm"
@@ -184,6 +191,7 @@ export default function PrintCenter() {
                         >
                             <Settings size={20} />
                         </button>
+                        )}
                     </div>
                 </div>
 

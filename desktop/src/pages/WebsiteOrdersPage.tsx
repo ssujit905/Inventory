@@ -93,7 +93,13 @@ export default function WebsiteOrdersPage() {
     }, [isPushModalOpen]);
 
     const fetchPhysicalProducts = async () => {
-        const { data } = await supabase.from('products').select('id, sku').order('sku');
+        let query = supabase.from('products').select('id, sku').order('sku');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else {
+            query = query.is('vendor_id', null);
+        }
+        const { data } = await query;
         if (data) setPhysicalProducts(data);
     };
 
@@ -238,10 +244,19 @@ export default function WebsiteOrdersPage() {
 
     const fetchOrders = async () => {
         setLoading(true);
-        const { data, error } = await supabase
+        let ordersQuery = supabase
             .from('website_orders')
-            .select(`*, website_order_items(*), sales:sales!sale_id(parcel_status)`)
-            .order('created_at', { ascending: false });
+            .select(`*, website_order_items!inner(*), sales:sales!sale_id(parcel_status)`);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            ordersQuery = ordersQuery.eq('website_order_items.vendor_id', profile.id);
+        } else {
+            // Main app sees only main-store orders; vendor orders stay in the
+            // vendor's own portal (website_order_items.vendor_id IS NULL).
+            ordersQuery = ordersQuery.is('website_order_items.vendor_id', null);
+        }
+
+        const { data, error } = await ordersQuery.order('created_at', { ascending: false });
         if (error) showToast(error.message, 'error');
         else setOrders(data || []);
         setLoading(false);

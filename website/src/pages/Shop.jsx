@@ -215,19 +215,19 @@ const Shop = () => {
                 .shop-grid {
                     display: grid;
                     grid-template-columns: repeat(2, 1fr);
-                    gap: 12px;
+                    gap: 8px;
                 }
                 .grid-column {
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
+                    gap: 8px;
                 }
                 .container::-webkit-scrollbar { display: none; }
                 
                 @media (min-width: 992px) {
                     .shop-grid {
                         grid-template-columns: repeat(5, 1fr);
-                        gap: 24px;
+                        gap: 12px;
                     }
                     .grid-column { display: contents; }
                     .grid-column:first-child { padding-top: 0 !important; }

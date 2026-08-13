@@ -93,6 +93,8 @@ export default function WebsiteOrdersPage() {
         let query = supabase.from('products').select('id, sku').order('sku');
         if (profile?.role === 'vendor' && profile?.id) {
             query = query.eq('vendor_id', profile.id);
+        } else {
+            query = query.is('vendor_id', null);
         }
         const { data } = await query;
         if (data) setPhysicalProducts(data);
@@ -107,7 +109,17 @@ export default function WebsiteOrdersPage() {
         try {
             const firstItemId = selectedOrderForPush.website_order_items[0].id;
             const firstPhysicalId = skuMappings[firstItemId];
-            const totalQty = selectedOrderForPush.website_order_items.reduce((s: number, i: any) => s + i.quantity, 0);
+
+            // Compute the vendor's share of this order (only the items mapped to
+            // this vendor's products) so the sale amount reflects their revenue.
+            const mappedItems = selectedOrderForPush.website_order_items.map(item => ({
+                id: item.id,
+                quantity: item.quantity,
+                unit_price: Number(item.unit_price) || 0,
+                physicalId: skuMappings[item.id]
+            }));
+            const vendorSubtotal = mappedItems.reduce((s, i) => s + (i.quantity * i.unit_price), 0);
+            const totalQty = mappedItems.reduce((s, i) => s + i.quantity, 0);
 
             const salePayloadFull = {
                 order_date: format(new Date(), 'yyyy-MM-dd'),
@@ -116,7 +128,7 @@ export default function WebsiteOrdersPage() {
                 customer_address: `${selectedOrderForPush.address}, ${selectedOrderForPush.city}`,
                 phone1: selectedOrderForPush.phone,
                 phone2: selectedOrderForPush.phone2 || null,
-                cod_amount: selectedOrderForPush.total_amount,
+                cod_amount: vendorSubtotal,
                 parcel_status: 'processing',
                 is_website: true,
                 recorded_by: profile.id,
@@ -137,6 +149,7 @@ export default function WebsiteOrdersPage() {
 
             for (const item of selectedOrderForPush.website_order_items) {
                 const physicalId = skuMappings[item.id];
+                const itemQty = item.quantity;
                 const { data: lots } = await supabase
                     .from('product_lots')
                     .select('id, product_id, received_date, transactions (type, quantity_changed, sales (parcel_status))')
@@ -150,7 +163,7 @@ export default function WebsiteOrdersPage() {
                     return { ...lot, current: stockIn - sold };
                 }).filter(l => l.current > 0);
 
-                let remaining = item.quantity;
+                let remaining = itemQty;
                 for (const lot of processedLots) {
                     if (remaining <= 0) break;
                     const deduction = Math.min(lot.current, remaining);
@@ -158,7 +171,12 @@ export default function WebsiteOrdersPage() {
                     await supabase.from('transactions').insert([{ product_id: physicalId, lot_id: lot.id, sale_id: newSale.id, type: 'sale', quantity_changed: -deduction, performed_by: profile.id }]);
                     remaining -= deduction;
                 }
-                await supabase.from('sale_items').insert([{ sale_id: newSale.id, product_id: physicalId, quantity: item.quantity }]);
+                await supabase.from('sale_items').insert([{
+                    sale_id: newSale.id,
+                    product_id: physicalId,
+                    quantity: itemQty,
+                    ...(profile?.role === 'vendor' ? { vendor_id: profile.id } : {})
+                }]);
             }
 
             await updateStatus(selectedOrderForPush.id, 'confirmed');

@@ -74,13 +74,20 @@ export default function IncomePage() {
     );
 
     const fetchIncomeEntries = async () => {
-        const { data } = await supabase
-            .from('income_entries')
-            .select('*')
+        let query = supabase.from('income_entries').select('*, profile:profiles(role)');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('recorded_by', profile.id);
+        }
+        const { data } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 
-        if (data) setIncomeEntries(data as IncomeEntry[]);
+        if (data) {
+            const scoped = profile?.role === 'vendor'
+                ? data
+                : data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
+            setIncomeEntries(scoped as IncomeEntry[]);
+        }
     };
 
     const openEntryForm = () => {

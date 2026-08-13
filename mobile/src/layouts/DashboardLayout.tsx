@@ -9,7 +9,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const navigate = useNavigate();
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
-    const { signOut } = useAuthStore();
+    const { profile, signOut } = useAuthStore();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -351,7 +351,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Website Ecosystem</label>
                             <div className="space-y-1">
-                                {role === 'admin' && (
+                                {(role === 'admin' || profile?.role === 'vendor') && (
                                     <MenuLink icon={<Globe className="text-pink-500" />} label="Products" path="/admin/website/products" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" onSelect={() => setIsMenuOpen(false)} badge={pendingOrdersCount} />
@@ -360,24 +360,26 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Customers" path="/admin/website/customers" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
-                                {role === 'admin' && (
-                                    <>
-                                        <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
-                                        <MenuLink icon={<Settings className="text-gray-500" />} label="Settings" path="/admin/website/settings" onSelect={() => setIsMenuOpen(false)} />
-                                    </>
+                                {(role === 'admin' || profile?.role === 'vendor') && (
+                                    <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
+                                )}
+                                {(role === 'admin' || profile?.role === 'vendor') && (
+                                    <MenuLink icon={<Settings className="text-gray-500" />} label="Settings" path="/admin/website/settings" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                             </div>
                         </section>
 
                         {/* ANALYTICS CATEGORY */}
-                        {role === 'admin' && (
+                        {(role === 'admin' || profile?.role === 'vendor') && (
                             <section>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Analytics & Logic</label>
                                 <div className="space-y-1">
                                     <MenuLink icon={<TrendingUp className="text-emerald-500" />} label="Income" path="/admin/income" onSelect={() => setIsMenuOpen(false)} />
                                     <MenuLink icon={<FileText className="text-orange-500" />} label="Profit" path="/admin/profit" onSelect={() => setIsMenuOpen(false)} />
                                     <MenuLink icon={<Activity className="text-rose-500" />} label="Finance" path="/admin/reports" onSelect={() => setIsMenuOpen(false)} />
-                                    <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" onSelect={() => setIsMenuOpen(false)} />
+                                    {role === 'admin' && (
+                                        <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" onSelect={() => setIsMenuOpen(false)} />
+                                    )}
                                 </div>
                             </section>
                         )}

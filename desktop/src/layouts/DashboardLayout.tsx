@@ -10,7 +10,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const navigate = useNavigate();
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
-    const { signOut } = useAuthStore();
+    const { profile, signOut } = useAuthStore();
     const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' | 'status' | 'sku' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [pendingCostCount, setPendingCostCount] = useState(0);
@@ -24,17 +24,27 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 return;
             }
 
-            const { data: salesData } = await supabase
+            const isVendor = profile?.role === 'vendor' && profile?.id;
+
+            let salesQuery = supabase
                 .from('sales')
-                .select('customer_name, phone1, parcel_status')
+                .select('customer_name, phone1, parcel_status, sale_items!inner(product:products!inner(vendor_id))')
                 .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%,parcel_status.ilike.%${query}%`)
                 .limit(10);
+            if (isVendor) salesQuery = salesQuery.eq('sale_items.product.vendor_id', profile.id);
+            else salesQuery = salesQuery.is('sale_items.product.vendor_id', null);
 
-            const { data: productData } = await supabase
+            let productsQuery = supabase
                 .from('products')
                 .select('sku')
                 .ilike('sku', `%${query}%`)
                 .limit(10);
+            if (isVendor) productsQuery = productsQuery.eq('vendor_id', profile.id);
+            else productsQuery = productsQuery.is('vendor_id', null);
+
+            const { data: salesData } = await salesQuery;
+
+            const { data: productData } = await productsQuery;
 
             const unique = new Set<string>();
             const results: { text: string, type: 'name' | 'phone' | 'status' | 'sku' }[] = [];
@@ -86,18 +96,25 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     };
 
     const fetchPendingWebItems = async () => {
+        const isVendor = profile?.role === 'vendor' && profile?.id;
         // Processing Orders Alert
-        const { count: ordersCount } = await supabase
+        let ordersQuery = supabase
             .from('website_orders')
-            .select('id', { count: 'exact', head: true })
+            .select('id, website_order_items!inner(vendor_id)', { count: 'exact', head: true })
             .eq('status', 'processing');
+        if (isVendor) ordersQuery = ordersQuery.eq('website_order_items.vendor_id', profile.id);
+        else ordersQuery = ordersQuery.is('website_order_items.vendor_id', null);
+        const { count: ordersCount } = await ordersQuery;
         setPendingOrdersCount(ordersCount || 0);
 
         // Pending Returns
-        const { count: returnsCount } = await supabase
+        let returnsQuery = supabase
             .from('website_order_returns')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending');
+        if (isVendor) returnsQuery = returnsQuery.eq('vendor_id', profile.id);
+        else returnsQuery = returnsQuery.is('vendor_id', null);
+        const { count: returnsCount } = await returnsQuery;
         setPendingReturnsCount(returnsCount || 0);
     };
 
@@ -226,7 +243,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     <div className="pt-6 pb-2">
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Website</p>
                     </div>
-                    {role === 'admin' && (
+                    {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Globe size={18} strokeWidth={1.5} />} label="Products" path="/admin/website/products" active={location.pathname === '/admin/website/products'} />
                     )}
                     <NavItem 
@@ -247,13 +264,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     {role === 'admin' && (
                         <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Customers" path="/admin/website/customers" active={location.pathname === '/admin/website/customers'} />
                     )}
-                    {role === 'admin' && (
+                    {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Website Reports" path="/admin/website/reports" active={location.pathname === '/admin/website/reports'} />
                     )}
-                    {role === 'admin' && (
+                    {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />
                     )}
-                    {role === 'admin' && (
+                    {(role === 'admin' || profile?.role === 'vendor') && (
                         <>
                             <div className="pt-6 pb-2">
                                 <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics</p>
@@ -261,7 +278,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
                             <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
                             <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
-                            <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
+                            {role === 'admin' && (
+                                <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
+                            )}
                         </>
                     )}
                     <div className="pt-6 pb-2">

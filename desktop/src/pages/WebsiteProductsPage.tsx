@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
     Package, Loader2, Check, AlertTriangle, Globe, Video
@@ -75,6 +75,40 @@ export default function WebsiteProductsPage() {
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // When the app window loses focus / sleeps, in-flight requests can hang and
+    // even deadlock the Supabase auth lock. Abort any pending submit as soon as
+    // the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: the save flow includes video (up to 5 min) and image
+    // uploads, so allow a long window, but the button can never spin forever.
+    useEffect(() => {
+        if (!saving) return;
+        const t = setTimeout(() => {
+            setSaving(false);
+            setVideoProgress(null);
+            setImageProgress(null);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 360000);
+        return () => clearTimeout(t);
+    }, [saving]);
+
     const emptyForm = {
         title: '', description: '', price: '', original_price: '',
         category: 'General', city: 'Kathmandu', delivery_days: '2-4',
@@ -140,11 +174,14 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        let wpQuery = supabase.from('website_products').select(`*, website_product_images(*)`);
+
+        if (profile?.role === 'vendor' && profile?.id) {
+            wpQuery = wpQuery.eq('vendor_id', profile.id);
+        }
+
         const { data, error } = await supabaseWithTimeout(
-            supabase
-                .from('website_products')
-                .select(`*, website_product_images(*)`)
-                .order('created_at', { ascending: false })
+            wpQuery.order('created_at', { ascending: false })
         );
         if (error) {
             showToast(error.message, 'error');
@@ -153,9 +190,15 @@ export default function WebsiteProductsPage() {
         }
 
         // Also fetch inventory items for mapping with REAL-TIME stock
-        const { data: inv, error: invErr } = await supabaseWithTimeout(
-            supabase.from('inventory_stock_view').select('id, name, sku, available_stock')
-        );
+        // Vendors only see their own products; the main app only sees its own
+        // (vendor_id IS NULL) so the two SKU links stay fully separate.
+        let invQuery = supabase.from('inventory_stock_view').select('id, name, sku, available_stock');
+        if (profile?.role === 'vendor' && profile?.id) {
+            invQuery = invQuery.eq('vendor_id', profile.id);
+        } else {
+            invQuery = invQuery.is('vendor_id', null);
+        }
+        const { data: inv, error: invErr } = await supabaseWithTimeout(invQuery);
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
 
@@ -268,7 +311,17 @@ export default function WebsiteProductsPage() {
         if (!form.allow_cod && !form.allow_esewa && !form.allow_fonepay) {
             return showToast('Choose at least one payment method for this product', 'error');
         }
+        if (saving) return;
         setSaving(true);
+        let createdProductId: number | null = null;
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
             const computedBasePrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -293,6 +346,7 @@ export default function WebsiteProductsPage() {
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
                 ad_id: form.ad_id || null,
+                vendor_id: profile?.role === 'vendor' ? profile.id : null,
                 updated_at: new Date().toISOString()
             };
 
@@ -320,15 +374,16 @@ export default function WebsiteProductsPage() {
 
             if (editingProduct) {
                 const { error } = await supabaseWithTimeout(
-                    supabase.from('website_products').update(productData).eq('id', editingProduct.id)
+                    supabase.from('website_products').update(productData).eq('id', editingProduct.id).abortSignal(controller.signal)
                 );
                 if (error) throw error;
             } else {
                 const { data, error } = await supabaseWithTimeout(
-                    supabase.from('website_products').insert(productData).select().single()
+                    supabase.from('website_products').insert(productData).select().abortSignal(controller.signal).single()
                 );
                 if (error) throw error;
                 productId = data.id;
+                createdProductId = data.id;
             }
 
             // --- SAVE VARIANTS ---
@@ -342,6 +397,7 @@ export default function WebsiteProductsPage() {
                                     .delete()
                                     .eq('product_id', productId)
                                     .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '0'})`)
+                                    .abortSignal(controller.signal)
                             );
                             if (delErr && delErr.code !== '23503') console.error('Delete Variants error:', delErr);
                         } catch (e) { console.warn('Variant cleanup skipped due to dependency'); }
@@ -367,7 +423,7 @@ export default function WebsiteProductsPage() {
 
                     if (toInsert.length > 0) {
                         const { error: insErr } = await supabaseWithTimeout(
-                            supabase.from('website_variants').insert(toInsert)
+                            supabase.from('website_variants').insert(toInsert).abortSignal(controller.signal)
                         );
                         if (insErr) throw insErr;
                     }
@@ -381,7 +437,7 @@ export default function WebsiteProductsPage() {
                                 price: v.price ? parseFloat(v.price.toString()) : null,
                                 inventory_product_id: v.inventory_product_id || null,
                                 is_bundle: v.color === 'Combo'
-                            }).eq('id', v.id)
+                            }).eq('id', v.id).abortSignal(controller.signal)
                         );
                         if (updErr) throw updErr;
                     }
@@ -391,12 +447,12 @@ export default function WebsiteProductsPage() {
                     if (combos.length > 0) {
                         try {
                             // Find the generated IDs for inserted combos
-                            const { data: currentVariants } = await supabase.from('website_variants').select('id, sku').eq('product_id', productId);
+                            const { data: currentVariants } = await supabaseWithTimeout(supabase.from('website_variants').select('id, sku').eq('product_id', productId).abortSignal(controller.signal));
                             for (const combo of combos) {
-                                const dbVariant = currentVariants?.find(cv => cv.sku === combo.sku);
+                                const dbVariant = currentVariants?.find((cv: any) => cv.sku === combo.sku);
                                 if (dbVariant && combo.combo_items) {
                                     // First delete existing bundles for this variant to prevent duplicates
-                                    await supabase.from('website_variant_bundles').delete().eq('bundle_variant_id', dbVariant.id);
+                                    await supabaseWithTimeout(supabase.from('website_variant_bundles').delete().eq('bundle_variant_id', dbVariant.id).abortSignal(controller.signal));
                                     
                                     const bundleInserts = combo.combo_items.map(invId => ({
                                         bundle_variant_id: dbVariant.id,
@@ -408,7 +464,7 @@ export default function WebsiteProductsPage() {
                                         child_inventory_id: invId,
                                         quantity: 1
                                     }));
-                                    const { error: bundleErr } = await supabase.from('website_variant_bundles').insert(bundleInserts);
+                                    const { error: bundleErr } = await supabaseWithTimeout(supabase.from('website_variant_bundles').insert(bundleInserts).abortSignal(controller.signal));
                                     if (bundleErr) console.warn("Failed to save bundle mappings (Schema might not be updated):", bundleErr);
                                 }
                             }
@@ -423,7 +479,7 @@ export default function WebsiteProductsPage() {
             if (productId) {
                 if (editingProduct) {
                     const { error: imgDelErr } = await supabaseWithTimeout(
-                        supabase.from('website_product_images').delete().eq('product_id', productId)
+                        supabase.from('website_product_images').delete().eq('product_id', productId).abortSignal(controller.signal)
                     );
                     if (imgDelErr) throw imgDelErr;
                 }
@@ -471,7 +527,7 @@ export default function WebsiteProductsPage() {
                     const { error: imgInsErr } = await supabaseWithTimeout(
                         supabase.from('website_product_images').insert(
                             uploadedImages.map(img => ({ ...img, product_id: productId }))
-                        )
+                        ).abortSignal(controller.signal)
                     );
                     if (imgInsErr) throw imgInsErr;
                 }
@@ -483,8 +539,25 @@ export default function WebsiteProductsPage() {
             fetchProducts();
         } catch (err: any) {
             console.error('Save failed:', err);
-            showToast(err.message || 'Save failed', 'error');
+            // Roll back: if the product was just created but a later step
+            // (variants, images, bundles) failed, delete it so retrying the
+            // save does not create duplicate products.
+            if (createdProductId) {
+                try {
+                    await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', createdProductId).abortSignal(controller.signal));
+                } catch (rollbackErr) {
+                    console.warn('Failed to roll back created product:', rollbackErr);
+                }
+            }
+            if (err?.name === 'AbortError') {
+                showToast('Save interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Save failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
             setVideoProgress(null);
             setImageProgress(null);
@@ -494,16 +567,29 @@ export default function WebsiteProductsPage() {
     const handleDelete = async () => {
         if (!deleteConfirm.id) return;
         setSaving(true);
+
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
-            await supabase.from('website_product_images').delete().eq('product_id', deleteConfirm.id);
-            const { error } = await supabase.from('website_products').delete().eq('id', deleteConfirm.id);
+            await supabaseWithTimeout(supabase.from('website_product_images').delete().eq('product_id', deleteConfirm.id).abortSignal(controller.signal));
+            const { error } = await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', deleteConfirm.id).abortSignal(controller.signal));
             if (error) throw error;
             showToast('Product deleted successfully');
             setDeleteConfirm({ show: false, id: null });
-            fetchProducts();
+            await supabaseWithTimeout(fetchProducts());
         } catch (err: any) {
-            showToast(err.message || 'Delete failed', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Delete interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Delete failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
         }
     };

@@ -90,11 +90,11 @@ function App() {
         } />
 
         <Route path="/admin/income" element={
-          user && profile?.role === 'admin' ? <IncomePage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <IncomePage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/profit" element={
-          user && profile?.role === 'admin' ? <ProfitPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <ProfitPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/sales" element={
@@ -110,7 +110,7 @@ function App() {
         } />
 
         <Route path="/admin/website/products" element={
-          user && profile?.role === 'admin' ? <WebsiteProductsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteProductsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/website/returns" element={
@@ -122,11 +122,11 @@ function App() {
         } />
 
         <Route path="/admin/website/settings" element={
-          user && profile?.role === 'admin' ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteSettingsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/website/reports" element={
-          user && profile?.role === 'admin' ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/chatbot" element={
@@ -139,7 +139,7 @@ function App() {
 
 
         <Route path="/admin/reports" element={
-          user && profile?.role === 'admin' ? <ReportsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <ReportsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/users" element={

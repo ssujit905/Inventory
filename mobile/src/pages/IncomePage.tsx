@@ -74,9 +74,11 @@ export default function IncomePage() {
     );
 
     const fetchIncomeEntries = async () => {
-        const { data } = await supabase
-            .from('income_entries')
-            .select('*')
+        let query = supabase.from('income_entries').select('*');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('recorded_by', profile.id);
+        }
+        const { data } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 

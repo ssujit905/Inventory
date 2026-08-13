@@ -63,7 +63,7 @@ export default function WebsiteReportsPage() {
             // website_orders.sale_id links to the sales table row
             // that was created when the order was "pushed to sales".
             // ──────────────────────────────────────────────────
-            const { data: webOrders, error: woErr } = await supabase
+            let woQuery = supabase
                 .from('website_orders')
                 .select(`
                     id,
@@ -71,6 +71,7 @@ export default function WebsiteReportsPage() {
                     total_amount,
                     created_at,
                     sale_id,
+                    website_order_items!inner(vendor_id),
                     sales:sales!sale_id(
                         id,
                         parcel_status,
@@ -80,8 +81,13 @@ export default function WebsiteReportsPage() {
                         order_date,
                         created_at
                     )
-                `)
-                .order('created_at', { ascending: false });
+                `);
+
+            if (profile?.role === 'vendor' && profile?.id) {
+                woQuery = woQuery.eq('website_order_items.vendor_id', profile.id);
+            }
+
+            const { data: webOrders, error: woErr } = await woQuery.order('created_at', { ascending: false });
 
             if (woErr) throw woErr;
 

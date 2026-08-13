@@ -9,6 +9,7 @@ import {
     RotateCcw,
     ShieldCheck,
     MessageCircle,
+    Package,
     Heart,
     MapPin,
     Share2,
@@ -19,7 +20,8 @@ import {
     X,
     Star,
     User,
-    Loader2
+    Loader2,
+    Store
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
@@ -42,6 +44,9 @@ const ProductDetail = () => {
     const [isFavorite, setIsFavorite] = useState(false);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+    const [vendorProfile, setVendorProfile] = useState(null);
+    const [vendorProductCount, setVendorProductCount] = useState(0);
+    const [vendorRating, setVendorRating] = useState(null);
 
     // ── VARIANT LOGIC ──
     const uniqueColors = useMemo(() => 
@@ -89,6 +94,36 @@ const ProductDetail = () => {
                 
                 if (!p) return;
                 setProduct(p);
+
+                // Fetch vendor store info if product belongs to a vendor
+                if (p.vendor_id) {
+                    const { data: vProfile } = await supabase
+                        .from('vendor_store_profiles')
+                        .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
+                        .eq('id', p.vendor_id)
+                        .maybeSingle();
+                    if (vProfile) setVendorProfile(vProfile);
+
+                    // Store stats: product count + average rating across the store
+                    const { data: storeProducts } = await supabase
+                        .from('website_products')
+                        .select('id')
+                        .eq('vendor_id', p.vendor_id)
+                        .eq('is_active', true);
+                    const productIds = (storeProducts || []).map(sp => sp.id);
+                    setVendorProductCount(productIds.length);
+                    if (productIds.length > 0) {
+                        const { data: storeRatings } = await supabase
+                            .from('website_product_ratings')
+                            .select('rating')
+                            .in('product_id', productIds);
+                        const all = storeRatings || [];
+                        if (all.length > 0) {
+                            const avg = all.reduce((s, r) => s + Number(r.rating), 0) / all.length;
+                            setVendorRating({ avg, count: all.length });
+                        }
+                    }
+                }
 
                 // 2. Fetch Variants with real-time stock
                 const { data: v } = await supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id);
@@ -820,6 +855,108 @@ const ProductDetail = () => {
                     </div>
                 )}
             </div>
+
+            {/* Vendor Store Info Card (Only if product is of vendor) */}
+            {product?.vendor_id && vendorProfile && (
+                <div style={{
+                    backgroundColor: 'white',
+                    padding: '20px',
+                    maxWidth: '1100px',
+                    margin: '15px auto',
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
+                }}>
+                    <Link
+                        to={`/store/${product.vendor_id}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', textDecoration: 'none', cursor: 'pointer' }}
+                    >
+                        {vendorProfile.avatar_url ? (
+                            <img
+                                src={vendorProfile.avatar_url}
+                                alt={vendorProfile.store_name || 'Store logo'}
+                                style={{
+                                    width: '52px', height: '52px', borderRadius: '16px',
+                                    objectFit: 'cover', border: '2px solid #f1f5f9',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                                }}
+                            />
+                        ) : (
+                            <div style={{
+                                width: '52px', height: '52px', borderRadius: '16px',
+                                background: 'linear-gradient(135deg, var(--primary-red, #f43f5e), #e11d48)',
+                                color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: '900', fontSize: '1.4rem', boxShadow: '0 4px 12px rgba(225,29,72,0.25)'
+                            }}>
+                                <Store size={26} />
+                            </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {vendorProfile.store_name || vendorProfile.full_name || 'Vendor Partner Store'}
+                                {vendorProfile.is_verified && (
+                                    <span
+                                        title="Verified Store"
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                            background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0',
+                                            borderRadius: '999px', padding: '2px 8px', fontSize: '0.62rem',
+                                            fontWeight: '800', letterSpacing: '0.04em'
+                                        }}
+                                    >
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                                            <path d="m9 12 2 2 4-4" />
+                                        </svg>
+                                        Verified
+                                    </span>
+                                )}
+                            </h4>
+                            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '3px 0 0 0' }}>
+                                {vendorProfile.city || vendorProfile.address ? `${vendorProfile.city || ''} ${vendorProfile.address || ''}` : 'Official Shopy Nepal Partner Store'}
+                            </p>
+                        </div>
+                    </Link>
+
+                    <div style={{
+                        display: 'flex', alignItems: 'stretch', marginBottom: '14px',
+                        padding: '10px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9'
+                    }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <Star size={12} fill="#f59e0b" color="#f59e0b" /> Rating
+                            </div>
+                            <span style={{ fontSize: '1.05rem', fontWeight: '900', color: '#0f172a' }}>
+                                {vendorRating ? vendorRating.avg.toFixed(1) : '0.0'}
+                            </span>
+                        </div>
+                        <div style={{ width: '1px', background: '#e2e8f0' }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <Package size={12} color="var(--primary-red, #f43f5e)" /> Products
+                            </div>
+                            <span style={{ fontSize: '1.05rem', fontWeight: '900', color: '#0f172a' }}>{vendorProductCount}</span>
+                        </div>
+                        <div style={{ width: '1px', background: '#e2e8f0' }} />
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <MessageCircle size={12} color="#16a34a" /> Response
+                            </div>
+                            <span style={{ fontSize: '1.05rem', fontWeight: '900', color: '#0f172a' }}>100%</span>
+                        </div>
+                    </div>
+
+                    {vendorProfile.description && (
+                        <p style={{
+                            fontSize: '0.85rem', color: '#475569', lineHeight: '1.6',
+                            background: '#f8fafc', padding: '12px 16px', borderRadius: '12px',
+                            margin: '0 0 14px 0', borderLeft: '3px solid var(--primary-red, #f43f5e)'
+                        }}>
+                            {vendorProfile.description}
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Sticky Bottom Bar */}
             <div style={{

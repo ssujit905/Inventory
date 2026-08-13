@@ -418,18 +418,18 @@ const Home = () => {
                         <div className="discovery-masonry" style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(2, 1fr)',
-                            gap: '12px',
+                            gap: '8px',
                             alignItems: 'start'
                         }}>
                             {/* Column 1 - Slightly Offset */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '1.5rem' }}>
                                 {leftColumn.map(product => (
                                     <ProductCard key={product.id} product={product} />
                                 ))}
                             </div>
 
                             {/* Column 2 */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {rightColumn.map(product => (
                                     <ProductCard key={product.id} product={product} />
                                 ))}
@@ -459,7 +459,7 @@ const Home = () => {
                     .hero-visual { display: flex !important; }
                     .discovery-masonry {
                         grid-template-columns: repeat(4, 1fr) !important;
-                        gap: 2rem !important;
+                        gap: 0.75rem !important;
                     }
                     .discovery-masonry > div {
                         display: contents !important;

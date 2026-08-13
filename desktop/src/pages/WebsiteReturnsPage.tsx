@@ -63,10 +63,16 @@ export default function WebsiteReturnsPage() {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('website_order_returns')
-                .select('*')
-                .order('created_at', { ascending: false });
+let query = supabase
+            .from('website_order_returns')
+            .select('*');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else {
+            query = query.is('vendor_id', null);
+        }
+        const { data, error } = await query
+            .order('created_at', { ascending: false });
             
             if (error) throw error;
             setRequests(data || []);
