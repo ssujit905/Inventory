@@ -178,6 +178,9 @@ export default function WebsiteProductsPage() {
 
         if (profile?.role === 'vendor' && profile?.id) {
             wpQuery = wpQuery.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff): only main-store products; hide vendor products.
+            wpQuery = wpQuery.is('vendor_id', null);
         }
 
         const { data, error } = await supabaseWithTimeout(
@@ -202,12 +205,20 @@ export default function WebsiteProductsPage() {
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
 
-        // Fetch Ads Options
-        const { data: adsData } = await supabase
+        // Fetch Ads Options (main app only sees its own ads; vendors see their own)
+        let adsQuery = supabase
             .from('expenses')
-            .select('id, description')
+            .select('id, description, profile:profiles(role)')
             .eq('category', 'ads');
-        setAdsOptions(adsData || []);
+        if (profile?.role === 'vendor' && profile?.id) {
+            adsQuery = adsQuery.eq('recorded_by', profile.id);
+        }
+        const { data: adsData } = await adsQuery;
+        if (profile?.role !== 'vendor') {
+            setAdsOptions((adsData || []).filter((e: any) => (e.profile?.role ?? null) !== 'vendor'));
+        } else {
+            setAdsOptions(adsData || []);
+        }
 
         setLoading(false);
     };

@@ -311,6 +311,9 @@ export default function SalesPage() {
 
         if (profile?.role === 'vendor' && profile?.id) {
             prodQuery = prodQuery.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff) sells only main-store products; hide vendor products.
+            prodQuery = prodQuery.is('vendor_id', null);
         }
 
         const { data } = await prodQuery;
@@ -348,10 +351,16 @@ export default function SalesPage() {
     };
 
     const fetchDeliveryBranches = async () => {
-        const { data } = await supabase
+        let query = supabase
             .from('website_delivery_branches')
-            .select('id, city')
-            .order('city', { ascending: true });
+            .select('id, city');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff): only main-store branches; hide vendor branches.
+            query = query.is('vendor_id', null);
+        }
+        const { data } = await query.order('city', { ascending: true });
         if (data) setDeliveryBranches(data);
     };
 
@@ -380,13 +389,27 @@ export default function SalesPage() {
     };
 
     const fetchAds = async () => {
-        const { data } = await supabase
+        let adsQuery = supabase
             .from('expenses')
-            .select('id, description, amount')
+            .select('id, description, amount, profile:profiles(role)')
             .eq('category', 'ads')
             .order('created_at', { ascending: false });
 
-        if (data) setAdsOptions(data as AdOption[]);
+        if (profile?.role === 'vendor' && profile?.id) {
+            adsQuery = adsQuery.eq('recorded_by', profile.id);
+        }
+
+        const { data } = await adsQuery;
+
+        if (data) {
+            // Main app (admin/staff): never show vendor-created ads.
+            // Vendors keep seeing only their own (filtered via recorded_by above).
+            let filtered = data;
+            if (profile?.role !== 'vendor') {
+                filtered = data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
+            }
+            setAdsOptions(filtered as AdOption[]);
+        }
     };
 
     const handleStatusUpdate = async (newStatus: Sale['parcel_status']) => {

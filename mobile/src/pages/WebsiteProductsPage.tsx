@@ -144,6 +144,9 @@ export default function WebsiteProductsPage() {
 
         if (profile?.role === 'vendor' && profile?.id) {
             wpQuery = wpQuery.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff): only main-store products; hide vendor products.
+            wpQuery = wpQuery.is('vendor_id', null);
         }
 
         const { data, error } = await supabaseWithTimeout(

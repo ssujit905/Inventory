@@ -207,7 +207,7 @@ export default function SalesPage() {
                     id,
                     quantity,
                     sold_amount,
-                    product:products(sku)
+                    product:products(sku, vendor_id)
                 ),
                 website_orders!sale_id(
                     id,
@@ -249,6 +249,11 @@ export default function SalesPage() {
                     ...sale,
                     items: processedItems
                 };
+            }).filter((sale: any) => {
+                // Main app shows only main-store sales; any sale containing a
+                // vendor's product belongs to that vendor's portal.
+                if (isVendor) return true;
+                return !(sale.sale_items || []).some((i: any) => i.product?.vendor_id);
             });
             setSales(processedSales as any);
         }
@@ -273,6 +278,9 @@ export default function SalesPage() {
 
         if (profile?.role === 'vendor' && profile?.id) {
             prodQuery = prodQuery.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff) sells only main-store products; hide vendor products.
+            prodQuery = prodQuery.is('vendor_id', null);
         }
 
         const { data } = await prodQuery;
@@ -334,20 +342,40 @@ export default function SalesPage() {
     };
 
     const fetchAds = async () => {
-        const { data } = await supabase
+        let adsQuery = supabase
             .from('expenses')
-            .select('id, description, amount')
+            .select('id, description, amount, profile:profiles(role)')
             .eq('category', 'ads')
             .order('created_at', { ascending: false });
 
-        if (data) setAdsOptions(data as AdOption[]);
+        if (profile?.role === 'vendor' && profile?.id) {
+            adsQuery = adsQuery.eq('recorded_by', profile.id);
+        }
+
+        const { data } = await adsQuery;
+
+        if (data) {
+            // Main app (admin/staff): never show vendor-created ads.
+            // Vendors keep seeing only their own (filtered via recorded_by above).
+            let filtered = data;
+            if (profile?.role !== 'vendor') {
+                filtered = data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
+            }
+            setAdsOptions(filtered as AdOption[]);
+        }
     };
 
     const fetchDeliveryBranches = async () => {
-        const { data } = await supabase
+        let query = supabase
             .from('website_delivery_branches')
-            .select('id, city')
-            .order('city', { ascending: true });
+            .select('id, city');
+        if (profile?.role === 'vendor' && profile?.id) {
+            query = query.eq('vendor_id', profile.id);
+        } else {
+            // Main app (admin/staff): only main-store branches; hide vendor branches.
+            query = query.is('vendor_id', null);
+        }
+        const { data } = await query.order('city', { ascending: true });
         if (data) setDeliveryBranches(data);
     };
 
@@ -1086,23 +1114,6 @@ export default function SalesPage() {
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                             placeholder="Package details or internal notes"
                                         />
-                                    </div>
-
-                                    <div className="sm:col-span-2 space-y-1.5 pt-1">
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-                                            <Zap size={10} className="text-amber-500 fill-amber-500" />
-                                            Ads Attribution <span className="text-[9px] font-normal lowercase">(Optional)</span>
-                                        </label>
-                                        <select
-                                            value={adId}
-                                            onChange={e => setAdId(e.target.value)}
-                                            className="w-full px-4 py-3 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100/50 dark:border-amber-900/20 focus:border-amber-500/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all"
-                                        >
-                                            <option value="">-- No Ad Assigned --</option>
-                                            {adsOptions.map(ad => (
-                                                <option key={ad.id} value={ad.id}>{ad.description}</option>
-                                            ))}
-                                        </select>
                                     </div>
 
                                     {/* Products Selection Section - Multi Product */}
