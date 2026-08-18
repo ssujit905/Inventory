@@ -610,8 +610,8 @@ const ProductDetail = () => {
                 {/* Right Side: Product Details */}
                 <div className="details-column">
                     {/* Product Variation Thumbnails - Clickable */}
-                    <div style={{ backgroundColor: 'white', padding: '15px 15px 10px', marginTop: '1px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '12px 12px 6px', marginTop: '1px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                             <p style={{ fontSize: '0.8rem', color: '#666' }}>{combinedMedia.length} Media Avail.</p>
                             {combinedMedia[activeImageIndex]?.label && (
                                 <span style={{ fontSize: '0.8rem', color: 'var(--primary-red)', fontWeight: '800', textTransform: 'uppercase' }}>
@@ -649,7 +649,7 @@ const ProductDetail = () => {
                     </div>
 
                     {/* Pricing Section */}
-                    <div style={{ backgroundColor: 'white', padding: '1rem', marginTop: '1px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '0.75rem 1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
@@ -691,15 +691,15 @@ const ProductDetail = () => {
                     </div>
 
                     {/* Title - Full Title Shown */}
-                    <div style={{ backgroundColor: 'white', padding: '1rem 1.25rem', marginTop: '1px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '0.75rem 1.25rem', marginTop: '1px' }}>
                         <h1 style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: '800', lineHeight: '1.3', color: 'var(--text-dark)', margin: 0 }}>
                             {product.title}
                         </h1>
                     </div>
 
                     {/* Delivery Section */}
-                    <div style={{ backgroundColor: 'white', padding: '15px', marginTop: '1px' }}>
-                        <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '12px', marginTop: '1px' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '10px' }}>
                             <Truck size={18} color="#2dd4bf" />
                             <div style={{ flex: 1 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -730,7 +730,7 @@ const ProductDetail = () => {
                                 </div>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '12px', borderTop: '0.5px solid #eee', paddingTop: '15px' }}>
+                        <div style={{ display: 'flex', gap: '12px', borderTop: '0.5px solid #eee', paddingTop: '10px' }}>
                             <ShieldCheck size={18} color="var(--primary-red)" />
                             <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
