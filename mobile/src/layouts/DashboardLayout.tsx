@@ -12,6 +12,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
     const { profile, signOut } = useAuthStore();
+    const isBasicPlan = profile?.role === 'vendor' && profile?.plan === 'basic';
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -346,7 +347,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 <MenuLink icon={<LayoutDashboard className="text-cyan-500" />} label="Dashboard" path="/admin/dashboard" onSelect={() => setIsMenuOpen(false)} />
                                 <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" onSelect={() => setIsMenuOpen(false)} />
                                 <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} badge={role === 'admin' || getVendorId(profile) ? pendingCostCount : undefined} />
-                                <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" onSelect={() => setIsMenuOpen(false)} />
+                                {!isBasicPlan && (
+                                    <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" onSelect={() => setIsMenuOpen(false)} />
+                                )}
                                 <MenuLink icon={<ShoppingCart className="text-emerald-500" />} label="Sales" path="/admin/sales" onSelect={() => setIsMenuOpen(false)} />
                             </div>
                         </section>
@@ -364,7 +367,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Customers" path="/admin/website/customers" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
-                                {(role === 'admin' || profile?.role === 'vendor') && (
+                                {!isBasicPlan && (role === 'admin' || profile?.role === 'vendor') && (
                                     <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 {(role === 'admin' || profile?.role === 'vendor') && (
@@ -374,24 +377,28 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         </section>
 
                         {/* ANALYTICS CATEGORY */}
+                        {!isBasicPlan && (
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Analytics & Logic</label>
                             <div className="space-y-1">
+                                {!isBasicPlan && (
                                 <MenuLink icon={<TrendingUp className="text-emerald-500" />} label="Income" path="/admin/income" onSelect={() => setIsMenuOpen(false)} />
-                                {(role === 'admin' || profile?.role === 'vendor') && (
+                            )}
+                                {!isBasicPlan && (role === 'admin' || profile?.role === 'vendor') && (
                                     <MenuLink icon={<FileText className="text-orange-500" />} label="Profit" path="/admin/profit" onSelect={() => setIsMenuOpen(false)} />
                                 )}
-                                {(role === 'admin' || profile?.role === 'vendor') && (
+                                {!isBasicPlan && (role === 'admin' || profile?.role === 'vendor') && (
                                     <MenuLink icon={<Activity className="text-rose-500" />} label="Finance" path="/admin/reports" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 {role === 'admin' && (
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/users" onSelect={() => setIsMenuOpen(false)} />
                                 )}
-                                {profile?.role === 'vendor' && (
+                                {profile?.role === 'vendor' && !isBasicPlan && (
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Staff Management" path="/admin/vendor-staff" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                             </div>
                         </section>
+                        )}
 
                         {/* TOOLS CATEGORY */}
                         <section>

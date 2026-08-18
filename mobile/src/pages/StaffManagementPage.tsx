@@ -85,6 +85,7 @@ export default function StaffManagementPage() {
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState<'admin' | 'staff' | 'vendor'>('staff');
     const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
+    const [newPlan, setNewPlan] = useState<'basic' | 'full'>('full');
     const [showPassword, setShowPassword] = useState(false);
 
     // Edit Modal State
@@ -93,6 +94,7 @@ export default function StaffManagementPage() {
     const [editEmail, setEditEmail] = useState('');
     const [editStoreName, setEditStoreName] = useState('');
     const [editPermissions, setEditPermissions] = useState<'read_only' | 'read_write'>('read_write');
+    const [editPlan, setEditPlan] = useState<'basic' | 'full'>('full');
     const [editNewPassword, setEditNewPassword] = useState('');
     const [showEditPassword, setShowEditPassword] = useState(false);
 
@@ -112,6 +114,7 @@ export default function StaffManagementPage() {
                 setNewEmail(d.newEmail || '');
                 setNewRole(d.newRole || 'staff');
                 setNewPermissions(d.newPermissions || 'read_only');
+                setNewPlan(d.newPlan || 'full');
             } catch (e) { console.error('Mobile Staff draft restore failed'); }
         }
     }, []);
@@ -119,13 +122,13 @@ export default function StaffManagementPage() {
     useEffect(() => {
         if (isAddModalOpen) {
             // Never persist a staff password in browser storage.
-            const draft = { newName, newEmail, newRole, newPermissions };
+            const draft = { newName, newEmail, newRole, newPermissions, newPlan };
             localStorage.setItem('mobile_staff_draft', JSON.stringify(draft));
             localStorage.setItem('mobile_staff_form_open', 'true');
         } else {
             localStorage.removeItem('mobile_staff_form_open');
         }
-    }, [newName, newEmail, newPassword, newRole, newPermissions, isAddModalOpen]);
+    }, [newName, newEmail, newPassword, newRole, newPermissions, newPlan, isAddModalOpen]);
 
     const clearDraft = () => {
         localStorage.removeItem('mobile_staff_draft');
@@ -212,12 +215,13 @@ export default function StaffManagementPage() {
                 email: newEmail,
                 password: newPassword,
                 options: {
-                    data: {
-                        full_name: newName,
-                        store_name: newRole === 'vendor' ? newStoreName : null,
-                        role: newRole,
-                        permissions: newPermissions
-                    }
+data: {
+                            full_name: newName,
+                            store_name: newRole === 'vendor' ? newStoreName : null,
+                            role: newRole,
+                            permissions: newPermissions,
+                            plan: newRole === 'vendor' ? newPlan : null
+                        }
                 }
             });
 
@@ -233,7 +237,8 @@ export default function StaffManagementPage() {
                     email: newEmail,
                     store_name: newRole === 'vendor' ? newStoreName : null,
                     role: newRole,
-                    permissions: newPermissions
+                    permissions: newPermissions,
+                    plan: newRole === 'vendor' ? newPlan : null
                 });
 
             if (profileError) {
@@ -277,6 +282,7 @@ export default function StaffManagementPage() {
         setEditEmail(p.email || '');
         setEditStoreName(p.store_name || '');
         setEditPermissions(p.permissions);
+        setEditPlan(p.plan === 'basic' ? 'basic' : 'full');
         setEditNewPassword('');
         setShowEditPassword(false);
     };
@@ -295,6 +301,7 @@ export default function StaffManagementPage() {
                     email: editEmail,
                     store_name: editingProfile.role === 'vendor' ? editStoreName : editingProfile.store_name,
                     permissions: editPermissions,
+                    plan: editingProfile.role === 'vendor' ? editPlan : editingProfile.plan,
                 })
                 .eq('id', editingProfile.id);
 
@@ -390,14 +397,14 @@ export default function StaffManagementPage() {
                                             Member since {format(new Date(p.created_at), 'MMM dd, yyyy')}
                                         </span>
                                     </div>
-                                    <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.role === 'admin'
-                                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800'
-                                        : p.role === 'vendor'
-                                        ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400 border border-purple-100 dark:border-purple-800'
-                                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800'
-                                    }`}>
-                                        {p.role === 'vendor' ? 'Vendor Partner' : p.role}
-                                    </div>
+                                    <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${roleBadgeClass(p)}`}>
+                                            {roleBadgeIcon(p)} {roleLabel(p)}
+                                        </div>
+                                    {p.role === 'vendor' && (
+                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'}`}>
+                                            {p.plan === 'basic' ? 'Basic' : 'Full'} Plan
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* Main Info Section */}
@@ -571,6 +578,30 @@ export default function StaffManagementPage() {
                                         </div>
                                     )}
 
+                                    {newRole === 'vendor' && (
+                                        <div className="space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-black text-purple-600 uppercase tracking-[0.1em] ml-1">Vendor Plan</label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewPlan('basic')}
+                                                    className={`text-left p-4 rounded-2xl border-2 transition-all ${newPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'}`}
+                                                >
+                                                    <p className={`font-black text-sm ${newPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                    <p className="text-[9px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus only.</p>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewPlan('full')}
+                                                    className={`text-left p-4 rounded-2xl border-2 transition-all ${newPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'}`}
+                                                >
+                                                    <p className={`font-black text-sm ${newPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                    <p className="text-[9px] font-bold text-gray-400 mt-1 leading-relaxed">All menus including finance.</p>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.1em] ml-1">Email Address</label>
                                         <div className="relative group">
@@ -684,6 +715,24 @@ export default function StaffManagementPage() {
                                         </select>
                                     </div>
                                 </div>
+
+                                {editingProfile.role === 'vendor' && (
+                                    <div className="space-y-1.5 animate-in fade-in">
+                                        <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button type="button" onClick={() => setEditPlan('basic')}
+                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
+                                                <p className={`font-black text-sm ${editPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                <p className="text-[9px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus only.</p>
+                                            </button>
+                                            <button type="button" onClick={() => setEditPlan('full')}
+                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800'}`}>
+                                                <p className={`font-black text-sm ${editPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                <p className="text-[9px] font-bold text-gray-400 mt-1 leading-relaxed">All menus including finance.</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">New Password <span className="text-gray-300 normal-case font-medium">(leave blank to keep)</span></label>

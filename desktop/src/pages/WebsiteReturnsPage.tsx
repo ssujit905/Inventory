@@ -6,8 +6,28 @@ import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     RotateCcw, Loader2, ChevronDown, ChevronUp,
-    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare
+    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare, ShoppingBag, Package
 } from 'lucide-react';
+
+interface OrderItem {
+    id: number;
+    product_title: string;
+    product_image: string | null;
+    quantity: number;
+    unit_price: number;
+}
+
+interface OrderInfo {
+    id: number;
+    order_number: string;
+    customer_name: string | null;
+    phone: string;
+    city: string | null;
+    status: string;
+    total_amount: number;
+    created_at: string;
+    website_order_items: OrderItem[];
+}
 
 interface ReturnRequest {
     id: number;
@@ -31,6 +51,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 export default function WebsiteReturnsPage() {
     const { profile } = useAuthStore();
     const [requests, setRequests] = useState<ReturnRequest[]>([]);
+    const [ordersMap, setOrdersMap] = useState<Map<number, OrderInfo>>(new Map());
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -82,6 +103,22 @@ let query = supabase
             
             if (error) throw error;
             setRequests(data || []);
+
+            // Fetch the linked orders so returns/exchanges show full order context
+            const orderIds = [...new Set((data || []).map(r => r.order_id).filter((id): id is number => !!id))];
+            if (orderIds.length > 0) {
+                const { data: orders, error: ordersError } = await supabaseWithTimeout(
+                    supabase
+                        .from('website_orders')
+                        .select('*, website_order_items!inner(*)')
+                        .in('id', orderIds)
+                );
+                if (!ordersError) {
+                    setOrdersMap(new Map((orders || []).map(o => [o.id, o as OrderInfo])));
+                }
+            } else {
+                setOrdersMap(new Map());
+            }
         } catch (err: any) {
             showToast(err.message, 'error');
         } finally {
@@ -134,7 +171,7 @@ let query = supabase
 
                 {/* Tabs Menu */}
                 <div className="flex items-center gap-2 p-1.5 bg-gray-100 dark:bg-gray-800/50 rounded-2xl w-fit">
-                    {(isVendorUser ? ['all', 'return', 'exchange'] : ['all', 'return', 'exchange', 'message'] as const).map((tab) => (
+                    {(isVendorUser ? (['all', 'return', 'exchange'] as const) : (['all', 'return', 'exchange', 'message'] as const)).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -212,6 +249,50 @@ let query = supabase
 
                                     {isExpanded && (
                                         <div className="border-t border-gray-100 dark:border-gray-800 p-5 space-y-6">
+                                            {request.order_id && ordersMap.get(request.order_id) && (
+                                                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                                    <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-gray-100 dark:border-gray-700">
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                                                <ShoppingBag size={12} /> Order Details
+                                                            </p>
+                                                            <p className="font-black text-gray-900 dark:text-gray-100 font-mono text-sm">#{ordersMap.get(request.order_id)!.order_number}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">
+                                                                {ordersMap.get(request.order_id)!.status}
+                                                            </span>
+                                                            <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-black uppercase tracking-widest">
+                                                                Rs. {ordersMap.get(request.order_id)!.total_amount.toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-5 py-3 flex items-center gap-3 text-xs text-gray-500 font-medium flex-wrap border-b border-gray-100 dark:border-gray-700">
+                                                        <span>👤 {ordersMap.get(request.order_id)!.customer_name || 'Guest'}</span>
+                                                        <span>📞 {ordersMap.get(request.order_id)!.phone}</span>
+                                                        {ordersMap.get(request.order_id)!.city && <span>📍 {ordersMap.get(request.order_id)!.city}</span>}
+                                                        <span>🕐 {format(new Date(ordersMap.get(request.order_id)!.created_at), 'MMM d, yyyy · h:mm a')}</span>
+                                                    </div>
+                                                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                                                        {ordersMap.get(request.order_id)!.website_order_items.map(item => (
+                                                            <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+                                                                {item.product_image ? (
+                                                                    <img src={item.product_image} className="h-10 w-10 rounded-lg object-cover border border-gray-100 dark:border-gray-700" />
+                                                                ) : (
+                                                                    <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
+                                                                        <Package size={16} />
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">{item.product_title}</p>
+                                                                    <p className="text-[10px] text-gray-400 font-medium">Qty: {item.quantity}</p>
+                                                                </div>
+                                                                <span className="text-xs font-black text-gray-700 dark:text-gray-200">Rs. {(item.unit_price * item.quantity).toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                 <div className="space-y-4">
                                                     <div>

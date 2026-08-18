@@ -299,7 +299,7 @@ export default function WebsiteDeliveryPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-gray-900 dark:text-gray-100">{branch.city}</p>
-                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{branch.coverage_area || 'Standard Coverage'}</p>
+                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight break-all max-w-[260px]">{branch.coverage_area || 'Standard Coverage'}</p>
                                                     </div>
                                                 </div>
                                             </td>

@@ -117,6 +117,7 @@ export default function StaffManagementPage() {
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState<'admin' | 'staff' | 'vendor'>('staff');
     const [newPermissions, setNewPermissions] = useState<'read_only' | 'read_write'>('read_only');
+    const [newPlan, setNewPlan] = useState<'basic' | 'full'>('full');
     const [showPassword, setShowPassword] = useState(false);
 
     // Edit Modal State
@@ -125,6 +126,7 @@ export default function StaffManagementPage() {
     const [editEmail, setEditEmail] = useState('');
     const [editStoreName, setEditStoreName] = useState('');
     const [editPermissions, setEditPermissions] = useState<'read_only' | 'read_write'>('read_write');
+    const [editPlan, setEditPlan] = useState<'basic' | 'full'>('full');
     const [editNewPassword, setEditNewPassword] = useState('');
     const [showEditPassword, setShowEditPassword] = useState(false);
 
@@ -144,19 +146,20 @@ export default function StaffManagementPage() {
                 setNewEmail(d.newEmail || '');
                 setNewRole(d.newRole || 'staff');
                 setNewPermissions(d.newPermissions || 'read_only');
+                setNewPlan(d.newPlan || 'full');
             } catch (e) { console.error('Staff draft restore failed'); }
         }
     }, []);
 
     useEffect(() => {
         if (isAddModalOpen) {
-            const draft = { newName, newEmail, newRole, newPermissions };
+            const draft = { newName, newEmail, newRole, newPermissions, newPlan };
             localStorage.setItem('staff_entry_draft', JSON.stringify(draft));
             localStorage.setItem('staff_entry_form_open', 'true');
         } else {
             localStorage.removeItem('staff_entry_form_open');
         }
-    }, [newName, newEmail, newPassword, newRole, newPermissions, isAddModalOpen]);
+    }, [newName, newEmail, newPassword, newRole, newPermissions, newPlan, isAddModalOpen]);
 
     const clearDraft = () => {
         localStorage.removeItem('staff_entry_draft');
@@ -250,7 +253,8 @@ export default function StaffManagementPage() {
                             full_name: newName,
                             store_name: newRole === 'vendor' ? newStoreName : null,
                             role: newRole,
-                            permissions: newPermissions
+                            permissions: newPermissions,
+                            plan: newRole === 'vendor' ? newPlan : null
                         }
                     }
                 })
@@ -268,7 +272,8 @@ export default function StaffManagementPage() {
                         email: newEmail,
                         store_name: newRole === 'vendor' ? newStoreName : null,
                         role: newRole,
-                        permissions: newPermissions
+                        permissions: newPermissions,
+                        plan: newRole === 'vendor' ? newPlan : null
                     })
                     .abortSignal(controller.signal)
             );
@@ -323,6 +328,7 @@ export default function StaffManagementPage() {
         setEditEmail(p.email || '');
         setEditStoreName(p.store_name || '');
         setEditPermissions(p.permissions);
+        setEditPlan(p.plan === 'basic' ? 'basic' : 'full');
         setEditNewPassword('');
         setShowEditPassword(false);
     };
@@ -350,6 +356,7 @@ export default function StaffManagementPage() {
                         email: editEmail,
                         store_name: editingProfile.role === 'vendor' ? editStoreName : editingProfile.store_name,
                         permissions: editPermissions,
+                        plan: editingProfile.role === 'vendor' ? editPlan : editingProfile.plan,
                     })
                     .eq('id', editingProfile.id)
                     .abortSignal(controller.signal)
@@ -504,6 +511,11 @@ export default function StaffManagementPage() {
                                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${roleBadgeClass(p)}`}>
                                         {roleBadgeIcon(p)} {roleLabel(p)}
                                     </span>
+                                    {p.role === 'vendor' && (
+                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${p.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'}`}>
+                                            {p.plan === 'basic' ? 'Basic' : 'Full'} Plan
+                                        </span>
+                                    )}
                                 </div>
                                 {p.store_name ? (
                                     <span className="flex items-center gap-2 flex-wrap">
@@ -606,6 +618,30 @@ export default function StaffManagementPage() {
                                                         className="w-full h-16 pl-14 pr-6 bg-purple-50/50 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
                                                         placeholder="e.g. Himalayan Fashion Hub"
                                                     />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {newRole === 'vendor' && (
+                                            <div className="space-y-3 md:col-span-2 animate-in fade-in duration-200">
+                                                <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewPlan('basic')}
+                                                        className={`text-left p-5 rounded-2xl border-2 transition-all ${newPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                                    >
+                                                        <p className={`font-black text-sm ${newPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                        <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus: dashboard, inventory, stock in, sales, products, orders, returns, delivery, settings & staff.</p>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewPlan('full')}
+                                                        className={`text-left p-5 rounded-2xl border-2 transition-all ${newPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                                    >
+                                                        <p className={`font-black text-sm ${newPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                        <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Everything — adds expenses, income, profit, finance, website reports & print center.</p>
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}
@@ -886,6 +922,31 @@ export default function StaffManagementPage() {
                                         </select>
                                     </div>
                                 </div>
+
+                                {/* Plan (vendor only) */}
+                                {editingProfile.role === 'vendor' && (
+                                    <div className="space-y-2 animate-in fade-in">
+                                        <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditPlan('basic')}
+                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                            >
+                                                <p className={`font-black text-sm ${editPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus only.</p>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditPlan('full')}
+                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                            >
+                                                <p className={`font-black text-sm ${editPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">All menus including finance.</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* New Password */}
                                 <div className="space-y-2">

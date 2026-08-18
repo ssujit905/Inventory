@@ -208,9 +208,9 @@ export default function WebsiteDeliveryPage() {
                                         <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
                                             <MapPin size={24} />
                                         </div>
-                                        <div>
+                                        <div className="min-w-0">
                                             <p className="font-black text-gray-900 dark:text-gray-100 text-lg">{branch.city}</p>
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{branch.coverage_area || 'Standard coverage'}</p>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight break-all">{branch.coverage_area || 'Standard coverage'}</p>
                                         </div>
                                     </div>
                                     <button

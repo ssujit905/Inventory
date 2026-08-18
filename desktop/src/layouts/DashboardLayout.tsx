@@ -12,6 +12,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
     const { profile, signOut } = useAuthStore();
+    const isBasicPlan = profile?.role === 'vendor' && profile?.plan === 'basic';
     const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' | 'status' | 'sku' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [pendingCostCount, setPendingCostCount] = useState(0);
@@ -299,7 +300,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         active={location.pathname === '/admin/stock-in'}
                         badge={(role === 'admin' || profile?.role === 'vendor') && pendingCostCount > 0 ? pendingCostCount : undefined}
                     />
-                    <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
+                    {!isBasicPlan && (
+                        <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
+                    )}
                     <NavItem icon={<ShoppingCart size={18} strokeWidth={1.5} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
                     <div className="pt-6 pb-2">
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Website</p>
@@ -325,24 +328,32 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     {role === 'admin' && (
                         <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Customers" path="/admin/website/customers" active={location.pathname === '/admin/website/customers'} />
                     )}
-                    {(role === 'admin' || profile?.role === 'vendor') && (
+                    {!isBasicPlan && (
                         <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Website Reports" path="/admin/website/reports" active={location.pathname === '/admin/website/reports'} />
                     )}
                     {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />
                     )}
+                    {!isBasicPlan && (
                     <div className="pt-6 pb-2">
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics</p>
                     </div>
-                    <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
-                    {(role === 'admin' || profile?.role === 'vendor') && (
+                    )}
+                    {!isBasicPlan && (
+                        <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
+                    )}
+                    {!isBasicPlan && (role === 'admin' || profile?.role === 'vendor') && (
                         <>
                             <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
                             <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
+                        </>
+                    )}
+                    {(role === 'admin' || profile?.role === 'vendor') && (
+                        <>
                             {role === 'admin' && (
                                 <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
                             )}
-                            {profile?.role === 'vendor' && (
+                            {profile?.role === 'vendor' && !isBasicPlan && (
                                 <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/vendor-staff" active={location.pathname === '/admin/vendor-staff'} />
                             )}
                         </>

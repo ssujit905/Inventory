@@ -2,11 +2,32 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     RotateCcw, Loader2, ChevronDown, ChevronUp,
-    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare
+    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare, ShoppingBag, Package
 } from 'lucide-react';
+
+interface OrderItem {
+    id: number;
+    product_title: string;
+    product_image: string | null;
+    quantity: number;
+    unit_price: number;
+}
+
+interface OrderInfo {
+    id: number;
+    order_number: string;
+    customer_name: string | null;
+    phone: string;
+    city: string | null;
+    status: string;
+    total_amount: number;
+    created_at: string;
+    website_order_items: OrderItem[];
+}
 
 interface ReturnRequest {
     id: number;
@@ -30,11 +51,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 export default function WebsiteReturnsPage() {
     const { profile } = useAuthStore();
     const [requests, setRequests] = useState<ReturnRequest[]>([]);
+    const [ordersMap, setOrdersMap] = useState<Map<number, OrderInfo>>(new Map());
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
     const isReadOnly = profile?.permissions === 'read_only';
+    const isVendorUser = isVendorMember(profile);
 
     useEffect(() => {
         fetchRequests();
@@ -63,13 +86,37 @@ export default function WebsiteReturnsPage() {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('website_order_returns')
-                .select('*')
+                .select('*');
+            if (isVendorUser) {
+                query = query.neq('type', 'message');
+            }
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                query = query.eq('vendor_id', vendorId);
+            } else {
+                query = query.is('vendor_id', null);
+            }
+            const { data, error } = await query
                 .order('created_at', { ascending: false });
             
             if (error) throw error;
             setRequests(data || []);
+
+            // Fetch the linked orders so returns/exchanges show full order context
+            const orderIds = [...new Set((data || []).map(r => r.order_id).filter((id): id is number => !!id))];
+            if (orderIds.length > 0) {
+                const { data: orders, error: ordersError } = await supabase
+                    .from('website_orders')
+                    .select('*, website_order_items!inner(*)')
+                    .in('id', orderIds);
+                if (!ordersError) {
+                    setOrdersMap(new Map((orders || []).map(o => [o.id, o as OrderInfo])));
+                }
+            } else {
+                setOrdersMap(new Map());
+            }
         } catch (err: any) {
             showToast(err.message, 'error');
         } finally {
@@ -107,7 +154,7 @@ export default function WebsiteReturnsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Customer Requests</h1>
-                        <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Manage return, exchange, and contact messages.</p>
+                        <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Manage return, exchange{!isVendorUser && ', and contact messages'}.</p>
                     </div>
                     <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm w-full md:w-auto">
                         <div className="h-9 w-9 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
@@ -122,7 +169,7 @@ export default function WebsiteReturnsPage() {
 
                 {/* Filter Tabs */}
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-                    {(['all', 'return', 'exchange', 'message'] as const).map((tab) => {
+                    {(isVendorUser ? (['all', 'return', 'exchange'] as const) : (['all', 'return', 'exchange', 'message'] as const)).map((tab) => {
                         const isActive = activeTab === tab;
                         const matchingRequests = tab === 'all' ? requests : requests.filter(r => r.type === tab);
                         const count = matchingRequests.length;
@@ -227,6 +274,47 @@ export default function WebsiteReturnsPage() {
 
                                     {isExpanded && (
                                         <div className="px-4 pb-5 space-y-5 animate-in slide-in-from-top-4 duration-300 border-t border-gray-50 dark:border-gray-800 pt-5">
+                                            {request.order_id && ordersMap.get(request.order_id) && (
+                                                <div className="bg-gray-50/50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                                                    <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800">
+                                                        <div>
+                                                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 flex items-center gap-1.5">
+                                                                <ShoppingBag size={12} className="text-primary" /> Order Details
+                                                            </p>
+                                                            <p className="text-xs font-black text-gray-900 dark:text-gray-100 font-mono">#{ordersMap.get(request.order_id)!.order_number}</p>
+                                                        </div>
+                                                        <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-widest">
+                                                            Rs. {ordersMap.get(request.order_id)!.total_amount.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="px-4 py-2.5 text-[10px] text-gray-500 font-medium flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800">
+                                                        <span>👤 {ordersMap.get(request.order_id)!.customer_name || 'Guest'}</span>
+                                                        <span>📞 {ordersMap.get(request.order_id)!.phone}</span>
+                                                        {ordersMap.get(request.order_id)!.city && <span>📍 {ordersMap.get(request.order_id)!.city}</span>}
+                                                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-[9px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">
+                                                            {ordersMap.get(request.order_id)!.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                                        {ordersMap.get(request.order_id)!.website_order_items.map(item => (
+                                                            <div key={item.id} className="flex items-center gap-2.5 px-4 py-2.5">
+                                                                {item.product_image ? (
+                                                                    <img src={item.product_image} className="h-8 w-8 rounded-lg object-cover border border-gray-100 dark:border-gray-800" />
+                                                                ) : (
+                                                                    <div className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
+                                                                        <Package size={14} />
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-[11px] font-bold text-gray-800 dark:text-gray-200 truncate">{item.product_title}</p>
+                                                                    <p className="text-[9px] text-gray-400 font-medium">Qty: {item.quantity}</p>
+                                                                </div>
+                                                                <span className="text-[11px] font-black text-gray-700 dark:text-gray-200">Rs. {(item.unit_price * item.quantity).toLocaleString()}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                             {/* Content Layout */}
                                             <div className="space-y-4">
                                                 <div className="p-4 bg-gray-50/50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-800">
