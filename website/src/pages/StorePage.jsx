@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import ProductCard from '../components/ProductCard';
 import { storeSlug, isUuid } from '../lib/storeSlug';
@@ -7,6 +7,8 @@ import { Store, Star, Package, MessageCircle, ArrowLeft, Search, Calendar, Phone
 
 const StorePage = () => {
     const { vendorId: param } = useParams();
+    const location = useLocation();
+    const backTarget = location.state?.from || '/shop';
     const [vendorId, setVendorId] = useState(null);
     const [vendorProfile, setVendorProfile] = useState(null);
     const [products, setProducts] = useState([]);
@@ -160,7 +162,7 @@ const StorePage = () => {
         <div className="shop-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '5rem' }}>
             <div className="container" style={{ paddingTop: '1.5rem', maxWidth: '1100px' }}>
                 <Link
-                    to="/shop"
+                    to={backTarget}
                     style={{
                         display: 'inline-flex', alignItems: 'center', gap: '6px',
                         fontSize: '0.85rem', fontWeight: '700', color: '#64748b',
