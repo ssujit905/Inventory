@@ -65,6 +65,7 @@ type Profile = {
     bank_branch?: string | null;
     esewa_id?: string | null;
     is_verified?: boolean;
+    plan?: string | null;
 };
 
 export default function StaffManagementPage() {

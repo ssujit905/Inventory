@@ -610,7 +610,7 @@ const ProductDetail = () => {
                 {/* Right Side: Product Details */}
                 <div className="details-column">
                     {/* Product Variation Thumbnails - Clickable */}
-                    <div style={{ backgroundColor: 'white', padding: '15px', marginTop: '1px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '15px 15px 10px', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                             <p style={{ fontSize: '0.8rem', color: '#666' }}>{combinedMedia.length} Media Avail.</p>
                             {combinedMedia[activeImageIndex]?.label && (
@@ -698,7 +698,7 @@ const ProductDetail = () => {
                     </div>
 
                     {/* Delivery Section */}
-                    <div style={{ backgroundColor: 'white', padding: '15px', marginTop: '10px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '15px', marginTop: '1px' }}>
                         <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
                             <Truck size={18} color="#2dd4bf" />
                             <div style={{ flex: 1 }}>

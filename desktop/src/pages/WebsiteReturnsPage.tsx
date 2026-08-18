@@ -105,7 +105,7 @@ let query = supabase
             setRequests(data || []);
 
             // Fetch the linked orders so returns/exchanges show full order context
-            const orderIds = [...new Set((data || []).map(r => r.order_id).filter((id): id is number => !!id))];
+            const orderIds = [...new Set((data as ReturnRequest[] | []).map(r => r.order_id).filter((id): id is number => !!id))];
             if (orderIds.length > 0) {
                 const { data: orders, error: ordersError } = await supabaseWithTimeout(
                     supabase
@@ -114,7 +114,7 @@ let query = supabase
                         .in('id', orderIds)
                 );
                 if (!ordersError) {
-                    setOrdersMap(new Map((orders || []).map(o => [o.id, o as OrderInfo])));
+                    setOrdersMap(new Map((orders as OrderInfo[] | []).map(o => [o.id, o])));
                 }
             } else {
                 setOrdersMap(new Map());
