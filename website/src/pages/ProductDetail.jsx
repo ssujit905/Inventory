@@ -42,7 +42,7 @@ const ProductDetail = () => {
     const [pickerAction, setPickerAction] = useState('buy');
     const [quantity, setQuantity] = useState(1);
     const [touchStart, setTouchStart] = useState(0);
-    const [isFavorite, setIsFavorite] = useState(false);    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
     const [vendorProfile, setVendorProfile] = useState(null);
     const [vendorProductCount, setVendorProductCount] = useState(0);
