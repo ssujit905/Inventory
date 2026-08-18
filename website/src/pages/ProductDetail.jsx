@@ -649,7 +649,7 @@ const ProductDetail = () => {
                     </div>
 
                     {/* Pricing Section */}
-                    <div style={{ backgroundColor: 'white', padding: '0.75rem 1rem', marginTop: '1px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '0.35rem 1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
