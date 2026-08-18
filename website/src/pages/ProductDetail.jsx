@@ -10,7 +10,6 @@ import {
     ShieldCheck,
     MessageCircle,
     Package,
-    Heart,
     MapPin,
     Share2,
     MoreVertical,
@@ -43,8 +42,7 @@ const ProductDetail = () => {
     const [pickerAction, setPickerAction] = useState('buy');
     const [quantity, setQuantity] = useState(1);
     const [touchStart, setTouchStart] = useState(0);
-    const [isFavorite, setIsFavorite] = useState(false);
-    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [isFavorite, setIsFavorite] = useState(false);    const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
     const [vendorProfile, setVendorProfile] = useState(null);
     const [vendorProductCount, setVendorProductCount] = useState(0);
@@ -680,13 +678,6 @@ const ProductDetail = () => {
                                 <MapPin size={14} color="#64748b" strokeWidth={2.5} />
                                 <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>{product.city || 'Kathmandu'}</span>
                             </div>
-                            
-                            <button
-                                onClick={() => setIsFavorite(!isFavorite)}
-                                style={{ background: 'none', border: 'none', color: isFavorite ? 'var(--primary-red)' : '#ccc' }}
-                            >
-                                <Heart fill={isFavorite ? 'var(--primary-red)' : 'none'} size={24} />
-                            </button>
                         </div>
                     </div>
 
