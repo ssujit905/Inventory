@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import {
     MapPin, Plus, Trash2, Loader2,
     AlertTriangle, CheckCircle, Truck, Info, Pencil, X, Clock
@@ -100,9 +101,10 @@ export default function WebsiteDeliveryPage() {
 
     const fetchBranches = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let query = supabase.from('website_delivery_branches').select('*');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             query = query.is('vendor_id', null);
         }
@@ -129,7 +131,7 @@ export default function WebsiteDeliveryPage() {
             coverage_area: newBranch.coverage_area.trim(),
             shipping_fee: Number(newBranch.shipping_fee) || 0,
             delivery_time: newBranch.delivery_time.trim(),
-            vendor_id: profile?.role === 'vendor' ? profile.id : null
+            vendor_id: getVendorId(profile)
         };
         const { data, error } = await supabaseWithTimeout(
             supabase

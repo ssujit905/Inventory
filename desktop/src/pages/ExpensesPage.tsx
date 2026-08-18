@@ -3,6 +3,7 @@ import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { Plus, IndianRupee, AlertCircle, X, History, ArrowRight, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -112,9 +113,10 @@ export default function ExpensesPage() {
     );
 
     const fetchExpenses = async () => {
-        let query = supabase.from('expenses').select('*, profile:profiles(role)');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('recorded_by', profile.id);
+        let query = supabase.from('expenses').select('*, profile:profiles!expenses_recorded_by_fkey(role)');
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            query = query.or(`recorded_by.eq.${profile?.id},vendor_id.eq.${vendorId}`);
         }
         const { data, error } = await supabaseWithTimeout(query
             .order('created_at', { ascending: false })
@@ -129,7 +131,7 @@ export default function ExpensesPage() {
             // Main app (admin/staff): never show vendor-recorded expenses.
             // Vendors keep seeing only their own (filtered via recorded_by above).
             let filtered = data;
-            if (profile?.role !== 'vendor') {
+            if (!isVendorMember(profile)) {
                 filtered = data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
             }
             setExpenses(filtered);
@@ -177,7 +179,8 @@ export default function ExpensesPage() {
                     amount,
                     expense_date: expenseDate,
                     category,
-                    recorded_by: user.id
+                    recorded_by: user.id,
+                    vendor_id: getVendorId(profile)
                 }])
                 .abortSignal(controller.signal)
             );

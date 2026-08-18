@@ -5,6 +5,7 @@ export type Profile = {
     store_name?: string | null;
     role: 'admin' | 'staff' | 'vendor';
     permissions: 'read_only' | 'read_write';
+    vendor_id?: string | null;
     phone?: string | null;
     whatsapp?: string | null;
     address?: string | null;

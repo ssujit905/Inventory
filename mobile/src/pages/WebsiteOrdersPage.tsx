@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import {
@@ -90,9 +91,10 @@ export default function WebsiteOrdersPage() {
     }, [isPushModalOpen]);
 
     const fetchPhysicalProducts = async () => {
+        const vendorId = getVendorId(profile);
         let query = supabase.from('products').select('id, sku').order('sku');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             query = query.is('vendor_id', null);
         }
@@ -180,12 +182,13 @@ export default function WebsiteOrdersPage() {
 
     const fetchOrders = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let ordersQuery = supabase
             .from('website_orders')
             .select(`*, website_order_items!inner(*), sales:sales!sale_id(parcel_status)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            ordersQuery = ordersQuery.eq('website_order_items.vendor_id', profile.id);
+        if (vendorId) {
+            ordersQuery = ordersQuery.eq('website_order_items.vendor_id', vendorId);
         }
 
         const { data, error } = await ordersQuery.order('created_at', { ascending: false });

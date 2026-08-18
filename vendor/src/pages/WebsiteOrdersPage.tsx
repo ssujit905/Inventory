@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { getVendorId } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     ShoppingBag, Loader2, ChevronDown, ChevronUp,
@@ -90,9 +91,10 @@ export default function WebsiteOrdersPage() {
     }, [isPushModalOpen]);
 
     const fetchPhysicalProducts = async () => {
+        const vendorId = getVendorId(profile);
         let query = supabase.from('products').select('id, sku').order('sku');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             query = query.is('vendor_id', null);
         }
@@ -175,7 +177,7 @@ export default function WebsiteOrdersPage() {
                     sale_id: newSale.id,
                     product_id: physicalId,
                     quantity: itemQty,
-                    ...(profile?.role === 'vendor' ? { vendor_id: profile.id } : {})
+                    vendor_id: getVendorId(profile)
                 }]);
             }
 
@@ -196,12 +198,13 @@ export default function WebsiteOrdersPage() {
 
     const fetchOrders = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let query = supabase
             .from('website_orders')
             .select(`*, website_order_items!inner(*), sales:sales!sale_id(parcel_status)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('website_order_items.vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('website_order_items.vendor_id', vendorId);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false });

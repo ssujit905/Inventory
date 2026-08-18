@@ -4,6 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId } from '../lib/vendorHelpers';
 import { Package, AlertTriangle, RotateCcw } from 'lucide-react';
 
 type InventoryLot = {
@@ -56,8 +57,9 @@ export default function InventoryPage() {
                     )
                 `);
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                query = query.eq('products.vendor_id', profile.id);
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                query = query.eq('products.vendor_id', vendorId);
             }
 
             const { data: lotsData, error: lotsError } = await query;

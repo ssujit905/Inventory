@@ -2,29 +2,61 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import ProductCard from '../components/ProductCard';
-import { Store, Star, Package, MessageCircle, ArrowLeft, Search } from 'lucide-react';
+import { storeSlug, isUuid } from '../lib/storeSlug';
+import { Store, Star, Package, MessageCircle, ArrowLeft, Search, Calendar, Phone, Share2, Check } from 'lucide-react';
 
 const StorePage = () => {
-    const { vendorId } = useParams();
+    const { vendorId: param } = useParams();
+    const [vendorId, setVendorId] = useState(null);
     const [vendorProfile, setVendorProfile] = useState(null);
     const [products, setProducts] = useState([]);
     const [vendorRating, setVendorRating] = useState(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
-        if (vendorId) fetchStore();
+        if (!param) return;
+        setLoading(true);
+        setNotFound(false);
+        if (isUuid(param)) {
+            setVendorId(param);
+        } else {
+            resolveSlug(param);
+        }
+    }, [param]);
+
+    const resolveSlug = async (slug) => {
+        try {
+            const { data } = await supabase
+                .from('vendor_store_profiles')
+                .select('id, store_name, full_name');
+            const match = (data || []).find(p => storeSlug(p) === slug);
+            if (!match) {
+                setNotFound(true);
+                setLoading(false);
+                return;
+            }
+            setVendorId(match.id);
+        } catch (err) {
+            setNotFound(true);
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (vendorId) fetchStore(vendorId);
     }, [vendorId]);
 
-    const fetchStore = async () => {
+    const fetchStore = async (id) => {
         setLoading(true);
         setNotFound(false);
         try {
             // 1. Vendor store profile
             const { data: vProfile } = await supabase
                 .from('vendor_store_profiles')
-                .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
-                .eq('id', vendorId)
+                .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description, created_at')
+                .eq('id', id)
                 .maybeSingle();
             if (!vProfile) {
                 setNotFound(true);
@@ -36,7 +68,7 @@ const StorePage = () => {
             const { data: wpData } = await supabase
                 .from('website_products')
                 .select('*, website_product_images(*)')
-                .eq('vendor_id', vendorId)
+                .eq('vendor_id', id)
                 .eq('is_active', true)
                 .order('created_at', { ascending: false });
 
@@ -109,6 +141,20 @@ const StorePage = () => {
     };
 
     const storeName = vendorProfile?.store_name || vendorProfile?.full_name || 'Vendor Store';
+    const joinedDate = vendorProfile?.created_at ? new Date(vendorProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+    const phoneNumber = vendorProfile?.phone || '';
+    const whatsappNumber = vendorProfile?.whatsapp || '';
+
+    const copyStoreLink = async () => {
+        const url = `${window.location.origin}/store/${storeSlug(vendorProfile)}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Copy failed:', err);
+        }
+    };
 
     return (
         <div className="shop-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '5rem' }}>
@@ -141,12 +187,14 @@ const StorePage = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Store Header */}
+                        {/* Store Header - Full Screen Width */}
                         <div style={{
-                            backgroundColor: 'white', borderRadius: '16px',
-                            border: '1px solid #e2e8f0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-                            padding: '24px', marginBottom: '1.5rem'
+                            backgroundColor: 'white', borderBottom: '1px solid #e2e8f0',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+                            padding: '24px 16px', marginBottom: '1.5rem',
+                            width: '100vw', marginLeft: 'calc(50% - 50vw)', marginRight: 'calc(50% - 50vw)'
                         }}>
+                            <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px' }}>
                                 {vendorProfile?.avatar_url ? (
                                     <img
@@ -233,6 +281,62 @@ const StorePage = () => {
                                     {vendorProfile.description}
                                 </p>
                             )}
+
+                            {/* Store Contact Details */}
+                            {(joinedDate || phoneNumber || whatsappNumber) && (
+                                <div style={{ margin: '14px 0 0 0' }}>
+                                    {joinedDate && (
+                                        <span style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                            background: '#f1f5f9', color: '#475569', borderRadius: '999px',
+                                            padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
+                                        }}>
+                                            <Calendar size={13} color="#64748b" /> Joined {joinedDate}
+                                        </span>
+                                    )}
+                                    {(phoneNumber || whatsappNumber) && (
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                                            marginTop: '10px'
+                                        }}>
+                                            {phoneNumber && (
+                                                <span style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                    background: '#eff6ff', color: '#2563eb', borderRadius: '999px',
+                                                    padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
+                                                }}>
+                                                    <Phone size={13} /> {phoneNumber}
+                                                </span>
+                                            )}
+                                            {whatsappNumber && (
+                                                <span style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                    background: '#ecfdf5', color: '#059669', borderRadius: '999px',
+                                                    padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
+                                                }}>
+                                                    <MessageCircle size={13} /> {whatsappNumber}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={copyStoreLink}
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                            background: copied ? '#ecfdf5' : '#f8fafc',
+                                            color: copied ? '#059669' : '#334155',
+                                            border: `1px solid ${copied ? '#a7f3d0' : '#e2e8f0'}`,
+                                            borderRadius: '999px', padding: '6px 14px',
+                                            fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer',
+                                            marginTop: '10px', transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        {copied ? <Check size={14} /> : <Share2 size={14} />}
+                                        {copied ? 'Copied!' : 'Copy Store Link'}
+                                    </button>
+                                </div>
+                            )}
+                            </div>
                         </div>
 
                         {/* Store Products */}

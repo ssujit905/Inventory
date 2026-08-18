@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     ShoppingBag, Loader2, ChevronDown, ChevronUp,
@@ -93,9 +94,10 @@ export default function WebsiteOrdersPage() {
     }, [isPushModalOpen]);
 
     const fetchPhysicalProducts = async () => {
+        const vendorId = getVendorId(profile);
         let query = supabase.from('products').select('id, sku').order('sku');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             query = query.is('vendor_id', null);
         }
@@ -248,8 +250,9 @@ export default function WebsiteOrdersPage() {
             .from('website_orders')
             .select(`*, website_order_items!inner(*), sales:sales!sale_id(parcel_status)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            ordersQuery = ordersQuery.eq('website_order_items.vendor_id', profile.id);
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            ordersQuery = ordersQuery.eq('website_order_items.vendor_id', vendorId);
         } else {
             // Main app sees only main-store orders; vendor orders stay in the
             // vendor's own portal (website_order_items.vendor_id IS NULL).

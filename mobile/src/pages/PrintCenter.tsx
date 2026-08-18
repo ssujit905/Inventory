@@ -5,6 +5,7 @@ import { Printer, Calendar, Search, Loader2, CheckCircle2, Package, Eye, X, Sett
 import ReceiptTemplate from '../components/ReceiptTemplate'
 import { useAuthStore } from '../hooks/useAuthStore'
 import DashboardLayout from '../layouts/DashboardLayout'
+import { isVendorMember } from '../lib/vendorHelpers'
 
 type Sale = {
     id: string
@@ -177,7 +178,7 @@ export default function PrintCenter() {
                             {loading ? <Loader2 className="animate-spin" size={14} /> : <Search size={14} />}
                             {loading ? 'Fetching...' : 'Fetch Orders'}
                         </button>
-                        {profile?.role !== 'vendor' && (
+                        {!isVendorMember(profile) && (
                         <button
                             onClick={() => { setTempBusinessName(businessName); setShowSettings(true); }}
                             className="h-10 w-10 flex items-center justify-center text-gray-400 hover:text-gray-900 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl transition-colors shadow-sm"

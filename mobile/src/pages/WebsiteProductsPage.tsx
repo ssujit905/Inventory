@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
@@ -51,6 +52,7 @@ interface WebsiteProduct {
     sold_count: number;
     created_at: string;
     video_url?: string | null;
+    ad_id?: string | null;
     website_product_images: ProductImage[];
 }
 
@@ -71,6 +73,7 @@ export default function WebsiteProductsPage() {
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; id: number | null }>({ show: false, id: null });
     const [videoProgress, setVideoProgress] = useState<number | null>(null);
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
+    const [adsOptions, setAdsOptions] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const emptyForm = {
@@ -82,6 +85,7 @@ export default function WebsiteProductsPage() {
         sizes: '',
         images: [] as ProductImage[],
         video_url: '',
+        ad_id: '' as string | null,
         video_file: undefined as File | undefined,
         video_progress: undefined as number | undefined
     };
@@ -140,10 +144,11 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let wpQuery = supabase.from('website_products').select(`*, website_product_images(*)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            wpQuery = wpQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            wpQuery = wpQuery.eq('vendor_id', vendorId);
         } else {
             // Main app (admin/staff): only main-store products; hide vendor products.
             wpQuery = wpQuery.is('vendor_id', null);
@@ -163,14 +168,29 @@ export default function WebsiteProductsPage() {
         // Vendors only see their own products; the main app only sees its own
         // (no vendor data) so the two SKU links stay fully separate.
         let invQuery = supabase.from('inventory_stock_view').select('id, name, sku, available_stock');
-        if (profile?.role === 'vendor' && profile?.id) {
-            invQuery = invQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            invQuery = invQuery.eq('vendor_id', vendorId);
         } else {
             invQuery = invQuery.is('vendor_id', null);
         }
         const { data: inv, error: invErr } = await supabaseWithTimeout(invQuery);
         if (invErr) console.warn('Inventory fetch failed', invErr);
         setInventoryItems(inv || []);
+
+        // Fetch Ads Options (main app only sees its own ads; vendors see their own)
+        let adsQuery = supabase
+            .from('expenses')
+            .select('id, description, profile:profiles!expenses_recorded_by_fkey(role)')
+            .eq('category', 'ads');
+        if (vendorId) {
+            adsQuery = adsQuery.eq('recorded_by', profile?.id);
+        }
+        const { data: adsData } = await adsQuery;
+        if (!isVendorMember(profile)) {
+            setAdsOptions((adsData || []).filter((e: any) => (e.profile?.role ?? null) !== 'vendor'));
+        } else {
+            setAdsOptions(adsData || []);
+        }
 
         setLoading(false);
     };
@@ -223,6 +243,7 @@ export default function WebsiteProductsPage() {
             sizes: p.sizes || '',
             images: p.website_product_images.map(img => ({ ...img })),
             video_url: p.video_url || '',
+            ad_id: p.ad_id || '',
             video_file: undefined,
             video_progress: undefined
         });
@@ -297,7 +318,8 @@ export default function WebsiteProductsPage() {
                 allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
-                vendor_id: profile?.role === 'vendor' ? profile.id : null,
+                ad_id: form.ad_id || null,
+                vendor_id: getVendorId(profile),
                 updated_at: new Date().toISOString()
             };
 
@@ -790,6 +812,25 @@ export default function WebsiteProductsPage() {
                                         </label>
                                     ))}
                                 </div>
+                            </div>
+
+                            <div className="mt-6 space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                    Ads Attribution <span className="text-[9px] font-medium normal-case text-gray-400">(Optional)</span>
+                                </label>
+                                <select
+                                    value={form.ad_id || ''}
+                                    onChange={e => setForm(f => ({ ...f, ad_id: e.target.value || null }))}
+                                    className="w-full h-12 px-4 rounded-2xl border border-transparent bg-gray-50 dark:bg-gray-800/50 text-sm font-bold focus:bg-white dark:focus:bg-gray-800 focus:border-primary/30 outline-none transition-all"
+                                >
+                                    <option value="">-- No Ad Assigned --</option>
+                                    {adsOptions.map(ad => (
+                                        <option key={ad.id} value={ad.id}>{ad.description}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-gray-400 mt-1 font-medium italic ml-1">
+                                    Assigning an ad here will automatically attribute all website orders for this product to that ad campaign.
+                                </p>
                             </div>
 
                             <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-8">

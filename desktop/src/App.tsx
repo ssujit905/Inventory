@@ -7,6 +7,7 @@ import ExpensesPage from './pages/ExpensesPage';
 import SalesPage from './pages/SalesPage';
 import ReportsPage from './pages/ReportsPage';
 import StaffManagementPage from './pages/StaffManagementPage';
+import VendorStaffManagementPage from './pages/VendorStaffManagementPage';
 import IncomePage from './pages/IncomePage';
 import ProfitPage from './pages/ProfitPage';
 import PrintCenter from './pages/PrintCenter';
@@ -108,7 +109,7 @@ function App() {
         } />
 
         <Route path="/admin/income" element={
-          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <IncomePage /> : <Navigate to="/" replace />
+          user ? <IncomePage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/profit" element={
@@ -156,6 +157,10 @@ function App() {
 
         <Route path="/admin/users" element={
           user && profile?.role === 'admin' ? <StaffManagementPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/vendor-staff" element={
+          user && profile?.role === 'vendor' ? <VendorStaffManagementPage /> : <Navigate to="/" replace />
         } />
 
 

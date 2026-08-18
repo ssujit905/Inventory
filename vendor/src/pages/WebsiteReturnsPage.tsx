@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { getVendorId } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     RotateCcw, Loader2, ChevronDown, ChevronUp,
-    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon, MessageSquare
+    Check, X, Clock, AlertTriangle, Phone, ExternalLink, Image as ImageIcon
 } from 'lucide-react';
 
 interface ReturnRequest {
@@ -13,7 +14,7 @@ interface ReturnRequest {
     order_id?: number | null;
     order_number?: string | null;
     customer_phone: string;
-    type: 'return' | 'exchange' | 'message';
+    type: 'return' | 'exchange';
     message: string;
     media?: { url: string; type: string }[] | null;
     status: 'pending' | 'approved' | 'rejected' | 'completed';
@@ -33,7 +34,7 @@ export default function WebsiteReturnsPage() {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-    const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange'>('all');
     const isReadOnly = profile?.permissions === 'read_only';
 
     useEffect(() => {
@@ -65,13 +66,15 @@ export default function WebsiteReturnsPage() {
         try {
             let query = supabase
                 .from('website_order_returns')
-                .select('*');
+                .select('*')
+                .neq('type', 'message');
 
-            if (profile?.role === 'vendor') {
-                query = query.eq('vendor_id', profile.id);
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                query = query.eq('vendor_id', vendorId);
             }
 
-            const { data, error } = await query.order('created_at', { ascending: false });
+            const { data, error } = await supabaseWithTimeout(query.order('created_at', { ascending: false }));
             
             if (error) throw error;
             setRequests(data || []);
@@ -83,10 +86,12 @@ export default function WebsiteReturnsPage() {
     };
 
     const updateStatus = async (id: number, status: string) => {
-        const { error } = await supabase
-            .from('website_order_returns')
-            .update({ status })
-            .eq('id', id);
+        const { error } = await supabaseWithTimeout(
+            supabase
+                .from('website_order_returns')
+                .update({ status })
+                .eq('id', id)
+        );
         
         if (error) return showToast(error.message, 'error');
         setRequests(rs => rs.map(r => r.id === id ? { ...r, status: status as any } : r));
@@ -112,7 +117,7 @@ export default function WebsiteReturnsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Customer Requests</h1>
-                        <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Manage return, exchange, and contact messages.</p>
+                        <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Manage return and exchange requests.</p>
                     </div>
                     <div className="flex items-center gap-3 bg-white dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm w-full md:w-auto">
                         <div className="h-9 w-9 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
@@ -127,7 +132,7 @@ export default function WebsiteReturnsPage() {
 
                 {/* Filter Tabs */}
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-                    {(['all', 'return', 'exchange', 'message'] as const).map((tab) => {
+                    {(['all', 'return', 'exchange'] as const).map((tab) => {
                         const isActive = activeTab === tab;
                         const matchingRequests = tab === 'all' ? requests : requests.filter(r => r.type === tab);
                         const count = matchingRequests.length;
@@ -178,8 +183,7 @@ export default function WebsiteReturnsPage() {
                             
                             const typeColors = {
                                 return: 'bg-rose-50 text-rose-600 border-rose-100',
-                                exchange: 'bg-blue-50 text-blue-600 border-blue-100',
-                                message: 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                exchange: 'bg-blue-50 text-blue-600 border-blue-100'
                             };
 
                             return (
@@ -280,7 +284,7 @@ export default function WebsiteReturnsPage() {
                                                     disabled={isReadOnly}
                                                     className={`flex-1 py-3 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-blue-600 shadow-blue-600/20'}`}
                                                 >
-                                                    <Check size={14} /> {isReadOnly ? 'Read Only' : (request.type === 'message' ? 'Process' : 'Approve')}
+                                                    <Check size={14} /> {isReadOnly ? 'Read Only' : 'Approve'}
                                                 </button>
                                                 <button 
                                                     onClick={() => !isReadOnly && updateStatus(request.id, 'completed')}

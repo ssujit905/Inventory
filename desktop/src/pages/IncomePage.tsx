@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee, Check } from 'lucide-react';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
+import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee, Check, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 
 type IncomeEntry = {
@@ -13,6 +14,7 @@ type IncomeEntry = {
     income_date: string;
     category: 'income' | 'investment' | 'operation';
     created_at: string;
+    recorded_by?: string;
 };
 
 export default function IncomePage() {
@@ -20,13 +22,20 @@ export default function IncomePage() {
     const [incomeEntries, setIncomeEntries] = useState<IncomeEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const isReadOnly = profile?.permissions === 'read_only';
+    const isStaff = profile?.role === 'staff';
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [incomeDate, setIncomeDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState<number>(0);
     const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
+
+    const isVendorStaff = profile?.role === 'staff' && Boolean(profile?.vendor_id);
+
+    const canEditEntry = (entry: IncomeEntry) =>
+        !isReadOnly && !isVendorStaff && (profile?.role === 'admin' || profile?.role === 'vendor' || entry.recorded_by === user?.id);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -74,23 +83,41 @@ export default function IncomePage() {
     );
 
     const fetchIncomeEntries = async () => {
-        let query = supabase.from('income_entries').select('*, profile:profiles(role)');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('recorded_by', profile.id);
+        let query = supabase.from('income_entries').select('*, profile:profiles(role, vendor_id)');
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            const { data: members } = await supabase
+                .from('profiles')
+                .select('id')
+                .or(`id.eq.${vendorId},vendor_id.eq.${vendorId}`);
+            const memberIds = (members || []).map((m: any) => m.id);
+            if (memberIds.length > 0) {
+                query = query.in('recorded_by', memberIds);
+            } else {
+                query = query.eq('recorded_by', profile?.id);
+            }
+        }
+        if (isStaff) {
+            query = query.eq('category', 'income');
         }
         const { data } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 
         if (data) {
-            const scoped = profile?.role === 'vendor'
+            const scoped = isVendorMember(profile)
                 ? data
-                : data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
+                : data.filter((e: any) => {
+                    const r = e.profile?.role ?? null;
+                    const v = e.profile?.vendor_id ?? null;
+                    return r !== 'vendor' && !(r === 'staff' && v);
+                });
             setIncomeEntries(scoped as IncomeEntry[]);
         }
     };
 
     const openEntryForm = () => {
+        setEditingId(null);
         setDescription('');
         setAmount(0);
         setIncomeDate(format(new Date(), 'yyyy-MM-dd'));
@@ -99,23 +126,41 @@ export default function IncomePage() {
         setMessage(null);
     };
 
-    const handleAddIncome = async (e: React.FormEvent) => {
+    const openEditEntry = (entry: IncomeEntry) => {
+        setEditingId(entry.id);
+        setDescription(entry.description);
+        setAmount(entry.amount);
+        setIncomeDate((entry.income_date || '').slice(0, 10) || format(new Date(), 'yyyy-MM-dd'));
+        setCategory(entry.category);
+        setIsFormOpen(true);
+        setMessage(null);
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
         setLoading(true);
 
         try {
-            const { error } = await supabase.from('income_entries').insert([{
-                description,
-                amount,
-                income_date: incomeDate,
-                category,
-                recorded_by: user.id
-            }]);
+            if (editingId) {
+                const { error } = await supabase
+                    .from('income_entries')
+                    .update({ description, amount, income_date: incomeDate, category })
+                    .eq('id', editingId);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Income entry updated successfully!' });
+            } else {
+                const { error } = await supabase.from('income_entries').insert([{
+                    description,
+                    amount,
+                    income_date: incomeDate,
+                    category,
+                    recorded_by: user.id
+                }]);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Income recorded successfully!' });
+            }
 
-            if (error) throw error;
-
-            setMessage({ type: 'success', text: 'Income recorded successfully!' });
             clearDraft();
             fetchIncomeEntries();
 
@@ -200,7 +245,7 @@ export default function IncomePage() {
                                                 <div className="md:col-span-2 text-right text-sm font-black text-green-600 font-mono tracking-tight">
                                                     Rs. {Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                 </div>
-                                                <div className="md:col-span-2 text-right">
+                                                <div className="md:col-span-2 flex items-center justify-end gap-3">
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${entry.category === 'investment'
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200'
                                                         : entry.category === 'operation'
@@ -209,6 +254,15 @@ export default function IncomePage() {
                                                         }`}>
                                                         {entry.category}
                                                     </span>
+                                                    {canEditEntry(entry) && (
+                                                        <button
+                                                            onClick={() => openEditEntry(entry)}
+                                                            title="Edit entry"
+                                                            className="h-8 w-8 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-green-600 hover:border-green-300 transition-all opacity-0 group-hover:opacity-100"
+                                                        >
+                                                            <Pencil size={13} strokeWidth={1.5} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -225,7 +279,7 @@ export default function IncomePage() {
                         <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800">
                             <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Record Income</h2>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{editingId ? 'Edit Income Entry' : 'Record Income'}</h2>
                                     <p className="text-xs text-gray-400 font-medium">Log inbound cash entry</p>
                                 </div>
                                 <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-green-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800">
@@ -233,7 +287,7 @@ export default function IncomePage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-8 space-y-6">
+                            <form onSubmit={handleSubmit} className="p-8 space-y-6">
                                 {message && (
                                     <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-sm font-black animate-in slide-in-from-right-full duration-500 ${message.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                                         <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
@@ -264,8 +318,8 @@ export default function IncomePage() {
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-green-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         >
                                             <option value="income">Income</option>
-                                            <option value="investment">Investment</option>
-                                            <option value="operation">Operation</option>
+                                            {!isStaff && <option value="investment">Investment</option>}
+                                            {!isStaff && <option value="operation">Operation</option>}
                                         </select>
                                     </div>
 
@@ -314,7 +368,7 @@ export default function IncomePage() {
                                         disabled={loading}
                                         className="flex-[2] py-3 px-6 bg-green-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-green-600/20 hover:bg-green-700 transition-all active:scale-[0.98] disabled:opacity-50"
                                     >
-                                        {loading ? 'Processing...' : 'Confirm Income'}
+                                        {loading ? 'Processing...' : editingId ? 'Save Changes' : 'Confirm Income'}
                                     </button>
                                 </div>
                             </form>

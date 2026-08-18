@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee, Check } from 'lucide-react';
+import { Plus, TrendingUp, AlertCircle, X, ArrowRight, IndianRupee, Check, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 
 type IncomeEntry = {
@@ -13,6 +14,7 @@ type IncomeEntry = {
     income_date: string;
     category: 'income' | 'investment' | 'operation';
     created_at: string;
+    recorded_by?: string;
 };
 
 export default function IncomePage() {
@@ -20,13 +22,20 @@ export default function IncomePage() {
     const [incomeEntries, setIncomeEntries] = useState<IncomeEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const isReadOnly = profile?.permissions === 'read_only';
+    const isStaff = profile?.role === 'staff';
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [incomeDate, setIncomeDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState<number>(0);
     const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
+
+    const isVendorStaff = profile?.role === 'staff' && Boolean(profile?.vendor_id);
+
+    const canEditEntry = (entry: IncomeEntry) =>
+        !isReadOnly && !isVendorStaff && (profile?.role === 'admin' || profile?.role === 'vendor' || entry.recorded_by === user?.id);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -74,18 +83,41 @@ export default function IncomePage() {
     );
 
     const fetchIncomeEntries = async () => {
-        let query = supabase.from('income_entries').select('*');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('recorded_by', profile.id);
+        let query = supabase.from('income_entries').select('*, profile:profiles(role, vendor_id)');
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            const { data: members } = await supabase
+                .from('profiles')
+                .select('id')
+                .or(`id.eq.${vendorId},vendor_id.eq.${vendorId}`);
+            const memberIds = (members || []).map((m: any) => m.id);
+            if (memberIds.length > 0) {
+                query = query.in('recorded_by', memberIds);
+            } else {
+                query = query.eq('recorded_by', profile?.id);
+            }
+        }
+        if (isStaff) {
+            query = query.eq('category', 'income');
         }
         const { data } = await query
             .order('created_at', { ascending: false })
             .limit(20);
 
-        if (data) setIncomeEntries(data as IncomeEntry[]);
+        if (data) {
+            const scoped = isVendorMember(profile)
+                ? data
+                : data.filter((e: any) => {
+                    const r = e.profile?.role ?? null;
+                    const v = e.profile?.vendor_id ?? null;
+                    return r !== 'vendor' && !(r === 'staff' && v);
+                });
+            setIncomeEntries(scoped as IncomeEntry[]);
+        }
     };
 
     const openEntryForm = () => {
+        setEditingId(null);
         setDescription('');
         setAmount(0);
         setIncomeDate(format(new Date(), 'yyyy-MM-dd'));
@@ -94,23 +126,41 @@ export default function IncomePage() {
         setMessage(null);
     };
 
-    const handleAddIncome = async (e: React.FormEvent) => {
+    const openEditEntry = (entry: IncomeEntry) => {
+        setEditingId(entry.id);
+        setDescription(entry.description);
+        setAmount(entry.amount);
+        setIncomeDate((entry.income_date || '').slice(0, 10) || format(new Date(), 'yyyy-MM-dd'));
+        setCategory(entry.category);
+        setIsFormOpen(true);
+        setMessage(null);
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
         setLoading(true);
 
         try {
-            const { error } = await supabase.from('income_entries').insert([{
-                description,
-                amount,
-                income_date: incomeDate,
-                category,
-                recorded_by: user.id
-            }]);
+            if (editingId) {
+                const { error } = await supabase
+                    .from('income_entries')
+                    .update({ description, amount, income_date: incomeDate, category })
+                    .eq('id', editingId);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Income entry updated successfully!' });
+            } else {
+                const { error } = await supabase.from('income_entries').insert([{
+                    description,
+                    amount,
+                    income_date: incomeDate,
+                    category,
+                    recorded_by: user.id
+                }]);
+                if (error) throw error;
+                setMessage({ type: 'success', text: 'Income recorded successfully!' });
+            }
 
-            if (error) throw error;
-
-            setMessage({ type: 'success', text: 'Income recorded successfully!' });
             clearDraft();
             fetchIncomeEntries();
 
@@ -179,14 +229,25 @@ export default function IncomePage() {
                                                         {format(new Date(entry.income_date), 'MMM dd, yyyy')}
                                                     </span>
                                                 </div>
-                                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${entry.category === 'investment'
-                                                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800'
-                                                    : entry.category === 'operation'
-                                                        ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800'
-                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800'
-                                                    }`}>
-                                                    {entry.category}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${entry.category === 'investment'
+                                                        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800'
+                                                        : entry.category === 'operation'
+                                                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800'
+                                                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800'
+                                                        }`}>
+                                                        {entry.category}
+                                                    </span>
+                                                    {canEditEntry(entry) && (
+                                                        <button
+                                                            onClick={() => openEditEntry(entry)}
+                                                            title="Edit entry"
+                                                            className="h-7 w-7 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-emerald-600 hover:border-emerald-300 transition-all"
+                                                        >
+                                                            <Pencil size={12} strokeWidth={1.5} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="px-3.5 pb-3 flex items-center justify-between gap-4">
@@ -216,7 +277,7 @@ export default function IncomePage() {
                         <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[92svh] flex flex-col">
                             <div className="px-5 py-4 sm:px-8 sm:py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50 flex-shrink-0">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Income Entry</h2>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{editingId ? 'Edit Income Entry' : 'Income Entry'}</h2>
                                     <p className="text-xs text-gray-400 font-medium">Record inbound cashflow</p>
                                 </div>
                                 <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800">
@@ -224,7 +285,7 @@ export default function IncomePage() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddIncome} className="p-5 sm:p-8 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                            <form onSubmit={handleSubmit} className="p-5 sm:p-8 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
                                 {message && (
                                     <div className={`p-4 rounded-xl text-xs font-bold flex items-center gap-3 animate-in slide-in-from-top-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                         {message.type === 'success' ? <Check size={16} strokeWidth={3} /> : <AlertCircle size={16} strokeWidth={1.5} />}
@@ -253,8 +314,8 @@ export default function IncomePage() {
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-emerald-600/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-bold text-gray-900 dark:text-gray-100 outline-none transition-all appearance-none cursor-pointer"
                                         >
                                             <option value="income">Income</option>
-                                            <option value="investment">Investment</option>
-                                            <option value="operation">Operation</option>
+                                            {!isStaff && <option value="investment">Investment</option>}
+                                            {!isStaff && <option value="operation">Operation</option>}
                                         </select>
                                     </div>
 
@@ -301,7 +362,7 @@ export default function IncomePage() {
                                         disabled={loading}
                                         className="flex-[2] py-3 px-6 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50"
                                     >
-                                        {loading ? 'Recording...' : 'Confirm Entry'}
+                                        {loading ? 'Recording...' : editingId ? 'Save Changes' : 'Confirm Entry'}
                                     </button>
                                 </div>
                             </form>

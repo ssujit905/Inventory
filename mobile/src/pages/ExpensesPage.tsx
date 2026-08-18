@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, IndianRupee, AlertCircle, X, History, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
@@ -101,8 +102,10 @@ export default function ExpensesPage() {
 
     const fetchExpenses = async () => {
         let query = supabase.from('expenses').select('*');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('recorded_by', profile.id);
+        const vendorId = getVendorId(profile);
+        const profileId = profile?.id;
+        if (vendorId && profileId) {
+            query = query.or(`recorded_by.eq.${profileId},vendor_id.eq.${vendorId}`);
         }
         const { data, error } = await supabaseWithTimeout(query
             .order('created_at', { ascending: false })
@@ -151,7 +154,8 @@ export default function ExpensesPage() {
                     amount,
                     expense_date: expenseDate,
                     category,
-                    recorded_by: user.id
+                    recorded_by: user.id,
+                    vendor_id: getVendorId(profile)
                 }])
                 .abortSignal(controller.signal)
             );

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { format, subMonths, eachMonthOfInterval, startOfMonth, endOfMonth } from 'date-fns';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell
@@ -76,8 +77,9 @@ export default function WebsiteReportsPage() {
                     )
                 `);
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                woQuery = woQuery.eq('website_order_items.vendor_id', profile.id);
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                woQuery = woQuery.eq('website_order_items.vendor_id', vendorId);
             } else {
                 woQuery = woQuery.is('website_order_items.vendor_id', null);
             }

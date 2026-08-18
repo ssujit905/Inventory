@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
-import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard, Store, ShieldCheck, Camera } from 'lucide-react';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
+import { buildStoreLink } from '../lib/storeLink';
+import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard, Store, ShieldCheck, Camera, Link2, Copy, ExternalLink } from 'lucide-react';
 
 interface Setting {
     key: string;
@@ -167,7 +169,7 @@ export default function WebsiteSettingsPage() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     useEffect(() => { 
-        if (profile?.role === 'vendor') {
+        if (isVendorMember(profile)) {
             fetchVendorProfile();
         } else {
             fetchSettings(); 
@@ -204,6 +206,16 @@ export default function WebsiteSettingsPage() {
 
     const handleSaveVendor = async (e: React.FormEvent) => {
         e.preventDefault();
+        const cleanPhone = vendorForm.phone.replace(/\D/g, '');
+        const cleanWhatsapp = vendorForm.whatsapp ? vendorForm.whatsapp.replace(/\D/g, '') : '';
+        if (cleanPhone.length !== 10) {
+            showToast('Phone number must be exactly 10 digits', 'error');
+            return;
+        }
+        if (vendorForm.whatsapp && cleanWhatsapp.length !== 10) {
+            showToast('WhatsApp number must be exactly 10 digits', 'error');
+            return;
+        }
         setSaving(true);
 
         // Ensure the session/connection is healthy before writing, so we don't
@@ -219,8 +231,8 @@ export default function WebsiteSettingsPage() {
                 supabase.from('profiles').update({
                     full_name: vendorForm.contact_person,
                     store_name: vendorForm.store_name,
-                    phone: vendorForm.phone,
-                    whatsapp: vendorForm.whatsapp,
+                    phone: cleanPhone,
+                    whatsapp: cleanWhatsapp,
                     address: vendorForm.address,
                     city: vendorForm.city,
                     description: vendorForm.description,
@@ -278,9 +290,10 @@ export default function WebsiteSettingsPage() {
 
     const fetchProducts = async () => {
         setLoadingProducts(true);
+        const vendorId = getVendorId(profile);
         let wpQuery = supabase.from('website_products').select('id, title, price, website_product_images(image_url, is_primary)').order('title');
-        if (profile?.role === 'vendor' && profile?.id) {
-            wpQuery = wpQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            wpQuery = wpQuery.eq('vendor_id', vendorId);
         } else {
             wpQuery = wpQuery.is('vendor_id', null);
         }
@@ -454,7 +467,7 @@ export default function WebsiteSettingsPage() {
     };
 
     // Admins and vendors can edit; staff is read-only
-    const isReadOnly = profile?.role !== 'admin' && profile?.role !== 'vendor';
+    const isReadOnly = profile?.role !== 'admin' && !isVendorMember(profile);
 
     if (loading) return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
@@ -495,7 +508,7 @@ export default function WebsiteSettingsPage() {
                     </button>
                 </div>
 
-                {profile?.role === 'vendor' ? (
+                {isVendorMember(profile) ? (
                     <form onSubmit={handleSaveVendor} className="space-y-6">
                         <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 p-6 space-y-5 shadow-sm">
                             <div className="flex items-center justify-between gap-4 flex-wrap border-b border-gray-100 dark:border-gray-800 pb-3">
@@ -540,6 +553,47 @@ export default function WebsiteSettingsPage() {
                                             Remove logo
                                         </button>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* Your Store Link */}
+                            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-1.5">
+                                    <Link2 size={12} /> Your Store Link
+                                </p>
+                                <p className="text-xs text-gray-500 font-medium mb-2">
+                                    Share this link with customers to open your store directly on the website. It updates automatically as you change the store name — no need to save first.
+                                </p>
+                                <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={profile?.id ? buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id) : ''}
+                                        className="flex-1 h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate outline-none"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (!profile?.id) return;
+                                                navigator.clipboard.writeText(buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id));
+                                                showToast('Store link copied to clipboard!');
+                                            }}
+                                            className="h-10 px-4 rounded-xl bg-primary text-white text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 active:scale-95 transition-transform"
+                                        >
+                                            <Copy size={13} /> Copy
+                                        </button>
+                                        {profile?.id && (
+                                            <a
+                                                href={buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 active:scale-95 transition-transform"
+                                            >
+                                                <ExternalLink size={13} /> Open
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -617,7 +671,7 @@ export default function WebsiteSettingsPage() {
                     </>
                 )}
 
-                {profile?.role !== 'vendor' && (
+                {!isVendorMember(profile) && (
                     <>
                         {/* Settings Groups */}
                         {SETTING_GROUPS.map(group => (
@@ -736,93 +790,94 @@ export default function WebsiteSettingsPage() {
                                                 />
                                             )}
 
-                                            {/* Flash Sale specific UI */}
-                                            {//@ts-ignore
-                                            group.isFlashSale && (
-                                                <div className="pt-6 border-t border-gray-100 dark:border-gray-800 space-y-6">
-                                                    <div className="space-y-3">
-                                                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Pick Product for Flash Sale</label>
-                                                        <div className="flex gap-3">
-                                                            <select 
-                                                                className={`flex-1 h-14 px-4 rounded-2xl border-2 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all appearance-none ${isReadOnly ? 'border-gray-50 text-gray-300 cursor-not-allowed' : 'border-gray-100 dark:border-gray-800 cursor-pointer'}`}
-                                                                onChange={(e) => {
-                                                                    if (isReadOnly) return;
-                                                                    const p = products.find(prod => prod.id === Number(e.target.value));
-                                                                    if (p) addProductToSale(p);
-                                                                    e.target.value = ""; // Reset dropdown
-                                                                }}
-                                                                disabled={isReadOnly}
-                                                                defaultValue=""
-                                                            >
-                                                                <option value="" disabled>{isReadOnly ? 'Read Only Mode' : 'Choose a product from your website...'}</option>
-                                                                {!isReadOnly && products.map(p => (
-                                                                    <option key={p.id} value={p.id}>
-                                                                        {p.title} (Rs. {p.price})
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 ${isReadOnly ? 'bg-gray-50 text-gray-300 border-gray-50' : 'bg-primary/10 text-primary border-primary/20'}`}>
-                                                                <Zap size={20} />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="space-y-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <h4 className="text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-tighter flex items-center gap-2">
-                                                                Currently in Flash Sale ({flashSaleProducts.length})
-                                                            </h4>
-                                                        </div>
-                                                        <div className="grid gap-3">
-                                                            {flashSaleProducts.map(p => {
-                                                                const discount = Number(p.discount || 0);
-                                                                const salePrice = Math.floor(p.price - (p.price * (discount / 100)));
-                                                                return (
-                                                                    <div key={p.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 group">
-                                                                        <div className="flex items-center gap-4">
-                                                                            <img src={p.image} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <p className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{p.title}</p>
-                                                                                <p className="text-xs text-gray-400 font-bold">Standard: Rs.{p.price}</p>
-                                                                            </div>
-                                                                            <button 
-                                                                                onClick={() => removeProductFromSale(p.id)}
-                                                                                className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors rounded-xl"
-                                                                            >
-                                                                                <Trash2 size={18} />
-                                                                            </button>
-                                                                        </div>
-
-                                                                        <div className="flex items-center gap-4 pt-3 border-t dark:border-gray-800">
-                                                                            <div className="flex-1 space-y-1">
-                                                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Discount %</label>
-                                                                                <input 
-                                                                                    type="number"
-                                                                                    value={p.discount}
-                                                                                    onChange={(e) => updateProductDiscount(p.id, Number(e.target.value))}
-                                                                                    className="w-full h-10 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-bold focus:border-primary outline-none"
-                                                                                    placeholder="0"
-                                                                                />
-                                                                            </div>
-                                                                            <div className="text-right px-4 py-2 bg-white dark:bg-gray-900 rounded-xl border border-rose-100 min-w-[120px]">
-                                                                                <p className="text-[10px] font-black text-gray-400 uppercase">Flash Price</p>
-                                                                                <p className="text-sm font-black text-rose-500">Rs. {salePrice.toLocaleString()}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                            {flashSaleProducts.length === 0 && (
-                                                                <div className="py-8 text-center border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl">
-                                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No products in sale. Use dropdown above to add.</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
                                     ))}
+
+                                    {/* Flash Sale specific UI (rendered once per group) */}
+                                    {//@ts-ignore
+                                    group.isFlashSale && (
+                                        <div className="pt-6 border-t border-gray-100 dark:border-gray-800 space-y-6">
+                                            <div className="space-y-3">
+                                                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Pick Product for Flash Sale</label>
+                                                <div className="flex gap-3">
+                                                    <select 
+                                                        className={`flex-1 h-14 px-4 rounded-2xl border-2 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all appearance-none ${isReadOnly ? 'border-gray-50 text-gray-300 cursor-not-allowed' : 'border-gray-100 dark:border-gray-800 cursor-pointer'}`}
+                                                        onChange={(e) => {
+                                                            if (isReadOnly) return;
+                                                            const p = products.find(prod => prod.id === Number(e.target.value));
+                                                            if (p) addProductToSale(p);
+                                                            e.target.value = ""; // Reset dropdown
+                                                        }}
+                                                        disabled={isReadOnly}
+                                                        defaultValue=""
+                                                    >
+                                                        <option value="" disabled>{isReadOnly ? 'Read Only Mode' : 'Choose a product from your website...'}</option>
+                                                        {!isReadOnly && products.map(p => (
+                                                            <option key={p.id} value={p.id}>
+                                                                {p.title} (Rs. {p.price})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 ${isReadOnly ? 'bg-gray-50 text-gray-300 border-gray-50' : 'bg-primary/10 text-primary border-primary/20'}`}>
+                                                        <Zap size={20} />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-tighter flex items-center gap-2">
+                                                        Currently in Flash Sale ({flashSaleProducts.length})
+                                                    </h4>
+                                                </div>
+                                                <div className="grid gap-3">
+                                                    {flashSaleProducts.map(p => {
+                                                        const discount = Number(p.discount || 0);
+                                                        const salePrice = Math.floor(p.price - (p.price * (discount / 100)));
+                                                        return (
+                                                            <div key={p.id} className="flex flex-col gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800 group">
+                                                                <div className="flex items-center gap-4">
+                                                                    <img src={p.image} className="w-12 h-12 rounded-xl object-cover shadow-sm" />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{p.title}</p>
+                                                                        <p className="text-xs text-gray-400 font-bold">Standard: Rs.{p.price}</p>
+                                                                    </div>
+                                                                    <button 
+                                                                        onClick={() => removeProductFromSale(p.id)}
+                                                                        className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors rounded-xl"
+                                                                    >
+                                                                        <Trash2 size={18} />
+                                                                    </button>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-4 pt-3 border-t dark:border-gray-800">
+                                                                    <div className="flex-1 space-y-1">
+                                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Discount %</label>
+                                                                        <input 
+                                                                            type="number"
+                                                                            value={p.discount}
+                                                                            onChange={(e) => updateProductDiscount(p.id, Number(e.target.value))}
+                                                                            className="w-full h-10 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-bold focus:border-primary outline-none"
+                                                                            placeholder="0"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="text-right px-4 py-2 bg-white dark:bg-gray-900 rounded-xl border border-rose-100 min-w-[120px]">
+                                                                        <p className="text-[10px] font-black text-gray-400 uppercase">Flash Price</p>
+                                                                        <p className="text-sm font-black text-rose-500">Rs. {salePrice.toLocaleString()}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {flashSaleProducts.length === 0 && (
+                                                        <div className="py-8 text-center border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl">
+                                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No products in sale. Use dropdown above to add.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

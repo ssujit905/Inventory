@@ -2,11 +2,14 @@ import { MemoryRouter as Router, Routes, Route, Navigate } from 'react-router-do
 import LoginPage from './pages/LoginPage';
 import StockInPage from './pages/StockInPage';
 import InventoryPage from './pages/InventoryPage';
+import ExpensesPage from './pages/ExpensesPage';
+import IncomePage from './pages/IncomePage';
 import WebsiteOrdersPage from './pages/WebsiteOrdersPage';
 import WebsiteProductsPage from './pages/WebsiteProductsPage';
 import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import VendorSettingsPage from './pages/VendorSettingsPage';
+import StaffManagementPage from './pages/StaffManagementPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
@@ -65,8 +68,16 @@ function App() {
           user ? <StockInPage /> : <Navigate to="/" replace />
         } />
 
+        <Route path="/admin/expenses" element={
+          user ? <ExpensesPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/income" element={
+          user ? <IncomePage /> : <Navigate to="/" replace />
+        } />
+
         <Route path="/admin/website/products" element={
-          user ? <WebsiteProductsPage /> : <Navigate to="/" replace />
+          user && profile?.role === 'vendor' ? <WebsiteProductsPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/website/orders" element={
@@ -82,7 +93,11 @@ function App() {
         } />
 
         <Route path="/vendor/settings" element={
-          user ? <VendorSettingsPage /> : <Navigate to="/" replace />
+          user && profile?.role === 'vendor' ? <VendorSettingsPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/staff" element={
+          user && profile?.role === 'vendor' ? <StaffManagementPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="*" element={<Navigate to={user ? "/admin/inventory" : "/"} replace />} />

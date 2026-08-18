@@ -4,6 +4,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { Package, AlertTriangle, RotateCcw } from 'lucide-react';
 
 type InventoryLot = {
@@ -41,6 +42,7 @@ export default function InventoryPage() {
     const fetchInventory = async (isInitial = true) => {
         if (isInitial) setLoading(true);
         try {
+            const vendorId = getVendorId(profile);
             let lotsQuery = supabase
                 .from('product_lots')
                 .select(`
@@ -56,8 +58,8 @@ export default function InventoryPage() {
                     )
                 `);
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                lotsQuery = lotsQuery.eq('products.vendor_id', profile.id);
+            if (vendorId) {
+                lotsQuery = lotsQuery.eq('products.vendor_id', vendorId);
             }
 
             const { data: lotsData, error: lotsError } = await lotsQuery;

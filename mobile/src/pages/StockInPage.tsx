@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, IndianRupee, Package, AlertCircle, Barcode, X, History, Hash } from 'lucide-react';
 import { format } from 'date-fns';
@@ -17,7 +18,6 @@ type RecentTransaction = {
 
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
-    const isAdmin = profile?.role === 'admin';
     const canSeeCost = profile?.role === 'admin' || profile?.role === 'vendor';
     const isReadOnly = profile?.permissions === 'read_only';
 
@@ -113,6 +113,7 @@ export default function StockInPage() {
     );
 
     const fetchRecentTransactions = async () => {
+        const vendorId = getVendorId(profile);
         let txQuery = supabase
             .from('transactions')
             .select(`
@@ -125,8 +126,8 @@ export default function StockInPage() {
             `)
             .eq('type', 'in');
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            txQuery = txQuery.eq('product.vendor_id', profile.id);
+        if (vendorId) {
+            txQuery = txQuery.eq('product.vendor_id', vendorId);
         }
 
         const { data, error } = await supabaseWithTimeout(txQuery
@@ -206,9 +207,10 @@ export default function StockInPage() {
 
         try {
             let productId;
+            const vendorId = getVendorId(profile);
             let prodSearchQuery = supabase.from('products').select('id').eq('sku', sku);
-            if (profile?.role === 'vendor' && profile?.id) {
-                prodSearchQuery = prodSearchQuery.eq('vendor_id', profile.id);
+            if (vendorId) {
+                prodSearchQuery = prodSearchQuery.eq('vendor_id', vendorId);
             }
             const { data: existingProd } = await supabaseWithTimeout(
                 prodSearchQuery.abortSignal(controller.signal).maybeSingle()
@@ -226,7 +228,7 @@ export default function StockInPage() {
                             description: details,
                             image_url: imageUrl,
                             min_stock_alert: 10,
-                            vendor_id: profile?.role === 'vendor' ? profile.id : null
+                            vendor_id: getVendorId(profile)
                         }])
                         .select()
                         .abortSignal(controller.signal)

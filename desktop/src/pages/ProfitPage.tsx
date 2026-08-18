@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 
 type LotProfitRow = {
     lot_id: string;
@@ -69,8 +70,9 @@ export default function ProfitPage() {
                 `)
                 .eq('type', 'sale');
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                txQuery = txQuery.eq('lot.products.vendor_id', profile.id);
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                txQuery = txQuery.eq('lot.products.vendor_id', vendorId);
             } else {
                 txQuery = txQuery.is('lot.products.vendor_id', null);
             }
@@ -95,20 +97,19 @@ export default function ProfitPage() {
 
             const { data: rawAdsData } = await supabase
                 .from('expenses')
-                .select('id, amount, recorded_by, profile:profiles(role)')
+                .select('id, amount, recorded_by, profile:profiles!expenses_recorded_by_fkey(role)')
                 .eq('category', 'ads');
 
             const { data: rawPackagingData } = await supabase
                 .from('expenses')
-                .select('amount, description, expense_date, recorded_by, profile:profiles(role)')
+                .select('amount, description, expense_date, recorded_by, profile:profiles!expenses_recorded_by_fkey(role)')
                 .eq('category', 'packaging')
                 .order('expense_date', { ascending: true });
 
-            const isVendorProfile = profile?.role === 'vendor';
             const scopeExpenses = (rows: any[]) =>
                 (rows || []).filter((e: any) =>
-                    isVendorProfile
-                        ? e.recorded_by === profile.id
+                    vendorId
+                        ? e.recorded_by === profile?.id || e.vendor_id === vendorId
                         : (e.profile?.role ?? null) !== 'vendor'
                 );
 

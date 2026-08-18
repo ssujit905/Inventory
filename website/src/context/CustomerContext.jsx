@@ -38,13 +38,13 @@ export const CustomerProvider = ({ children }) => {
         }
     };
 
-    const register = async (name, phone, pin, address, city) => {
+    const register = async (name, phone, pin) => {
         setLoading(true);
         // Standardize phone to 10 digits
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
         
         try {
-            const { data, error } = await supabase.rpc('customer_register', { p_name: name, p_phone: cleanPhone, p_pin: String(pin), p_address: address, p_city: city });
+            const { data, error } = await supabase.rpc('customer_register', { p_name: name, p_phone: cleanPhone, p_pin: String(pin), p_address: null, p_city: null });
             if (error || !data?.success) throw error || new Error(data?.error || 'Registration failed');
             setCustomer(data.customer);
             sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));

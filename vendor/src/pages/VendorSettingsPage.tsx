@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
-import { Store, Save, Loader2, Check, AlertTriangle, Phone, Mail, MapPin, Building2, CreditCard, User, ImagePlus } from 'lucide-react';
+import { buildStoreLink } from '../lib/storeLink';
+import { Store, Save, Loader2, Check, AlertTriangle, Phone, Mail, MapPin, Building2, CreditCard, User, ImagePlus, Link2, Copy, ExternalLink } from 'lucide-react';
 
 export default function VendorSettingsPage() {
     const { profile } = useAuthStore();
@@ -27,6 +28,19 @@ export default function VendorSettingsPage() {
         bank_branch: '',
         esewa_id: ''
     });
+    const [linkCopied, setLinkCopied] = useState(false);
+
+    const copyStoreLink = async () => {
+        if (!profile?.id) return;
+        try {
+            await navigator.clipboard.writeText(buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id));
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+        } catch (err) {
+            setToast({ msg: 'Failed to copy link', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
 
     useEffect(() => {
         fetchVendorProfile();
@@ -99,6 +113,18 @@ export default function VendorSettingsPage() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        const cleanPhone = vendorForm.phone.replace(/\D/g, '');
+        const cleanWhatsapp = vendorForm.whatsapp ? vendorForm.whatsapp.replace(/\D/g, '') : '';
+        if (cleanPhone.length !== 10) {
+            setToast({ msg: 'Phone number must be exactly 10 digits', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+        if (vendorForm.whatsapp && cleanWhatsapp.length !== 10) {
+            setToast({ msg: 'WhatsApp number must be exactly 10 digits', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
         setSaving(true);
         try {
             if (!profile?.id) return;
@@ -108,8 +134,8 @@ export default function VendorSettingsPage() {
                 .update({
                     full_name: vendorForm.contact_person,
                     store_name: vendorForm.store_name,
-                    phone: vendorForm.phone,
-                    whatsapp: vendorForm.whatsapp,
+                    phone: cleanPhone,
+                    whatsapp: cleanWhatsapp,
                     address: vendorForm.address,
                     city: vendorForm.city,
                     description: vendorForm.description,
@@ -201,6 +227,43 @@ export default function VendorSettingsPage() {
                                         Shown on the store card below your products.<br />
                                         Click the image to upload (PNG, JPG).
                                     </p>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2 flex items-center gap-1.5">
+                                    <Link2 size={12} /> Your Store Link
+                                </p>
+                                <p className="text-[11px] text-gray-500 font-medium mb-2">
+                                    Share this link with customers to open your store directly on the website.
+                                </p>
+                                <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={profile?.id ? buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id) : ''}
+                                        className="flex-1 h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate outline-none"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={copyStoreLink}
+                                            className="h-10 px-4 rounded-xl bg-primary text-white text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 active:scale-95 transition-transform"
+                                        >
+                                            {linkCopied ? <Check size={13} /> : <Copy size={13} />}
+                                            {linkCopied ? 'Copied' : 'Copy'}
+                                        </button>
+                                        {profile?.id && (
+                                            <a
+                                                href={buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="h-10 px-4 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 active:scale-95 transition-transform"
+                                            >
+                                                <ExternalLink size={13} /> Open
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

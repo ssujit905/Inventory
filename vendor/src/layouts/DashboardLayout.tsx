@@ -3,13 +3,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare, Globe, Settings, MapPin, RotateCcw, DollarSign, ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId } from '../lib/vendorHelpers';
 import { supabase } from '../lib/supabase';
 
 export default function DashboardLayout({ children, role }: { children: React.ReactNode, role: 'admin' | 'staff' }) {
     const navigate = useNavigate();
     const location = useLocation();
     const { query, setQuery } = useSearchStore();
-    const { signOut } = useAuthStore();
+    const { signOut, profile } = useAuthStore();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -35,41 +37,43 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         };
     }, [setQuery]);
 
-    useEffect(() => {
-        const fetchCounts = async () => {
-            if (role === 'admin') {
-                const { count } = await supabase
-                    .from('product_lots')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('cost_price', 0);
-                setPendingCostCount(count || 0);
+    const fetchCounts = async () => {
+        const vendorId = getVendorId(profile);
+        if (profile?.role === 'vendor' || profile?.role === 'admin') {
+            let costQuery = supabase
+                .from('product_lots')
+                .select('id, products!inner(vendor_id)', { count: 'exact', head: true })
+                .eq('cost_price', 0);
+            if (vendorId) {
+                costQuery = costQuery.eq('products.vendor_id', vendorId);
+            } else {
+                costQuery = costQuery.is('products.vendor_id', null);
             }
+            const { count } = await costQuery;
+            setPendingCostCount(count || 0);
+        }
 
-            const { count: orders } = await supabase
-                .from('website_orders')
-                .select('id', { count: 'exact', head: true })
-                .eq('status', 'processing');
-            setPendingOrdersCount(orders || 0);
+        const { count: orders } = await supabase
+            .from('website_orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'processing');
+        setPendingOrdersCount(orders || 0);
 
-            const { count: returns } = await supabase
-                .from('website_order_returns')
-                .select('id', { count: 'exact', head: true })
-                .eq('status', 'pending');
-            setPendingReturnsCount(returns || 0);
-        };
+        const { count: returns } = await supabase
+            .from('website_order_returns')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending');
+        setPendingReturnsCount(returns || 0);
+    };
 
-        fetchCounts();
-
-        const channel = supabase
-            .channel('count-updates')
-            .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'website_orders' }, fetchCounts)
-            .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'website_order_returns' }, fetchCounts)
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [role]);
+    useRealtimeRefresh(
+        () => fetchCounts(),
+        {
+            channelName: 'vendor-count-updates',
+            tables: ['product_lots', 'website_orders', 'website_order_returns'],
+            pollMs: 8000
+        }
+    );
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -339,7 +343,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Inventory & Stock</label>
                             <div className="space-y-1">
                                 <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" onSelect={() => setIsMenuOpen(false)} />
-                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} />
+                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} badge={pendingCostCount} />
+                                <MenuLink icon={<DollarSign className="text-rose-500" />} label="Expenses" path="/admin/expenses" onSelect={() => setIsMenuOpen(false)} />
+                                <MenuLink icon={<TrendingUp className="text-emerald-500" />} label="Income" path="/admin/income" onSelect={() => setIsMenuOpen(false)} />
                             </div>
                         </section>
 
@@ -347,7 +353,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Products & Deliveries</label>
                             <div className="space-y-1">
-                                <MenuLink icon={<Globe className="text-pink-500" />} label="Website Products" path="/admin/website/products" onSelect={() => setIsMenuOpen(false)} />
+                                {profile?.role === 'vendor' && (
+                                    <MenuLink icon={<Globe className="text-pink-500" />} label="Website Products" path="/admin/website/products" onSelect={() => setIsMenuOpen(false)} />
+                                )}
                                 <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" onSelect={() => setIsMenuOpen(false)} badge={pendingOrdersCount} />
                                 <MenuLink icon={<RotateCcw className="text-orange-500" />} label="Returns" path="/admin/website/returns" onSelect={() => setIsMenuOpen(false)} badge={pendingReturnsCount} />
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
@@ -358,7 +366,12 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         <section>
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-4 mb-3 block">Store Account</label>
                             <div className="space-y-1">
-                                <MenuLink icon={<Settings className="text-gray-500" />} label="Vendor Store Settings" path="/vendor/settings" onSelect={() => setIsMenuOpen(false)} />
+                                {profile?.role === 'vendor' && (
+                                    <MenuLink icon={<Settings className="text-gray-500" />} label="Vendor Store Settings" path="/vendor/settings" onSelect={() => setIsMenuOpen(false)} />
+                                )}
+                                {profile?.role === 'vendor' && (
+                                    <MenuLink icon={<Users className="text-emerald-500" />} label="Staff Management" path="/admin/staff" onSelect={() => setIsMenuOpen(false)} />
+                                )}
                             </div>
                         </section>
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format, subMonths, eachMonthOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -56,6 +57,7 @@ export default function WebsiteReportsPage() {
 
     const fetchStats = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         try {
             // ──────────────────────────────────────────────────
             // PRIMARY DATA SOURCE: website_orders joined to sales
@@ -83,8 +85,8 @@ export default function WebsiteReportsPage() {
                     )
                 `);
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                woQuery = woQuery.eq('website_order_items.vendor_id', profile.id);
+            if (vendorId) {
+                woQuery = woQuery.eq('website_order_items.vendor_id', vendorId);
             }
 
             const { data: webOrders, error: woErr } = await woQuery.order('created_at', { ascending: false });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { supabase } from '../lib/supabase';
 import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard } from 'lucide-react';
 
@@ -132,7 +133,7 @@ export default function WebsiteSettingsPage() {
     });
 
     useEffect(() => { 
-        if (profile?.role === 'vendor') {
+        if (isVendorMember(profile)) {
             fetchVendorProfile();
         } else {
             fetchSettings(); 
@@ -142,8 +143,9 @@ export default function WebsiteSettingsPage() {
 
     const fetchVendorProfile = async () => {
         setLoading(true);
-        if (profile?.id) {
-            const { data } = await supabase.from('profiles').select('*').eq('id', profile.id).maybeSingle();
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            const { data } = await supabase.from('profiles').select('*').eq('id', vendorId).maybeSingle();
             if (data) {
                 setVendorForm({
                     store_name: data.store_name || data.full_name || '',
@@ -169,7 +171,8 @@ export default function WebsiteSettingsPage() {
         e.preventDefault();
         setSaving(true);
         try {
-            if (!profile?.id) return;
+            const vendorId = getVendorId(profile);
+            if (!vendorId) return;
             const { error } = await supabase.from('profiles').update({
                 full_name: vendorForm.contact_person,
                 store_name: vendorForm.store_name,
@@ -183,7 +186,7 @@ export default function WebsiteSettingsPage() {
                 bank_account_number: vendorForm.bank_account_number,
                 bank_branch: vendorForm.bank_branch,
                 esewa_id: vendorForm.esewa_id
-            }).eq('id', profile.id);
+            }).eq('id', getVendorId(profile));
 
             if (error) throw error;
             showToast('Vendor store settings saved successfully!');

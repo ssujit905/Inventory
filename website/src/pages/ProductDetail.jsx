@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { storeSlug } from '../lib/storeSlug';
 import { useNotification } from '../context/NotificationContext';
 
 const ProductDetail = () => {
@@ -832,7 +833,7 @@ const ProductDetail = () => {
 
                         {/* Individual Reviews */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            {ratings.map((rev) => (
+                            {ratings.slice(0, 3).map((rev) => (
                                 <div key={rev.id} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -852,6 +853,32 @@ const ProductDetail = () => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* See More → All Reviews Page */}
+                        {ratings.length > 3 && (
+                            <button
+                                onClick={() => navigate(`/product/${id}/reviews`)}
+                                style={{
+                                    alignSelf: 'center',
+                                    background: 'none',
+                                    border: '1.5px solid #e2e8f0',
+                                    borderRadius: '999px',
+                                    padding: '8px 24px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '700',
+                                    color: '#1e293b',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary-red)'}
+                                onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                            >
+                                See More ({ratings.length - 3} more) <ChevronRight size={16} />
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -868,7 +895,7 @@ const ProductDetail = () => {
                     boxShadow: '0 4px 15px rgba(0,0,0,0.03)'
                 }}>
                     <Link
-                        to={`/store/${product.vendor_id}`}
+                        to={`/store/${storeSlug(vendorProfile)}`}
                         style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', textDecoration: 'none', cursor: 'pointer' }}
                     >
                         {vendorProfile.avatar_url ? (

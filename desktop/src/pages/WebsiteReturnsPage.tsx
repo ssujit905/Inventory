@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
     RotateCcw, Loader2, ChevronDown, ChevronUp,
@@ -35,6 +36,7 @@ export default function WebsiteReturnsPage() {
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
     const isReadOnly = profile?.permissions === 'read_only';
+    const isVendorUser = isVendorMember(profile);
 
     useEffect(() => {
         fetchRequests();
@@ -63,16 +65,20 @@ export default function WebsiteReturnsPage() {
     const fetchRequests = async () => {
         setLoading(true);
         try {
+            const vendorId = getVendorId(profile);
 let query = supabase
             .from('website_order_returns')
             .select('*');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (isVendorUser) {
+            query = query.neq('type', 'message');
+        }
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             query = query.is('vendor_id', null);
         }
-        const { data, error } = await query
-            .order('created_at', { ascending: false });
+        const { data, error } = await supabaseWithTimeout(query
+            .order('created_at', { ascending: false }));
             
             if (error) throw error;
             setRequests(data || []);
@@ -84,10 +90,12 @@ let query = supabase
     };
 
     const updateStatus = async (id: number, status: string) => {
-        const { error } = await supabase
-            .from('website_order_returns')
-            .update({ status })
-            .eq('id', id);
+        const { error } = await supabaseWithTimeout(
+            supabase
+                .from('website_order_returns')
+                .update({ status })
+                .eq('id', id)
+        );
         
         if (error) return showToast(error.message, 'error');
         setRequests(rs => rs.map(r => r.id === id ? { ...r, status: status as any } : r));
@@ -116,7 +124,7 @@ let query = supabase
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                             <RotateCcw size={22} className="text-primary" /> Customer Requests
                         </h1>
-                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Manage return, exchange, and contact messages</p>
+                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Manage return, exchange{!isVendorUser && ', and contact messages'}</p>
                     </div>
                     <div className="text-right">
                         <p className="text-2xl font-black text-gray-900 dark:text-gray-100">{filteredRequests.length}</p>
@@ -126,7 +134,7 @@ let query = supabase
 
                 {/* Tabs Menu */}
                 <div className="flex items-center gap-2 p-1.5 bg-gray-100 dark:bg-gray-800/50 rounded-2xl w-fit">
-                    {(['all', 'return', 'exchange', 'message'] as const).map((tab) => (
+                    {(isVendorUser ? ['all', 'return', 'exchange'] : ['all', 'return', 'exchange', 'message'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}

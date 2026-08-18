@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Package, AlertTriangle, RotateCcw, Barcode, Hash } from 'lucide-react';
 
@@ -54,8 +55,9 @@ export default function InventoryPage() {
                     )
                 `);
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                query = query.eq('products.vendor_id', profile.id);
+            const vendorId = getVendorId(profile);
+            if (vendorId) {
+                query = query.eq('products.vendor_id', vendorId);
             } else {
                 query = query.is('products.vendor_id', null);
             }

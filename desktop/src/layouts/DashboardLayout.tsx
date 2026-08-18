@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare, Globe, ShoppingBag, Settings, MapPin, RotateCcw } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId } from '../lib/vendorHelpers';
 
 export default function DashboardLayout({ children, role }: { children: React.ReactNode, role: 'admin' | 'staff' }) {
     const navigate = useNavigate();
@@ -24,14 +25,14 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 return;
             }
 
-            const isVendor = profile?.role === 'vendor' && profile?.id;
+            const vendorId = getVendorId(profile);
 
             let salesQuery = supabase
                 .from('sales')
                 .select('customer_name, phone1, parcel_status, sale_items!inner(product:products!inner(vendor_id))')
                 .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%,parcel_status.ilike.%${query}%`)
                 .limit(10);
-            if (isVendor) salesQuery = salesQuery.eq('sale_items.product.vendor_id', profile.id);
+            if (vendorId) salesQuery = salesQuery.eq('sale_items.product.vendor_id', vendorId);
             else salesQuery = salesQuery.is('sale_items.product.vendor_id', null);
 
             let productsQuery = supabase
@@ -39,7 +40,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 .select('sku')
                 .ilike('sku', `%${query}%`)
                 .limit(10);
-            if (isVendor) productsQuery = productsQuery.eq('vendor_id', profile.id);
+            if (vendorId) productsQuery = productsQuery.eq('vendor_id', vendorId);
             else productsQuery = productsQuery.is('vendor_id', null);
 
             const { data: salesData } = await salesQuery;
@@ -84,25 +85,32 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     }, [query]);
 
     const fetchPendingCosts = async () => {
-        if (role !== 'admin') {
+        const vendorId = getVendorId(profile);
+        if (role !== 'admin' && !vendorId) {
             setPendingCostCount(0);
             return;
         }
-        const { count } = await supabase
+        let costQuery = supabase
             .from('product_lots')
-            .select('id', { count: 'exact', head: true })
+            .select('id, products!inner(vendor_id)', { count: 'exact', head: true })
             .eq('cost_price', 0);
+        if (vendorId) {
+            costQuery = costQuery.eq('products.vendor_id', vendorId);
+        } else {
+            costQuery = costQuery.is('products.vendor_id', null);
+        }
+        const { count } = await costQuery;
         setPendingCostCount(count || 0);
     };
 
     const fetchPendingWebItems = async () => {
-        const isVendor = profile?.role === 'vendor' && profile?.id;
+        const vendorId = getVendorId(profile);
         // Processing Orders Alert
         let ordersQuery = supabase
             .from('website_orders')
             .select('id, website_order_items!inner(vendor_id)', { count: 'exact', head: true })
             .eq('status', 'processing');
-        if (isVendor) ordersQuery = ordersQuery.eq('website_order_items.vendor_id', profile.id);
+        if (vendorId) ordersQuery = ordersQuery.eq('website_order_items.vendor_id', vendorId);
         else ordersQuery = ordersQuery.is('website_order_items.vendor_id', null);
         const { count: ordersCount } = await ordersQuery;
         setPendingOrdersCount(ordersCount || 0);
@@ -112,7 +120,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             .from('website_order_returns')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending');
-        if (isVendor) returnsQuery = returnsQuery.eq('vendor_id', profile.id);
+        if (vendorId) returnsQuery = returnsQuery.eq('vendor_id', vendorId);
         else returnsQuery = returnsQuery.is('vendor_id', null);
         const { count: returnsCount } = await returnsQuery;
         setPendingReturnsCount(returnsCount || 0);
@@ -121,7 +129,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     useEffect(() => {
         fetchPendingCosts();
         fetchPendingWebItems();
-    }, [role]);
+    }, [role, profile]);
 
     useRealtimeRefresh(
         () => {
@@ -157,6 +165,59 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     };
 
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const navRef = useRef<HTMLElement>(null);
+
+    // Restore scroll position after async content renders (loading -> data).
+    const restoreScroll = (el: HTMLElement | null, key: string) => {
+        if (!el) return;
+        const saved = sessionStorage.getItem(key);
+        if (!saved) return;
+        const target = Number(saved) || 0;
+        if (target <= 0) return;
+        const apply = () => {
+            const max = el.scrollHeight - el.clientHeight;
+            if (max >= target) {
+                el.scrollTop = target;
+                clearInterval(iv);
+                clearTimeout(to);
+            }
+        };
+        const iv = setInterval(apply, 100);
+        const to = setTimeout(() => clearInterval(iv), 3000);
+        requestAnimationFrame(apply);
+    };
+
+    // Preserve sidebar nav scroll position (sidebar remounts on every navigation)
+    useEffect(() => {
+        restoreScroll(navRef.current, 'desktop_sidebar_scroll');
+    }, []);
+
+    useEffect(() => {
+        const el = navRef.current;
+        if (!el) return;
+        const handler = () => {
+            sessionStorage.setItem('desktop_sidebar_scroll', String(el.scrollTop));
+        };
+        el.addEventListener('scroll', handler, { passive: true });
+        return () => el.removeEventListener('scroll', handler);
+    }, []);
+
+    // Preserve per-page content scroll position across menu navigation
+    useEffect(() => {
+        restoreScroll(scrollRef.current, `desktop_scroll_${location.pathname}`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const handler = () => {
+            sessionStorage.setItem(`desktop_scroll_${location.pathname}`, String(el.scrollTop));
+        };
+        el.addEventListener('scroll', handler, { passive: true });
+        return () => el.removeEventListener('scroll', handler);
+    }, [location.pathname]);
 
     useEffect(() => {
         setIsMobileMenuOpen(false);
@@ -228,7 +289,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     </button>
                 </div>
 
-                <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+                <nav ref={navRef as any} className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
                     <NavItem icon={<LayoutDashboard size={18} strokeWidth={1.5} />} label="Dashboard" path="/admin/dashboard" active={location.pathname === '/admin/dashboard'} />
                     <NavItem icon={<Package size={18} strokeWidth={1.5} />} label="Inventory" path="/admin/inventory" active={location.pathname === '/admin/inventory'} />
                     <NavItem
@@ -236,7 +297,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         label="Stock In"
                         path="/admin/stock-in"
                         active={location.pathname === '/admin/stock-in'}
-                        badge={role === 'admin' && pendingCostCount > 0 ? pendingCostCount : undefined}
+                        badge={(role === 'admin' || profile?.role === 'vendor') && pendingCostCount > 0 ? pendingCostCount : undefined}
                     />
                     <NavItem icon={<DollarSign size={18} strokeWidth={1.5} />} label="Expenses" path="/admin/expenses" active={location.pathname === '/admin/expenses'} />
                     <NavItem icon={<ShoppingCart size={18} strokeWidth={1.5} />} label="Sales" path="/admin/sales" active={location.pathname === '/admin/sales'} />
@@ -270,16 +331,19 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />
                     )}
+                    <div className="pt-6 pb-2">
+                        <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics</p>
+                    </div>
+                    <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
                     {(role === 'admin' || profile?.role === 'vendor') && (
                         <>
-                            <div className="pt-6 pb-2">
-                                <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics</p>
-                            </div>
-                            <NavItem icon={<TrendingUp size={18} strokeWidth={1.5} />} label="Income" path="/admin/income" active={location.pathname === '/admin/income'} />
                             <NavItem icon={<FileText size={18} strokeWidth={1.5} />} label="Profit" path="/admin/profit" active={location.pathname === '/admin/profit'} />
                             <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Finance" path="/admin/reports" active={location.pathname === '/admin/reports'} />
                             {role === 'admin' && (
                                 <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/users" active={location.pathname === '/admin/users'} />
+                            )}
+                            {profile?.role === 'vendor' && (
+                                <NavItem icon={<Users size={18} strokeWidth={1.5} />} label="Staff Management" path="/admin/vendor-staff" active={location.pathname === '/admin/vendor-staff'} />
                             )}
                         </>
                     )}
@@ -375,14 +439,14 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <Bell size={20} />
                             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900"></span>
                         </button>
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                            {role === 'admin' ? 'A' : 'S'}
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold" title={profile?.full_name || profile?.email || ''}>
+                            {(profile?.full_name || profile?.email || '?').charAt(0).toUpperCase()}
                         </div>
                     </div>
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-auto p-4 lg:p-8">
+                <div ref={scrollRef} className="flex-1 overflow-auto p-4 lg:p-8">
                     {children}
                 </div>
             </main>

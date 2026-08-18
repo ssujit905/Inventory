@@ -3,6 +3,7 @@ import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId } from '../lib/vendorHelpers';
 import { Plus, IndianRupee, Package, AlertCircle, Barcode, X, History, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -17,7 +18,7 @@ type RecentTransaction = {
 
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
-    const isAdmin = profile?.role === 'admin';
+    const isAdmin = profile?.role === 'vendor' || profile?.role === 'admin';
     const isReadOnly = profile?.permissions === 'read_only';
 
     // UI State
@@ -111,6 +112,15 @@ export default function StockInPage() {
         }
     );
 
+    const pendingCount = recentTransactions.filter((t: any) => (t.lot?.cost_price || 0) <= 0).length;
+
+    const updateFirstPendingCost = () => {
+        const pending = recentTransactions.find((t: any) => (t.lot?.cost_price || 0) <= 0);
+        if (pending?.lot) {
+            openUpdateModal(pending.lot.id, pending.product?.sku, pending.quantity_changed, pending.lot?.cost_price);
+        }
+    };
+
     const fetchRecentTransactions = async () => {
         let query = supabase
             .from('transactions')
@@ -124,8 +134,9 @@ export default function StockInPage() {
             `)
             .eq('type', 'in');
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('product.vendor_id', profile.id);
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            query = query.eq('product.vendor_id', vendorId);
         }
 
         const { data, error } = await supabaseWithTimeout(query
@@ -204,10 +215,11 @@ export default function StockInPage() {
         activeSubmitRef.current = controller;
 
         try {
+            const vendorId = getVendorId(profile);
             let productId;
             let prodQuery = supabase.from('products').select('id').eq('sku', sku);
-            if (profile?.role === 'vendor' && profile?.id) {
-                prodQuery = prodQuery.eq('vendor_id', profile.id);
+            if (vendorId) {
+                prodQuery = prodQuery.eq('vendor_id', vendorId);
             }
             const { data: existingProd } = await supabaseWithTimeout(
                 prodQuery.abortSignal(controller.signal).maybeSingle()
@@ -225,7 +237,7 @@ export default function StockInPage() {
                             description: details,
                             image_url: imageUrl,
                             min_stock_alert: 10,
-                            vendor_id: profile?.role === 'vendor' ? profile.id : null
+                            vendor_id: getVendorId(profile)
                         }])
                         .select()
                         .abortSignal(controller.signal)
@@ -306,6 +318,32 @@ export default function StockInPage() {
                         {isReadOnly ? 'Read Only Mode' : 'Receive Shipment'}
                     </button>
                 </div>
+
+                {/* Pending Cost Alert */}
+                {isAdmin && pendingCount > 0 && (
+                    <div className="flex items-center gap-3 p-4 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 animate-in fade-in">
+                        <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+                            <AlertCircle size={18} className="text-amber-500" strokeWidth={2} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black text-amber-700 dark:text-amber-400">
+                                {pendingCount} shipment{pendingCount > 1 ? 's' : ''} need unit cost update
+                            </p>
+                            <p className="text-[10px] text-amber-600/80 dark:text-amber-500/80 font-medium leading-relaxed">
+                                Staff recorded stock without a unit cost. Set it to include these in profit calculations.
+                            </p>
+                        </div>
+                        {!isReadOnly && (
+                            <button
+                                onClick={updateFirstPendingCost}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-xl text-[10px] font-bold shadow-sm hover:bg-amber-600 transition-all active:scale-95 flex-shrink-0"
+                            >
+                                <IndianRupee size={12} strokeWidth={2} />
+                                Update
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Reception History - Card Layout */}
                 <div className="flex items-center gap-2 px-1">

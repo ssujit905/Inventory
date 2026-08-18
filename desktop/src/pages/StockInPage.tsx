@@ -3,6 +3,7 @@ import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId } from '../lib/vendorHelpers';
 import { Plus, IndianRupee, Package, AlertCircle, Barcode, X, History, Hash, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -17,7 +18,6 @@ type RecentTransaction = {
 
 export default function StockInPage() {
     const { user, profile } = useAuthStore();
-    const isAdmin = profile?.role === 'admin';
     const canSeeCost = profile?.role === 'admin' || profile?.role === 'vendor';
     const isReadOnly = profile?.permissions === 'read_only';
 
@@ -125,6 +125,7 @@ export default function StockInPage() {
     );
 
     const fetchRecentTransactions = async () => {
+        const vendorId = getVendorId(profile);
         let txQuery = supabase
             .from('transactions')
             .select(`
@@ -137,8 +138,8 @@ export default function StockInPage() {
             `)
             .eq('type', 'in');
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            txQuery = txQuery.eq('product.vendor_id', profile.id);
+        if (vendorId) {
+            txQuery = txQuery.eq('product.vendor_id', vendorId);
         } else {
             txQuery = txQuery.is('product.vendor_id', null);
         }
@@ -225,10 +226,11 @@ export default function StockInPage() {
         activeSubmitRef.current = controller;
 
         try {
+            const vendorId = getVendorId(profile);
             let productId;
             let prodSearchQuery = supabase.from('products').select('id').eq('sku', sku);
-            if (profile?.role === 'vendor' && profile?.id) {
-                prodSearchQuery = prodSearchQuery.eq('vendor_id', profile.id);
+            if (vendorId) {
+                prodSearchQuery = prodSearchQuery.eq('vendor_id', vendorId);
             } else {
                 prodSearchQuery = prodSearchQuery.is('vendor_id', null);
             }
@@ -251,7 +253,7 @@ export default function StockInPage() {
                             description: details,
                             image_url: imageUrl,
                             min_stock_alert: 10,
-                            vendor_id: profile?.role === 'vendor' ? profile.id : null
+                            vendor_id: vendorId
                         }])
                         .select()
                         .abortSignal(controller.signal)
@@ -271,7 +273,7 @@ export default function StockInPage() {
                         lot_number: lotNumber,
                         received_date: entryDate ? `${entryDate}T00:00:00Z` : undefined,
                         quantity_remaining: quantity,
-                        cost_price: (isAdmin || profile?.role === 'vendor') ? costPrice : 0,
+                        cost_price: canSeeCost ? costPrice : 0,
                         created_by: user.id
                     }])
                     .select()

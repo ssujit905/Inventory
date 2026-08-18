@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -56,7 +57,8 @@ export default function ReportsPage() {
     const fetchFinanceData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            const isVendor = profile?.role === 'vendor' && profile?.id;
+            const vendorId = getVendorId(profile);
+            const profileId = profile?.id;
 
             let incomeQuery = supabase.from('income_entries').select('amount, income_date, category');
             let transInQuery = supabase.from('transactions').select(`
@@ -88,12 +90,21 @@ export default function ReportsPage() {
                 )
             `);
 
-            if (isVendor) {
-                incomeQuery = incomeQuery.eq('recorded_by', profile.id);
-                transInQuery = transInQuery.eq('lot.products.vendor_id', profile.id);
-                expensesQuery = expensesQuery.eq('recorded_by', profile.id);
-                lotSalesQuery = lotSalesQuery.eq('lot.products.vendor_id', profile.id);
-                lotsQuery = lotsQuery.eq('products.vendor_id', profile.id);
+            if (vendorId && profileId) {
+                const { data: members } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .or(`id.eq.${vendorId},vendor_id.eq.${vendorId}`);
+                const memberIds = (members || []).map((m: any) => m.id);
+                if (memberIds.length > 0) {
+                    incomeQuery = incomeQuery.in('recorded_by', memberIds);
+                } else {
+                    incomeQuery = incomeQuery.eq('recorded_by', profileId);
+                }
+                transInQuery = transInQuery.eq('lot.products.vendor_id', vendorId);
+                expensesQuery = expensesQuery.or(`recorded_by.eq.${profileId},vendor_id.eq.${vendorId}`);
+                lotSalesQuery = lotSalesQuery.eq('lot.products.vendor_id', vendorId);
+                lotsQuery = lotsQuery.eq('products.vendor_id', vendorId);
             }
 
             const [incomeRes, transRes, expensesRes, lotSalesRes, lotsRes] = await Promise.all([
@@ -128,11 +139,11 @@ export default function ReportsPage() {
             });
 
             const salesRevenue = Array.from(deliveredSalesMap.values()).reduce((sum, s) => sum + s.amount, 0);
-            const otherIncome = (incomeEntries || [])
-                .filter((i: any) => i.category === 'income')
-                .reduce((sum, i) => sum + Number(i.amount), 0);
 
-            const totalRevenue = salesRevenue + otherIncome;
+            // Revenue is auto-calculated from delivered sales only. Manual
+            // income entries are a separate cashflow ledger and are NOT added
+            // here, otherwise delivered COD sales would be double-counted.
+            const totalRevenue = salesRevenue;
 
             const totalCOGS = (saleTransactions || [])
                 .filter((t: any) => t.sale?.parcel_status !== 'cancelled')
@@ -347,15 +358,7 @@ export default function ReportsPage() {
                     })
                     .reduce((sum, s) => sum + s.amount, 0);
 
-                const mOtherIncome = (incomeEntries || [])
-                    .filter((i: any) => i.category === 'income')
-                    .filter((i: any) => {
-                        const d = new Date(i.income_date);
-                        return d >= mStart && d <= mEnd;
-                    })
-                    .reduce((sum, i) => sum + Number(i.amount), 0);
-
-                const mRevenue = mSalesRevenue + mOtherIncome;
+                const mRevenue = mSalesRevenue;
 
                 const mExpenses = (expensesData || [])
                     .filter(e => {

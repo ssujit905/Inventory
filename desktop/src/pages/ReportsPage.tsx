@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { IndianRupee } from 'lucide-react';
@@ -56,7 +57,7 @@ export default function ReportsPage() {
     const fetchFinanceData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
         try {
-            const isVendor = profile?.role === 'vendor' && profile?.id;
+            const vendorId = getVendorId(profile);
 
             let incomeQuery = supabase.from('income_entries').select('amount, income_date, category, profile:profiles(role)');
             let transInQuery = supabase.from('transactions').select(`
@@ -64,7 +65,7 @@ export default function ReportsPage() {
                 lot:product_lots!inner(cost_price, products!inner(vendor_id)),
                 sale:sales(parcel_status)
             `).eq('type', 'in');
-            let expensesQuery = supabase.from('expenses').select('id, amount, description, expense_date, category, created_at, profile:profiles(role)');
+            let expensesQuery = supabase.from('expenses').select('id, amount, description, expense_date, category, created_at, profile:profiles!expenses_recorded_by_fkey(role)');
             let lotSalesQuery = supabase.from('transactions').select(`
                 id,
                 sale_id,
@@ -88,12 +89,21 @@ export default function ReportsPage() {
                 )
             `);
 
-            if (isVendor) {
-                incomeQuery = incomeQuery.eq('recorded_by', profile.id);
-                transInQuery = transInQuery.eq('lot.products.vendor_id', profile.id);
-                expensesQuery = expensesQuery.eq('recorded_by', profile.id);
-                lotSalesQuery = lotSalesQuery.eq('lot.products.vendor_id', profile.id);
-                lotsQuery = lotsQuery.eq('products.vendor_id', profile.id);
+            if (vendorId) {
+                const { data: members } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .or(`id.eq.${vendorId},vendor_id.eq.${vendorId}`);
+                const memberIds = (members || []).map((m: any) => m.id);
+                if (memberIds.length > 0) {
+                    incomeQuery = incomeQuery.in('recorded_by', memberIds);
+                } else {
+                    incomeQuery = incomeQuery.eq('recorded_by', profile?.id);
+                }
+                transInQuery = transInQuery.eq('lot.products.vendor_id', vendorId);
+                expensesQuery = expensesQuery.or(`recorded_by.eq.${profile?.id},vendor_id.eq.${vendorId}`);
+                lotSalesQuery = lotSalesQuery.eq('lot.products.vendor_id', vendorId);
+                lotsQuery = lotsQuery.eq('products.vendor_id', vendorId);
             } else {
                 transInQuery = transInQuery.is('lot.products.vendor_id', null);
                 lotSalesQuery = lotSalesQuery.is('lot.products.vendor_id', null);
@@ -116,7 +126,7 @@ export default function ReportsPage() {
 
             let incomeEntries = incomeRes.data;
             let expensesData = expensesRes.data;
-            if (!isVendor) {
+            if (!vendorId) {
                 incomeEntries = (incomeRes.data || []).filter((i: any) => (i.profile?.role ?? null) !== 'vendor');
                 expensesData = (expensesRes.data || []).filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
             }
@@ -138,12 +148,10 @@ export default function ReportsPage() {
 
             const salesRevenue = Array.from(deliveredSalesMap.values()).reduce((sum, s) => sum + s.amount, 0);
 
-            // Manual income entries can also be added if needed, but per request we focus on sold amounts
-            const otherIncome = (incomeEntries || [])
-                .filter((i: any) => i.category === 'income')
-                .reduce((sum, i) => sum + Number(i.amount), 0);
-
-            const totalRevenue = salesRevenue + otherIncome;
+            // Revenue is auto-calculated from delivered sales only. Manual
+            // income entries are a separate cashflow ledger and are NOT added
+            // here, otherwise delivered COD sales would be double-counted.
+            const totalRevenue = salesRevenue;
 
             // Calculate Stock Purchase Value (Requested as COGS by user)
             const totalCOGS = (saleTransactions || [])
@@ -376,15 +384,7 @@ export default function ReportsPage() {
                     })
                     .reduce((sum, s) => sum + s.amount, 0);
 
-                const mOtherIncome = (incomeEntries || [])
-                    .filter((i: any) => i.category === 'income')
-                    .filter((i: any) => {
-                        const d = new Date(i.income_date);
-                        return d >= mStart && d <= mEnd;
-                    })
-                    .reduce((sum, i) => sum + Number(i.amount), 0);
-
-                const mRevenue = mSalesRevenue + mOtherIncome;
+                const mRevenue = mSalesRevenue;
 
                 const mInvestment = (incomeEntries || [])
                     .filter((i: any) => i.category === 'investment')

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
     Package, Loader2, Check, AlertTriangle, Globe, Video
@@ -174,10 +175,11 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let wpQuery = supabase.from('website_products').select(`*, website_product_images(*)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            wpQuery = wpQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            wpQuery = wpQuery.eq('vendor_id', vendorId);
         } else {
             // Main app (admin/staff): only main-store products; hide vendor products.
             wpQuery = wpQuery.is('vendor_id', null);
@@ -196,8 +198,8 @@ export default function WebsiteProductsPage() {
         // Vendors only see their own products; the main app only sees its own
         // (vendor_id IS NULL) so the two SKU links stay fully separate.
         let invQuery = supabase.from('inventory_stock_view').select('id, name, sku, available_stock');
-        if (profile?.role === 'vendor' && profile?.id) {
-            invQuery = invQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            invQuery = invQuery.eq('vendor_id', vendorId);
         } else {
             invQuery = invQuery.is('vendor_id', null);
         }
@@ -208,13 +210,13 @@ export default function WebsiteProductsPage() {
         // Fetch Ads Options (main app only sees its own ads; vendors see their own)
         let adsQuery = supabase
             .from('expenses')
-            .select('id, description, profile:profiles(role)')
+            .select('id, description, profile:profiles!expenses_recorded_by_fkey(role)')
             .eq('category', 'ads');
-        if (profile?.role === 'vendor' && profile?.id) {
-            adsQuery = adsQuery.eq('recorded_by', profile.id);
+        if (vendorId) {
+            adsQuery = adsQuery.eq('recorded_by', profile?.id);
         }
         const { data: adsData } = await adsQuery;
-        if (profile?.role !== 'vendor') {
+        if (!isVendorMember(profile)) {
             setAdsOptions((adsData || []).filter((e: any) => (e.profile?.role ?? null) !== 'vendor'));
         } else {
             setAdsOptions(adsData || []);
@@ -357,7 +359,7 @@ export default function WebsiteProductsPage() {
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
                 ad_id: form.ad_id || null,
-                vendor_id: profile?.role === 'vendor' ? profile.id : null,
+                vendor_id: getVendorId(profile),
                 updated_at: new Date().toISOString()
             };
 

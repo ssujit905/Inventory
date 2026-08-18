@@ -5,6 +5,7 @@ import { useSettings } from './context/SettingsContext';
 import Home from './pages/Home';
 import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
+import AllReviews from './pages/AllReviews';
 import StorePage from './pages/StorePage';
 import AdminDashboard from './pages/AdminDashboard';
 import Cart from './pages/Cart';
@@ -33,6 +34,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/product/:id/reviews" element={<AllReviews />} />
           <Route path="/store/:vendorId" element={<StorePage />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/cart" element={<Cart />} />

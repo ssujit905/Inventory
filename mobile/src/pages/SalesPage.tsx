@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { Plus, ShoppingCart, User, Phone, IndianRupee, X, History, CheckCircle2, Edit2, Eye, FileDown, Globe, Zap } from 'lucide-react';
@@ -183,10 +184,10 @@ export default function SalesPage() {
     );
 
     const fetchSales = async () => {
-        const isVendor = profile?.role === 'vendor' && profile?.id;
+        const vendorId = getVendorId(profile);
         let salesQuery = supabase
             .from('sales')
-            .select(isVendor ? `
+            .select(vendorId ? `
                 *,
                 sale_items!inner (
                     id,
@@ -218,8 +219,8 @@ export default function SalesPage() {
                 ad:expenses!ad_id(description)
             `);
 
-        if (isVendor) {
-            salesQuery = salesQuery.eq('sale_items.product.vendor_id', profile.id);
+        if (vendorId) {
+            salesQuery = salesQuery.eq('sale_items.product.vendor_id', vendorId);
         }
 
         const { data } = await salesQuery
@@ -252,7 +253,7 @@ export default function SalesPage() {
             }).filter((sale: any) => {
                 // Main app shows only main-store sales; any sale containing a
                 // vendor's product belongs to that vendor's portal.
-                if (isVendor) return true;
+                if (vendorId) return true;
                 return !(sale.sale_items || []).some((i: any) => i.product?.vendor_id);
             });
             setSales(processedSales as any);
@@ -276,8 +277,9 @@ export default function SalesPage() {
                 )
             `);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            prodQuery = prodQuery.eq('vendor_id', profile.id);
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            prodQuery = prodQuery.eq('vendor_id', vendorId);
         } else {
             // Main app (admin/staff) sells only main-store products; hide vendor products.
             prodQuery = prodQuery.is('vendor_id', null);
@@ -344,21 +346,22 @@ export default function SalesPage() {
     const fetchAds = async () => {
         let adsQuery = supabase
             .from('expenses')
-            .select('id, description, amount, profile:profiles(role)')
+            .select('id, description, amount, profile:profiles!expenses_recorded_by_fkey(role)')
             .eq('category', 'ads')
             .order('created_at', { ascending: false });
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            adsQuery = adsQuery.eq('recorded_by', profile.id);
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            adsQuery = adsQuery.or(`recorded_by.eq.${profile?.id},vendor_id.eq.${vendorId}`);
         }
 
         const { data } = await adsQuery;
 
         if (data) {
             // Main app (admin/staff): never show vendor-created ads.
-            // Vendors keep seeing only their own (filtered via recorded_by above).
+            // Vendor members keep seeing only their own (filtered via recorded_by above).
             let filtered = data;
-            if (profile?.role !== 'vendor') {
+            if (!isVendorMember(profile)) {
                 filtered = data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
             }
             setAdsOptions(filtered as AdOption[]);
@@ -369,8 +372,9 @@ export default function SalesPage() {
         let query = supabase
             .from('website_delivery_branches')
             .select('id, city');
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        const vendorId = getVendorId(profile);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         } else {
             // Main app (admin/staff): only main-store branches; hide vendor branches.
             query = query.is('vendor_id', null);

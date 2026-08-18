@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 type LotProfitRow = {
@@ -52,6 +53,7 @@ export default function ProfitPage() {
 
     const fetchProfitData = async (showLoader = true) => {
         if (showLoader) setLoading(true);
+        const vendorId = getVendorId(profile);
         try {
             let txQuery = supabase
                 .from('transactions')
@@ -69,8 +71,8 @@ export default function ProfitPage() {
                 `)
                 .eq('type', 'sale');
 
-            if (profile?.role === 'vendor' && profile?.id) {
-                txQuery = txQuery.eq('lot.products.vendor_id', profile.id);
+            if (vendorId) {
+                txQuery = txQuery.eq('lot.products.vendor_id', vendorId);
             }
 
             const { data: lotSales, error: lotSalesError } = await txQuery;

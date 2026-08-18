@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { getVendorId } from '../lib/vendorHelpers';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
     Package, Loader2, Check, AlertTriangle, Globe, Video
@@ -140,12 +141,13 @@ export default function WebsiteProductsPage() {
 
     const fetchProducts = async () => {
         setLoading(true);
+        const vendorId = getVendorId(profile);
         let query = supabase
             .from('website_products')
             .select(`*, website_product_images(*)`);
 
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('vendor_id', profile.id);
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
         }
 
         const { data, error } = await supabaseWithTimeout(
@@ -162,8 +164,8 @@ export default function WebsiteProductsPage() {
         // Vendors only see their own products; admins see only the main app's
         // (vendor_id IS NULL) so the two SKU links stay fully separate.
         let invQuery = supabase.from('inventory_stock_view').select('id, name, sku, available_stock');
-        if (profile?.role === 'vendor' && profile?.id) {
-            invQuery = invQuery.eq('vendor_id', profile.id);
+        if (vendorId) {
+            invQuery = invQuery.eq('vendor_id', vendorId);
         } else {
             invQuery = invQuery.is('vendor_id', null);
         }
@@ -296,7 +298,7 @@ export default function WebsiteProductsPage() {
                 allow_fonepay: form.allow_fonepay,
                 sizes: form.sizes.trim(),
                 video_url: form.video_url,
-                vendor_id: profile?.role === 'vendor' ? profile.id : null,
+                vendor_id: getVendorId(profile),
                 updated_at: new Date().toISOString()
             };
 

@@ -55,8 +55,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
             const currentProfile = profile as Profile;
 
-            // Only block 'staff' — vendors and admins are allowed in vendor app
-            if (currentProfile.role === 'staff') {
+            // Block main-store staff. Vendor-created staff (role staff with a
+            // vendor_id) belong to a vendor account and are allowed in.
+            if (currentProfile.role === 'staff' && !currentProfile.vendor_id) {
                 await supabase.auth.signOut();
                 set({ user: null, profile: null });
                 return;
@@ -125,14 +126,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             if (data?.user) {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('role')
+                    .select('role, vendor_id')
                     .eq('id', data.user.id)
                     .single();
 
-                // Only block staff — vendors and admins can login here
-                if (!profile || profile.role === 'staff') {
+                // Block main-store staff. Vendor-created staff (vendor_id set)
+                // belong to a vendor account and can sign in here.
+                if (!profile || (profile.role === 'staff' && !profile.vendor_id)) {
                     await supabase.auth.signOut();
-                    throw new Error('This is a Staff account. Please use the Main Staff Portal to login.');
+                    throw new Error('This is a Main Store Staff account. Please use the Main Staff Portal to login.');
                 }
 
                 set({ user: data.user });

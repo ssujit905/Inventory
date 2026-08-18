@@ -183,6 +183,7 @@ export default function StaffManagementPage() {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
+                .is('vendor_id', null)
                 .order('created_at', { ascending: false });
 
             if (error) {

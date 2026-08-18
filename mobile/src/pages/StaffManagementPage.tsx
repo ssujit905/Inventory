@@ -3,8 +3,48 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck, Users, Store, Eye, EyeOff, Save } from 'lucide-react';
+import { UserPlus, Shield, Mail, Edit2, X, AlertCircle, Key, UserCheck, Users, Store, Eye, EyeOff, Save, Phone, MapPin, Calendar, Building2, CreditCard, MessageCircle, Crown, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
+
+const MASTER_EMAIL = 'ssujit905@gmail.com';
+
+const isMaster = (p: Profile) => p.role === 'admin' && p.email?.toLowerCase() === MASTER_EMAIL;
+
+const roleLabel = (p: Profile) => (p.role === 'vendor' ? 'Vendor' : isMaster(p) ? 'Master Admin' : p.role);
+
+const roleBadgeClass = (p: Profile) => {
+    if (p.role === 'admin' && isMaster(p)) {
+        return 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300';
+    }
+    if (p.role === 'admin') {
+        return 'bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/30 dark:border-indigo-800 dark:text-indigo-300';
+    }
+    if (p.role === 'vendor') {
+        return 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-300';
+    }
+    return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-300';
+};
+
+const roleBadgeIcon = (p: Profile) => {
+    if (isMaster(p)) return <Crown size={10} />;
+    if (p.role === 'vendor') return <Store size={10} />;
+    return <Shield size={10} />;
+};
+
+const toggleVendorVerified = async (p: Profile, setProfiles: (fn: (prev: Profile[]) => Profile[]) => void, onMessage: (msg: string, type?: 'success' | 'error') => void) => {
+    const next = !p.is_verified;
+    const { error } = await supabase
+        .from('profiles')
+        .update({ is_verified: next })
+        .eq('id', p.id);
+
+    if (error) {
+        onMessage(error.message, 'error');
+        return;
+    }
+    setProfiles(prev => prev.map(x => (x.id === p.id ? { ...x, is_verified: next } : x)));
+    onMessage(next ? `Verified ${p.store_name || p.full_name || 'store'}` : `Verification removed for ${p.store_name || p.full_name || 'store'}`);
+};
 
 type Profile = {
     id: string;
@@ -14,6 +54,17 @@ type Profile = {
     role: 'admin' | 'staff' | 'vendor';
     permissions: 'read_only' | 'read_write';
     created_at: string;
+    phone?: string | null;
+    whatsapp?: string | null;
+    address?: string | null;
+    city?: string | null;
+    description?: string | null;
+    bank_name?: string | null;
+    bank_account_holder?: string | null;
+    bank_account_number?: string | null;
+    bank_branch?: string | null;
+    esewa_id?: string | null;
+    is_verified?: boolean;
 };
 
 export default function StaffManagementPage() {
@@ -44,6 +95,9 @@ export default function StaffManagementPage() {
     const [editPermissions, setEditPermissions] = useState<'read_only' | 'read_write'>('read_write');
     const [editNewPassword, setEditNewPassword] = useState('');
     const [showEditPassword, setShowEditPassword] = useState(false);
+
+    // Details Modal State
+    const [detailsProfile, setDetailsProfile] = useState<Profile | null>(null);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -98,6 +152,7 @@ export default function StaffManagementPage() {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
+                .is('vendor_id', null)
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -259,6 +314,21 @@ export default function StaffManagementPage() {
         }
     };
 
+    const renderDetailRow = (label: string, value?: string | null, Icon?: React.ComponentType<{ size?: number | string }>) =>
+        value ? (
+            <div className="flex items-center gap-4">
+                {Icon && (
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400">
+                        <Icon size={16} />
+                    </div>
+                )}
+                <div className="min-w-0">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{label}</p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 break-words">{value}</p>
+                </div>
+            </div>
+        ) : null;
+
     return (
         <DashboardLayout role={currentUserProfile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="px-5 max-w-7xl mx-auto space-y-6 pb-12">
@@ -346,6 +416,11 @@ export default function StaffManagementPage() {
                                                         {p.store_name}
                                                     </span>
                                                 )}
+                                                {p.is_verified && (
+                                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <ShieldCheck size={9} /> Verified
+                                                    </span>
+                                                )}
                                             </div>
                                             {p.email && (
                                                 <div className="flex items-center gap-1 mt-0.5">
@@ -372,6 +447,28 @@ export default function StaffManagementPage() {
                                             </p>
                                         </div>
                                     </div>
+                                    {p.role === 'vendor' && !isReadOnly && (
+                                        <button
+                                            onClick={() => toggleVendorVerified(p, setProfiles, (msg, type) => setMessage({ type: type || 'success', text: msg }))}
+                                            title={p.is_verified ? 'Remove verified badge' : 'Verify this vendor store'}
+                                            className={`px-3 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase transition-all border-l border-gray-50 dark:border-gray-800 ${
+                                                p.is_verified
+                                                    ? 'text-emerald-600 bg-emerald-50/50 hover:bg-emerald-50'
+                                                    : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-500/5'
+                                            }`}
+                                        >
+                                            <ShieldCheck size={12} />
+                                            {p.is_verified ? 'Verified' : 'Verify'}
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setDetailsProfile(p)}
+                                        title="View all details"
+                                        className="px-3 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
+                                    >
+                                        <Eye size={12} />
+                                        View
+                                    </button>
                                     {!isReadOnly && (
                                         <button
                                             onClick={() => openEditModal(p)}
@@ -608,6 +705,129 @@ export default function StaffManagementPage() {
                                     {actionLoading ? 'Saving...' : <><Save size={16} />Save Changes</>}
                                 </button>
                             </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Details Modal */}
+                {detailsProfile && (
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[92svh] flex flex-col">
+                            <div className="px-5 py-4 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50 flex-shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center font-black text-lg ${
+                                        detailsProfile.role === 'vendor' ? 'bg-purple-100 text-purple-700' : detailsProfile.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-gradient-to-br from-primary/20 to-primary/5 text-primary'
+                                    }`}>
+                                        {detailsProfile.role === 'vendor' ? <Store size={20} /> : (detailsProfile.full_name?.[0] || 'U')}
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-black text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                            {detailsProfile.full_name || 'Anonymous User'}
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${roleBadgeClass(detailsProfile)}`}>
+                                                {roleBadgeIcon(detailsProfile)} {roleLabel(detailsProfile)}
+                                            </span>
+                                        </h2>
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest mt-0.5 ${
+                                            detailsProfile.permissions === 'read_write'
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300'
+                                                : 'bg-orange-50 text-orange-700 border border-orange-100 dark:bg-orange-950/30 dark:border-orange-800 dark:text-orange-300'
+                                        }`}>
+                                            <UserCheck size={9} /> {detailsProfile.permissions === 'read_write' ? 'Read & Write' : 'Read Only'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setDetailsProfile(null)}
+                                    className="h-9 w-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-rose-100 hover:text-rose-600 transition-all"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                                {detailsProfile.role === 'vendor' && (
+                                    <div className="flex items-center justify-between rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 px-4 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${
+                                                detailsProfile.is_verified ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                                            }`}>
+                                                <ShieldCheck size={16} />
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Verification</p>
+                                                <p className={`text-xs font-bold ${detailsProfile.is_verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                                                    {detailsProfile.is_verified ? 'Verified Store' : 'Not Verified'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {!isReadOnly && (
+                                            <button
+                                                onClick={() => {
+                                                    toggleVendorVerified(detailsProfile, setProfiles, (msg, type) => setMessage({ type: type || 'success', text: msg }));
+                                                    setDetailsProfile({ ...detailsProfile, is_verified: !detailsProfile.is_verified });
+                                                }}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                    detailsProfile.is_verified
+                                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-rose-50 hover:text-rose-600'
+                                                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 hover:bg-emerald-100'
+                                                }`}
+                                            >
+                                                {detailsProfile.is_verified ? 'Unverify' : 'Verify'}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    {renderDetailRow('Email Address', detailsProfile.email, Mail)}
+                                    {renderDetailRow('Store Name', detailsProfile.store_name, Store)}
+                                    {renderDetailRow('Phone', detailsProfile.phone, Phone)}
+                                    {renderDetailRow('WhatsApp', detailsProfile.whatsapp, MessageCircle)}
+                                    {renderDetailRow('City', detailsProfile.city, MapPin)}
+                                    {renderDetailRow('Address', detailsProfile.address, MapPin)}
+                                    {renderDetailRow('Description', detailsProfile.description)}
+                                </div>
+
+                                {(detailsProfile.bank_name || detailsProfile.bank_account_holder || detailsProfile.bank_account_number || detailsProfile.bank_branch || detailsProfile.esewa_id) && (
+                                    <>
+                                        <div className="flex items-center gap-3 pt-1">
+                                            <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800"></div>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Bank & Payment</span>
+                                            <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800"></div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {renderDetailRow('Bank Name', detailsProfile.bank_name, Building2)}
+                                            {renderDetailRow('Account Holder', detailsProfile.bank_account_holder, CreditCard)}
+                                            {renderDetailRow('Account Number', detailsProfile.bank_account_number, CreditCard)}
+                                            {renderDetailRow('Branch', detailsProfile.bank_branch, MapPin)}
+                                            {renderDetailRow('eSewa ID', detailsProfile.esewa_id, CreditCard)}
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="flex items-center gap-3 pt-1">
+                                    <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800"></div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Registry</span>
+                                    <div className="h-px flex-1 bg-gray-100 dark:bg-gray-800"></div>
+                                </div>
+                                <div className="space-y-4">
+                                    {renderDetailRow('User ID', detailsProfile.id, Key)}
+                                    {renderDetailRow('Enlisted', format(new Date(detailsProfile.created_at), 'dd MMM yyyy, h:mm a'), Calendar)}
+                                </div>
+
+                                {!isReadOnly && (
+                                    <button
+                                        onClick={() => {
+                                            openEditModal(detailsProfile);
+                                            setDetailsProfile(null);
+                                        }}
+                                        className="w-full h-12 bg-primary text-white font-black text-sm rounded-2xl shadow-lg shadow-primary/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <Edit2 size={15} />
+                                        Edit Account
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

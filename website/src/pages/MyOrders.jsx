@@ -13,7 +13,7 @@ import {
 import { useNotification } from '../context/NotificationContext';
 
 const MyOrders = () => {
-    const { customer, login, logout, register, updateProfile, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
+    const { customer, login, logout, register, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
     const { settings } = useSettings();
     const { showNotification } = useNotification();
     const location = useLocation();
@@ -37,15 +37,7 @@ const MyOrders = () => {
     const [regName, setRegName] = useState('');
     const [regPhone, setRegPhone] = useState('');
     const [regPin, setRegPin] = useState('');
-    const [regAddress, setRegAddress] = useState('');
-    const [regCity, setRegCity] = useState('');
     const [error, setError] = useState('');
-
-    // Profile Edit State
-    const [editName, setEditName] = useState('');
-    const [editAddress, setEditAddress] = useState('');
-    const [editCity, setEditCity] = useState('');
-    const [updateMsg, setUpdateMsg] = useState({ text: '', type: '' });
 
     // Modals
     const [showCancelModal, setShowCancelModal] = useState(false);
@@ -69,18 +61,11 @@ const MyOrders = () => {
 
     // Change PIN & Settings State
     const [showChangePinModal, setShowChangePinModal] = useState(false);
-    const [settingsTab, setSettingsTab] = useState('pin'); // 'pin' | 'address'
     const [currentPin, setCurrentPin] = useState('');
     const [newPin, setNewPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
     const [pinLoading, setPinLoading] = useState(false);
     const [pinMsg, setPinMsg] = useState({ text: '', type: '' });
-
-    // Address State
-    const [addressCity, setAddressCity] = useState('');
-    const [addressStreet, setAddressStreet] = useState('');
-    const [savingAddress, setSavingAddress] = useState(false);
-    const [addressMsg, setAddressMsg] = useState({ text: '', type: '' });
 
     // Reset PIN State
     const [showResetModal, setShowResetModal] = useState(false);
@@ -100,15 +85,7 @@ const MyOrders = () => {
     const [setupPinLoading, setSetupPinLoading] = useState(false);
     const [setupPinError, setSetupPinError] = useState('');
 
-    // Sync customer address into state
-    useEffect(() => {
-        if (customer) {
-            setAddressCity(customer.city || '');
-            setAddressStreet(customer.address || '');
-        }
-    }, [customer]);
-
-    // Fetch delivery branches for Destination select
+    // Fetch delivery branches for delivery time estimates
     useEffect(() => {
         const fetchBranches = async () => {
             const { data } = await supabase
@@ -126,16 +103,10 @@ const MyOrders = () => {
     useEffect(() => {
         const openModal = () => {
             setShowChangePinModal(true);
-            setSettingsTab('pin');
             setPinMsg({ text: '', type: '' });
-            setAddressMsg({ text: '', type: '' });
             setCurrentPin('');
             setNewPin('');
             setConfirmPin('');
-            if (customer) {
-                setAddressCity(customer.city || '');
-                setAddressStreet(customer.address || '');
-            }
         };
         window.addEventListener('open-change-pin-modal', openModal);
         return () => window.removeEventListener('open-change-pin-modal', openModal);
@@ -184,41 +155,6 @@ const MyOrders = () => {
             setPinMsg({ text: 'Failed to change PIN. Please try again.', type: 'error' });
         } finally {
             setPinLoading(false);
-        }
-    };
-
-    const handleSaveAddress = async (e) => {
-        e.preventDefault();
-        setAddressMsg({ text: '', type: '' });
-        if (!addressCity) {
-            setAddressMsg({ text: 'Please select a destination city.', type: 'error' });
-            return;
-        }
-        if (!addressStreet.trim()) {
-            setAddressMsg({ text: 'Please enter your street address.', type: 'error' });
-            return;
-        }
-
-        setSavingAddress(true);
-        try {
-            const res = await updateProfile({
-                address: addressStreet.trim(),
-                city: addressCity
-            });
-
-            if (res.success) {
-                setAddressMsg({ text: 'Address saved successfully!', type: 'success' });
-                showNotification('Default delivery address saved!', 'success');
-                setTimeout(() => {
-                    setShowChangePinModal(false);
-                }, 1200);
-            } else {
-                setAddressMsg({ text: res.error || 'Failed to save address', type: 'error' });
-            }
-        } catch (err) {
-            setAddressMsg({ text: err.message || 'Error saving address', type: 'error' });
-        } finally {
-            setSavingAddress(false);
         }
     };
 
@@ -282,9 +218,6 @@ const MyOrders = () => {
 
     useEffect(() => {
         if (customer) {
-            setEditName(customer.name || '');
-            setEditAddress(customer.address || '');
-            setEditCity(customer.city || '');
             fetchOrders();
         }
     }, [customer]);
@@ -360,17 +293,8 @@ const MyOrders = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
         setError('');
-        const res = await register(regName, regPhone, regPin, regAddress, regCity);
+        const res = await register(regName, regPhone, regPin);
         if (!res.success) setError(res.error || 'Registration failed');
-    };
-
-    const handleUpdateProfile = async (e) => {
-        e.preventDefault();
-        const res = await updateProfile({ name: editName, address: editAddress, city: editCity });
-        if (res.success) {
-            setUpdateMsg({ text: 'Profile updated!', type: 'success' });
-            setTimeout(() => setUpdateMsg({ text: '', type: '' }), 3000);
-        }
     };
 
     const confirmCancelOrder = async () => {
@@ -448,7 +372,7 @@ const MyOrders = () => {
 
             setRatedOrderIds(prev => new Set([...prev, rateData.orderId]));
             setShowRateModal(false);
-            showNotification("Thanks for your review! 25 Shopy Coins added! ⏳🪙", 'success', 6000);
+            showNotification("Thanks for your review! 25 Shopy Coins are pending — they'll be added to your wallet after the 2-day return window closes. 🪙", 'success', 6000);
         } catch (err) {
             console.error('Rating error:', err);
             showNotification('Failed to submit rating. Please try again.', 'error');
@@ -586,16 +510,6 @@ const MyOrders = () => {
                             <input required className="form-input" placeholder="Full Name" value={regName} onChange={e => setRegName(e.target.value)} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '600' }} />
                         )}
                         <input required type="tel" maxLength={10} className="form-input" placeholder="Phone Number" value={isRegistering ? regPhone : phone} onChange={e => isRegistering ? setRegPhone(e.target.value.replace(/\D/g, '')) : setPhone(e.target.value.replace(/\D/g, ''))} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '600' }} />
-                        
-                        {isRegistering && (
-                            <>
-                                <select required className="form-input" value={regCity} onChange={e => setRegCity(e.target.value)} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '600' }}>
-                                    <option value="">Select City</option>
-                                    {branches.map(b => <option key={b.city} value={b.city}>{b.city}</option>)}
-                                </select>
-                                <input required className="form-input" placeholder="Area / Address" value={regAddress} onChange={e => setRegAddress(e.target.value)} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '600' }} />
-                            </>
-                        )}
                         
                         <input required type="password" maxLength={4} className="form-input" placeholder="4-Digit PIN" value={isRegistering ? regPin : pin} onChange={e => isRegistering ? setRegPin(e.target.value.replace(/\D/g, '')) : setPin(e.target.value.replace(/\D/g, ''))} style={{ padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em' }} />
                         
@@ -1048,58 +962,8 @@ const MyOrders = () => {
                             </button>
                         </div>
 
-                        {/* Tab Switcher */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: '#f1f5f9', padding: '4px', borderRadius: '12px', marginBottom: '1.5rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setSettingsTab('pin')}
-                                style={{
-                                    padding: '0.6rem',
-                                    borderRadius: '10px',
-                                    border: 'none',
-                                    background: settingsTab === 'pin' ? 'white' : 'transparent',
-                                    color: settingsTab === 'pin' ? 'var(--primary-red)' : '#64748b',
-                                    fontWeight: '800',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer',
-                                    boxShadow: settingsTab === 'pin' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-                                    transition: 'all 0.2s',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justify: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                🔒 Change PIN
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setSettingsTab('address')}
-                                style={{
-                                    padding: '0.6rem',
-                                    borderRadius: '10px',
-                                    border: 'none',
-                                    background: settingsTab === 'address' ? 'white' : 'transparent',
-                                    color: settingsTab === 'address' ? 'var(--primary-red)' : '#64748b',
-                                    fontWeight: '800',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer',
-                                    boxShadow: settingsTab === 'address' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-                                    transition: 'all 0.2s',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justify: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                📍 Add Address
-                            </button>
-                        </div>
-
-                        {/* Tab 1: Change PIN Form */}
-                        {settingsTab === 'pin' && (
-                            <form onSubmit={handleChangePin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {/* Change PIN Form */}
+                        <form onSubmit={handleChangePin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Current PIN</label>
                                     <input required type="password" maxLength={4} value={currentPin} onChange={e => setCurrentPin(e.target.value.replace(/\D/g, ''))} placeholder="Current 4-digit PIN" style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '900', letterSpacing: '0.2em', fontSize: '1.1rem' }} />
@@ -1124,51 +988,6 @@ const MyOrders = () => {
                                     {pinLoading ? <Loader2 className="animate-spin" size={20} /> : '🔐 Update PIN'}
                                 </button>
                             </form>
-                        )}
-
-                        {/* Tab 2: Add/Edit Address Form */}
-                        {settingsTab === 'address' && (
-                            <form onSubmit={handleSaveAddress} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Destination / City</label>
-                                    <select
-                                        required
-                                        value={addressCity}
-                                        onChange={e => setAddressCity(e.target.value)}
-                                        style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '700', fontSize: '0.95rem', outline: 'none' }}
-                                    >
-                                        <option value="">Select Destination Branch/City</option>
-                                        {branches.map(b => (
-                                            <option key={b.id || b.city} value={b.city}>
-                                                {b.city} {b.shipping_fee ? `(Rs. ${b.shipping_fee} Delivery)` : ''}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '0.4rem' }}>Your Street Address</label>
-                                    <textarea
-                                        required
-                                        rows={3}
-                                        value={addressStreet}
-                                        onChange={e => setAddressStreet(e.target.value)}
-                                        placeholder="Street Name, Tole, Landmark, House No."
-                                        style={{ width: '100%', padding: '0.85rem 1.1rem', borderRadius: '12px', border: '1.5px solid #e2e8f0', background: '#f8fafc', fontWeight: '600', fontSize: '0.95rem', resize: 'vertical', outline: 'none' }}
-                                    />
-                                </div>
-
-                                {addressMsg.text && (
-                                    <p style={{ color: addressMsg.type === 'success' ? '#16a34a' : '#ef4444', fontSize: '0.85rem', fontWeight: '800', textAlign: 'center', padding: '0.75rem', background: addressMsg.type === 'success' ? '#dcfce7' : '#fee2e2', borderRadius: '10px' }}>
-                                        {addressMsg.type === 'success' ? '✅ ' : '❌ '}{addressMsg.text}
-                                    </p>
-                                )}
-
-                                <button type="submit" disabled={savingAddress} className="btn btn-primary" style={{ width: '100%', padding: '0.9rem', borderRadius: '12px', fontWeight: '900', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                    {savingAddress ? <Loader2 className="animate-spin" size={20} /> : '💾 Save Address'}
-                                </button>
-                            </form>
-                        )}
                     </div>
                 </div>
             )}

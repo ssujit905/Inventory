@@ -5,6 +5,7 @@ import { Printer, Calendar, Search, Loader2, CheckCircle2, Package, Eye, X, Sett
 import ReceiptTemplate from '../components/ReceiptTemplate'
 import { useAuthStore } from '../hooks/useAuthStore'
 import DashboardLayout from '../layouts/DashboardLayout'
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers'
 
 type Sale = {
     id: string
@@ -94,8 +95,9 @@ let query = supabase
         `)
             .eq('order_date', date)
             .order('created_at', { ascending: true })
-        if (profile?.role === 'vendor' && profile?.id) {
-            query = query.eq('sale_items.product.vendor_id', profile.id)
+        const vendorId = getVendorId(profile)
+        if (vendorId) {
+            query = query.eq('sale_items.product.vendor_id', vendorId)
         } else {
             query = query.is('sale_items.product.vendor_id', null)
         }
@@ -183,7 +185,7 @@ let query = supabase
                             {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
                             Fetch Orders
                         </button>
-                        {profile?.role !== 'vendor' && (
+                        {!isVendorMember(profile) && (
                         <button
                             onClick={() => { setTempBusinessName(businessName); setShowSettings(true); }}
                             className="p-2.5 text-gray-400 hover:text-gray-900 dark:hover:text-white bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl transition-colors shadow-sm"
