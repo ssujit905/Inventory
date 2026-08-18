@@ -650,7 +650,7 @@ const ProductDetail = () => {
                     <div style={{ backgroundColor: 'white', padding: '0.25rem 1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1.75rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
+                                <span style={{ fontSize: '1.4rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
                                 {product.is_sold_out && (
                                     <span style={{
                                         background: 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)',
