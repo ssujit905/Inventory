@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { MapPin, Sparkles } from 'lucide-react';
+import { MapPin, Sparkles, Truck } from 'lucide-react';
 
 const ProductCard = ({ product }) => {
 
@@ -21,6 +21,7 @@ const ProductCard = ({ product }) => {
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
+            aspectRatio: '3 / 5.5',
             border: '1px solid transparent',
             borderBottom: isSoldOut ? '3px solid var(--primary-red)' : '3px solid #000'
         }}
@@ -37,13 +38,13 @@ const ProductCard = ({ product }) => {
                 e.currentTarget.style.borderRightColor = 'transparent';
             }}
         >
-            <Link to={`/product/${product.id}`} style={{ display: 'block', position: 'relative' }}>
+            <Link to={`/product/${product.id}`} style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
                 <img
                     src={product.image}
                     alt={product.title}
                     style={{
                         width: '100%',
-                        aspectRatio: '1',
+                        height: '100%',
                         objectFit: 'cover',
                         display: 'block',
                         opacity: isSoldOut ? 0.62 : 1,
@@ -64,115 +65,64 @@ const ProductCard = ({ product }) => {
                 )}
             </Link>
 
-            <div style={{ padding: '0.6rem 0.65rem 0.55rem', display: 'flex', flexDirection: 'column', flex: 1, gap: '0.4rem' }}>
+            <div style={{ padding: '0.4rem 0.6rem 0.4rem', display: 'flex', flexDirection: 'column', flexShrink: 0, gap: '0.3rem', justifyContent: 'center' }}>
                 {/* Title */}
                 <Link to={`/product/${product.id}`}>
                     <h3 style={{
-                        fontSize: '0.85rem',
+                        fontSize: '0.78rem',
                         fontWeight: '400',
                         lineHeight: '1.3',
-                        height: '1.3em',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
                         color: isSoldOut ? 'var(--text-gray)' : 'var(--text-dark)'
                     }}>
                         {product.title}
                     </h3>
                 </Link>
 
-                {/* Trust Badges */}
-                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'nowrap', overflow: 'hidden' }}>
-                    {product.show_shopinepal !== false && (
-                        <span style={{
-                            fontSize: '0.65rem',
-                            color: 'var(--primary-red)',
-                            border: '1.2px solid var(--primary-red)',
-                            padding: '1px 6px',
-                            borderRadius: '3px',
-                            fontWeight: '800',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            opacity: isSoldOut ? 0.5 : 1
-                        }}>ShopyNepal</span>
-                    )}
-
-                    {/* COD Badge */}
-                    {(product.is_cod === true || (product.is_cod === undefined && !product.is_prepaid && !product.is_prebook)) && (
-                        <span style={{
-                            fontSize: '0.65rem',
-                            color: '#10b981', 
-                            border: '1.2px solid #10b981',
-                            padding: '1px 6px',
-                            borderRadius: '3px',
-                            fontWeight: '800',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            opacity: isSoldOut ? 0.5 : 1
-                        }}>COD</span>
-                    )}
-
-                    {product.is_prepaid === true && (
-                        <span style={{
-                            fontSize: '0.65rem',
-                            color: '#3b82f6', 
-                            border: '1.2px solid #3b82f6',
-                            padding: '1px 6px',
-                            borderRadius: '3px',
-                            fontWeight: '800',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            opacity: isSoldOut ? 0.5 : 1
-                        }}>Prepaid</span>
-                    )}
-
-                    {product.is_prebook === true && (
-                        <span style={{
-                            fontSize: '0.65rem',
-                            color: '#f59e0b', 
-                            border: '1.2px solid #f59e0b',
-                            padding: '1px 6px',
-                            borderRadius: '3px',
-                            fontWeight: '800',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            opacity: isSoldOut ? 0.5 : 1
-                        }}>Pre-booking</span>
-                    )}
-                </div>
-
                 {/* Price */}
-                <div style={{ marginTop: '0.1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     <span style={{
                         fontWeight: '800',
-                        fontSize: '1.1rem',
-                        color: isSoldOut ? 'var(--text-gray)' : 'var(--primary-red)'
+                        fontSize: '0.68rem',
+                        color: isSoldOut ? 'var(--text-gray)' : 'var(--primary-red)',
+                        whiteSpace: 'nowrap'
                     }}>
-                        Rs. {product.price.toLocaleString()}
+                        RS.{product.price.toLocaleString()}
                     </span>
                     {originalPrice && (
                         <span style={{
-                            fontSize: '0.8rem',
+                            fontSize: '0.6rem',
                             color: 'var(--text-gray)',
                             textDecoration: 'line-through',
-                            marginLeft: '0.5rem',
                             fontWeight: '500',
                             opacity: isSoldOut ? 0.5 : 1
                         }}>
-                            Rs. {originalPrice.toLocaleString()}
+                            RS.{originalPrice.toLocaleString()}
                         </span>
                     )}
                 </div>
 
-                {/* Ship From Location */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '-0.3rem' }}>
-                    <MapPin size={13} color="#64748b" />
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600' }}>
+                {/* Ship From + Delivery */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                    <MapPin size={11} color="#64748b" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {product.city || 'Kathmandu'}
                     </span>
+                    <span style={{ width: '1px', height: '0.8rem', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#10b981', flexShrink: 0 }}>
+                        <Truck size={11} />
+                        <span style={{ fontSize: '0.6rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            {product.delivery_days
+                                ? (String(product.delivery_days).toLowerCase().includes('day')
+                                    ? product.delivery_days
+                                    : `${product.delivery_days} days`)
+                                : '1-2 days'}
+                        </span>
+                    </span>
                 </div>
-
-
             </div>
         </div>
     );

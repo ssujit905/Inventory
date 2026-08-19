@@ -261,6 +261,25 @@ export default function WebsiteSettingsPage() {
         }
     };
 
+    const compressImage = (file: File, maxDim = 1024, quality = 0.82): Promise<Blob> =>
+        new Promise((resolve, reject) => {
+            const img = new window.Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { URL.revokeObjectURL(url); reject(new Error('Failed to process image')); return; }
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Failed to process image')), 'image/jpeg', quality);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unsupported image format')); };
+            img.src = url;
+        });
+
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !profile?.id) return;
@@ -270,15 +289,15 @@ export default function WebsiteSettingsPage() {
         }
         setUploadingAvatar(true);
         try {
-            const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
-            const path = `vendor-avatars/${profile.id}.${ext}`;
+            const compressed = await compressImage(file);
+            const path = `vendor-avatars/${profile.id}.jpg`;
             const { error: upErr } = await supabaseWithTimeout(
-                supabase.storage.from('website-images').upload(path, file, { upsert: true }),
+                supabase.storage.from('website-images').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' }),
                 120000
             );
             if (upErr) throw upErr;
             const { data } = supabase.storage.from('website-images').getPublicUrl(path);
-            setVendorForm(f => ({ ...f, avatar_url: data.publicUrl }));
+            setVendorForm(f => ({ ...f, avatar_url: `${data.publicUrl}?v=${Date.now()}` }));
             showToast('Store logo uploaded! Click Save to apply.');
         } catch (err: any) {
             showToast(err.message || 'Failed to upload logo', 'error');
@@ -498,6 +517,7 @@ export default function WebsiteSettingsPage() {
                         </h1>
                         <p className="text-xs text-gray-400 font-medium uppercase tracking-widest mt-1">Control your website content and branding</p>
                     </div>
+                    {!isVendorMember(profile) && (
                     <button
                         onClick={handleSave}
                         disabled={saving || isReadOnly}
@@ -506,6 +526,7 @@ export default function WebsiteSettingsPage() {
                         {saving ? <Loader2 size={16} className="animate-spin" /> : (isReadOnly ? null : <Save size={16} />)}
                         {saving ? 'Saving...' : (isReadOnly ? 'Read Only Mode' : 'Save All')}
                     </button>
+                    )}
                 </div>
 
                 {isVendorMember(profile) ? (

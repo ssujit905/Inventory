@@ -13,6 +13,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const { query, setQuery } = useSearchStore();
     const { profile, signOut } = useAuthStore();
     const isBasicPlan = profile?.role === 'vendor' && profile?.plan === 'basic';
+    const isVendorStaff = profile?.role === 'staff' && Boolean(profile?.vendor_id);
     const [suggestions, setSuggestions] = useState<{ text: string, type: 'name' | 'phone' | 'status' | 'sku' }[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [pendingCostCount, setPendingCostCount] = useState(0);
@@ -307,7 +308,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     <div className="pt-6 pb-2">
                         <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Website</p>
                     </div>
-                    {(role === 'admin' || profile?.role === 'vendor') && (
+                    {(role === 'admin' || profile?.role === 'vendor' || isVendorStaff) && (
                         <NavItem icon={<Globe size={18} strokeWidth={1.5} />} label="Products" path="/admin/website/products" active={location.pathname === '/admin/website/products'} />
                     )}
                     <NavItem 

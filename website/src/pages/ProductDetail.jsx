@@ -647,37 +647,29 @@ const ProductDetail = () => {
                     </div>
 
                     {/* Pricing Section */}
-                    <div style={{ backgroundColor: 'white', padding: '0.25rem 1rem', marginTop: '1px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1.4rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs. {activePrice.toLocaleString()}</span>
-                                {product.is_sold_out && (
-                                    <span style={{
-                                        background: 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)',
-                                        color: '#fff',
-                                        padding: '6px 11px',
-                                        fontWeight: '800',
-                                        fontSize: '0.65rem',
-                                        borderRadius: '999px',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.1em',
-                                        border: '1px solid rgba(255,255,255,0.2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        boxShadow: '0 6px 18px rgba(239,68,68,0.24)'
-                                    }}>
-                                        <Sparkles size={12} strokeWidth={2.5} color="#d8b36a" />
-                                        Sold Out
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Ship from Info */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                <MapPin size={14} color="#64748b" strokeWidth={2.5} />
-                                <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>{product.city || 'Kathmandu'}</span>
-                            </div>
+                    <div style={{ backgroundColor: 'white', padding: '0.4rem 1rem', marginTop: '1px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.1rem', color: 'var(--primary-red)', fontWeight: '900' }}>RS.{activePrice.toLocaleString()}</span>
+                            {product.is_sold_out && (
+                                <span style={{
+                                    background: 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)',
+                                    color: '#fff',
+                                    padding: '6px 11px',
+                                    fontWeight: '800',
+                                    fontSize: '0.65rem',
+                                    borderRadius: '999px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.1em',
+                                    border: '1px solid rgba(255,255,255,0.2)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    boxShadow: '0 6px 18px rgba(239,68,68,0.24)'
+                                }}>
+                                    <Sparkles size={12} strokeWidth={2.5} color="#d8b36a" />
+                                    Sold Out
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -686,6 +678,21 @@ const ProductDetail = () => {
                         <h1 style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: '800', lineHeight: '1.3', color: 'var(--text-dark)', margin: 0 }}>
                             {product.title}
                         </h1>
+                    </div>
+
+                    {/* Ship from Section - same design as delivery */}
+                    <div style={{ backgroundColor: 'white', padding: '12px', marginTop: '1px' }}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <MapPin size={18} color="#64748b" />
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.9rem', color: '#333' }}>
+                                        {product.city || 'Kathmandu'}
+                                    </span>
+                                    <ChevronRight size={16} color="#ccc" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Delivery Section */}
@@ -1042,7 +1049,7 @@ const ProductDetail = () => {
                     ) : (
                         <>
                             <span style={{ fontSize: '0.95rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
-                            <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>Rs. {activePrice.toLocaleString()}</span>
+                            <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>RS.{activePrice.toLocaleString()}</span>
                         </>
                     )}
                 </button>
@@ -1062,7 +1069,7 @@ const ProductDetail = () => {
                                 <img src={images[activeImageIndex]?.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <p style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>Rs. {activePrice.toLocaleString()}</p>
+                                <p style={{ fontSize: '1.05rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>RS.{activePrice.toLocaleString()}</p>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-gray)', marginTop: '2px' }}>
                                     {images[activeImageIndex]?.label ? `Variation: ${images[activeImageIndex].label}` : 'Select Variation'}
                                 </p>

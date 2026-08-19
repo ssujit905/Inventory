@@ -64,6 +64,7 @@ type Profile = {
     bank_account_number?: string | null;
     bank_branch?: string | null;
     esewa_id?: string | null;
+    plan?: string | null;
     is_verified?: boolean;
 };
 

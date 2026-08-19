@@ -3,7 +3,8 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { supabase } from '../lib/supabase';
-import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard } from 'lucide-react';
+import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard, Store, Camera, Copy, Link2 } from 'lucide-react';
+import { buildStoreLink } from '../lib/storeLink';
 
 interface Setting {
     key: string;
@@ -125,12 +126,14 @@ export default function WebsiteSettingsPage() {
         address: '',
         city: '',
         description: '',
+        avatar_url: '',
         bank_name: '',
         bank_account_holder: '',
         bank_account_number: '',
         bank_branch: '',
         esewa_id: ''
     });
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     useEffect(() => { 
         if (isVendorMember(profile)) {
@@ -156,6 +159,7 @@ export default function WebsiteSettingsPage() {
                     address: data.address || '',
                     city: data.city || '',
                     description: data.description || '',
+                    avatar_url: data.avatar_url || '',
                     bank_name: data.bank_name || '',
                     bank_account_holder: data.bank_account_holder || '',
                     bank_account_number: data.bank_account_number || '',
@@ -181,6 +185,7 @@ export default function WebsiteSettingsPage() {
                 address: vendorForm.address,
                 city: vendorForm.city,
                 description: vendorForm.description,
+                avatar_url: vendorForm.avatar_url,
                 bank_name: vendorForm.bank_name,
                 bank_account_holder: vendorForm.bank_account_holder,
                 bank_account_number: vendorForm.bank_account_number,
@@ -194,6 +199,51 @@ export default function WebsiteSettingsPage() {
             showToast(err.message || 'Failed to save vendor settings', 'error');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const compressImage = (file: File, maxDim = 1024, quality = 0.82): Promise<Blob> =>
+        new Promise((resolve, reject) => {
+            const img = new window.Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { URL.revokeObjectURL(url); reject(new Error('Failed to process image')); return; }
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Failed to process image')), 'image/jpeg', quality);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unsupported image format')); };
+            img.src = url;
+        });
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !profile?.id) return;
+        if (!file.type.startsWith('image/')) {
+            e.target.value = '';
+            return showToast('Please choose an image file', 'error');
+        }
+        setUploadingAvatar(true);
+        try {
+            const compressed = await compressImage(file);
+            const path = `vendor-avatars/${profile.id}.jpg`;
+            const { error: upErr } = await supabase.storage
+                .from('website-images')
+                .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
+            if (upErr) throw upErr;
+            const { data } = supabase.storage.from('website-images').getPublicUrl(path);
+            setVendorForm(f => ({ ...f, avatar_url: `${data.publicUrl}?v=${Date.now()}` }));
+            showToast('Store logo uploaded! Click Save to apply.');
+        } catch (err: any) {
+            showToast(err.message || 'Failed to upload logo', 'error');
+        } finally {
+            setUploadingAvatar(false);
+            if (e.target) e.target.value = '';
         }
     };
 
@@ -371,6 +421,7 @@ export default function WebsiteSettingsPage() {
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Website Settings</h1>
                         <p className="text-gray-400 font-medium text-xs uppercase tracking-widest">Control your website content and branding.</p>
                     </div>
+                    {!isVendorMember(profile) && (
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <button
                             onClick={handleSave}
@@ -381,6 +432,7 @@ export default function WebsiteSettingsPage() {
                             {saving ? 'Saving...' : 'Deploy Changes'}
                         </button>
                     </div>
+                    )}
                 </div>
 
                 {/* Live Preview Banner */}
@@ -394,6 +446,139 @@ export default function WebsiteSettingsPage() {
                     </div>
                 </div>
 
+                {isVendorMember(profile) ? (
+                    <form onSubmit={handleSaveVendor} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm space-y-6 p-5">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-[11px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-widest flex items-center gap-2">
+                                <Store size={16} className="text-primary" /> Vendor Store Details
+                            </h2>
+                        </div>
+
+                        {/* Store Logo Upload */}
+                        <div className="flex items-center gap-5">
+                            <div className="relative shrink-0">
+                                <div className="h-20 w-20 rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+                                    {vendorForm.avatar_url ? (
+                                        <img src={vendorForm.avatar_url} alt="Store logo" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <Store size={32} className="text-gray-300 dark:text-gray-600" />
+                                    )}
+                                </div>
+                                <label className="absolute -bottom-2 -right-2 h-8 w-8 flex items-center justify-center rounded-xl bg-primary text-white shadow-lg cursor-pointer hover:bg-primary/90 transition-all active:scale-90">
+                                    {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+                                </label>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs font-black text-gray-900 dark:text-gray-100">Store Logo</p>
+                                <p className="text-[10px] text-gray-400 font-medium leading-relaxed">This picture is displayed on your public store page so customers recognize your store.</p>
+                                {vendorForm.avatar_url && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setVendorForm(f => ({ ...f, avatar_url: '' }))}
+                                        className="text-[10px] font-bold text-rose-500 hover:text-rose-600 transition-colors"
+                                    >
+                                        Remove logo
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Your Store Link */}
+                        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
+                                <Link2 size={12} /> Your Store Link
+                            </p>
+                            <p className="text-[10px] text-gray-500 font-medium leading-relaxed">Share this link with customers to open your store directly on the website.</p>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={profile?.id ? buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id) : ''}
+                                    className="flex-1 h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-semibold text-gray-600 dark:text-gray-300 truncate outline-none"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!profile?.id) return;
+                                        navigator.clipboard.writeText(buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id));
+                                        showToast('Store link copied to clipboard!');
+                                    }}
+                                    className="h-10 px-3 rounded-xl bg-primary text-white text-[9px] font-black uppercase tracking-widest flex items-center gap-1 active:scale-95 transition-transform"
+                                >
+                                    <Copy size={12} /> Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Store Name *</label>
+                                <input
+                                    type="text" required value={vendorForm.store_name}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, store_name: e.target.value })}
+                                    placeholder="e.g. Himalayan Traders"
+                                    className="w-full h-11 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Contact Manager Name</label>
+                                <input
+                                    type="text" value={vendorForm.contact_person}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
+                                    placeholder="Manager Full Name"
+                                    className="w-full h-11 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Phone Number *</label>
+                                <input
+                                    type="tel" required value={vendorForm.phone}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                                    placeholder="98XXXXXXXX"
+                                    className="w-full h-11 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">WhatsApp Support</label>
+                                <input
+                                    type="tel" value={vendorForm.whatsapp}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, whatsapp: e.target.value })}
+                                    placeholder="98XXXXXXXX"
+                                    className="w-full h-11 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Address / Location</label>
+                                <input
+                                    type="text" value={vendorForm.address}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, address: e.target.value })}
+                                    placeholder="Store location in Nepal"
+                                    className="w-full h-11 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Store Description (Displayed on Public Product Pages)</label>
+                                <textarea
+                                    rows={3} value={vendorForm.description}
+                                    onChange={(e) => setVendorForm({ ...vendorForm, description: e.target.value })}
+                                    placeholder="Brief description of your vendor store for online customers..."
+                                    className="w-full p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-xs font-bold focus:border-primary/30 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="w-full py-3.5 bg-primary text-white rounded-xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-primary/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                        >
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            Save Store Settings
+                        </button>
+                    </form>
+                ) : (
+                <>
                 {/* Settings Groups */}
                 {SETTING_GROUPS.map(group => (
                     <div key={group.title} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm">
@@ -606,6 +791,8 @@ export default function WebsiteSettingsPage() {
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                     Deploy All Settings
                 </button>
+                </>
+                )}
             </div>
         </DashboardLayout>
     );

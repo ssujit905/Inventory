@@ -129,7 +129,7 @@ function App() {
         } />
 
         <Route path="/admin/website/products" element={
-          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteProductsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'vendor' || (profile?.role === 'staff' && !!profile?.vendor_id)) ? <WebsiteProductsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/orders" element={
           user ? <WebsiteOrdersPage /> : <Navigate to="/" replace />
@@ -144,7 +144,7 @@ function App() {
           user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/reports" element={
-          user && (profile?.role === 'admin' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+          user && (profile?.role === 'admin' || profile?.role === 'staff' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/customers" element={
           user && profile?.role === 'admin' ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
