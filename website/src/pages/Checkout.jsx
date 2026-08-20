@@ -333,7 +333,7 @@ const Checkout = () => {
                 const dateStr = `${mm}/${dd}/${yyyy}`;
 
                 const r1 = `Order ${tempOrderNumber}`;
-                const r2 = `Shipping rs. ${fmt(shippingFee)}`;
+                const r2 = `Shipping Rs. ${fmt(shippingFee)}`;
                 const returnUrl = `${window.location.origin}/payment-success`;
                 const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
                     body: { action: 'create-fonepay-payment', amount: totalAmountStr, prn: tempOrderNumber, date: dateStr, r1, r2, returnUrl }
@@ -524,7 +524,7 @@ const Checkout = () => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: '#64748b' }}>Total Amount</span>
-                                    <strong style={{ color: '#059669', fontSize: '1rem' }}>rs. {grandTotal.toLocaleString()}</strong>
+                                    <strong style={{ color: '#059669', fontSize: '1rem' }}>Rs. {grandTotal.toLocaleString()}</strong>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
                                     <span style={{ color: '#64748b' }}>Customer Name</span>
@@ -799,7 +799,7 @@ const Checkout = () => {
                                                 {item.title.length > 40 ? item.title.substring(0, 40) + '...' : item.title} 
                                                 <span style={{ color: '#94a3b8' }}> ×{item.quantity}</span>
                                             </span>
-                                            <span style={{ fontWeight: '700', flexShrink: 0 }}>rs. {(item.price * item.quantity).toLocaleString()}</span>
+                                            <span style={{ fontWeight: '700', flexShrink: 0 }}>Rs. {(item.price * item.quantity).toLocaleString()}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -807,25 +807,25 @@ const Checkout = () => {
                                 <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748b' }}>
                                         <span>Subtotal</span>
-                                        <span>rs. {checkoutSubtotal.toLocaleString()}</span>
+                                        <span>Rs. {checkoutSubtotal.toLocaleString()}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: shippingFee === 0 ? '#10b981' : '#64748b' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                             <Truck size={13} /> Shipping to {formData.city || '—'}
                                         </span>
                                         <span style={{ fontWeight: '700' }}>
-                                            {shippingFee === 0 ? '🎉 Free' : `rs. ${shippingFee.toLocaleString()}`}
+                                            {shippingFee === 0 ? '🎉 Free' : `Rs. ${shippingFee.toLocaleString()}`}
                                         </span>
                                     </div>
                                     {appliedCoinDiscount > 0 && (
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#10b981', fontWeight: '800' }}>
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>🪙 Shopy Coins</span>
-                                            <span>- rs. {appliedCoinDiscount.toLocaleString()}</span>
+                                            <span>- Rs. {appliedCoinDiscount.toLocaleString()}</span>
                                         </div>
                                     )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '1.2rem', borderTop: '2px solid #e2e8f0', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
                                         <span>Total</span>
-                                        <span style={{ color: 'var(--primary-red)' }}>rs. {grandTotal.toLocaleString()}</span>
+                                        <span style={{ color: 'var(--primary-red)' }}>Rs. {grandTotal.toLocaleString()}</span>
                                     </div>
                                 </div>
 

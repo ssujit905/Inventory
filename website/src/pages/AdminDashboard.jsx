@@ -59,7 +59,7 @@ const AdminDashboard = () => {
 
     const stats = [
         { label: 'Total Products', value: products.length, icon: <Package size={20} />, color: '#3b82f6' },
-        { label: 'Total Sales', value: 'rs. 54,200', icon: <TrendingUp size={20} />, color: '#22c55e' },
+        { label: 'Total Sales', value: 'Rs. 54,200', icon: <TrendingUp size={20} />, color: '#22c55e' },
         { label: 'Pending Orders', value: '12', icon: <ShoppingBag size={20} />, color: '#f59e0b' },
         { label: 'Active Users', value: '1,240', icon: <Users size={20} />, color: '#8b5cf6' }
     ];
@@ -192,7 +192,7 @@ const AdminDashboard = () => {
                                         </div>
                                     </td>
                                     <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', color: '#64748b' }}>{product.category}</td>
-                                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: '600' }}>rs. {product.price}</td>
+                                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: '600' }}>Rs. {product.price}</td>
                                     <td style={{ padding: '1rem 1.5rem' }}>
                                         <span style={{
                                             padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700',
@@ -247,7 +247,7 @@ const AdminDashboard = () => {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '600' }}>Price (rs.)</label>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '600' }}>Price (Rs.)</label>
                                     <input
                                         type="number" required
                                         style={{ width: '100%', padding: '0.7rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}

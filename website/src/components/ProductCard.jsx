@@ -90,7 +90,7 @@ const ProductCard = ({ product }) => {
                         color: isSoldOut ? 'var(--text-gray)' : 'var(--primary-red)',
                         whiteSpace: 'nowrap'
                     }}>
-                        rs.{product.price.toLocaleString()}
+                        Rs.{product.price.toLocaleString()}
                     </span>
                     {originalPrice && (
                         <span style={{
@@ -100,7 +100,7 @@ const ProductCard = ({ product }) => {
                             fontWeight: '500',
                             opacity: isSoldOut ? 0.5 : 1
                         }}>
-                            rs.{originalPrice.toLocaleString()}
+                            Rs.{originalPrice.toLocaleString()}
                         </span>
                     )}
                 </div>

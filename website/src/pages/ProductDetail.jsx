@@ -665,7 +665,7 @@ const ProductDetail = () => {
                     {/* Pricing Section */}
                     <div style={{ backgroundColor: 'white', padding: '0.4rem 1rem', marginTop: '1px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.1rem', color: 'var(--primary-red)', fontWeight: '900' }}>rs.{activePrice.toLocaleString()}</span>
+                            <span style={{ fontSize: '1.1rem', color: 'var(--primary-red)', fontWeight: '900' }}>Rs.{activePrice.toLocaleString()}</span>
                             {product.is_sold_out && (
                                 <span style={{
                                     background: 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)',
@@ -1088,7 +1088,7 @@ const ProductDetail = () => {
                     ) : (
                         <>
                             <span style={{ fontSize: '0.95rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
-                            <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>rs.{activePrice.toLocaleString()}</span>
+                            <span style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '700' }}>Rs.{activePrice.toLocaleString()}</span>
                         </>
                     )}
                 </button>
@@ -1108,7 +1108,7 @@ const ProductDetail = () => {
                                 <img src={images[activeImageIndex]?.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <p style={{ fontSize: '1.05rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>rs.{activePrice.toLocaleString()}</p>
+                                <p style={{ fontSize: '1.05rem', fontWeight: '900', color: 'var(--primary-red)', margin: 0 }}>Rs.{activePrice.toLocaleString()}</p>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-gray)', marginTop: '2px' }}>
                                     {images[activeImageIndex]?.label ? `Variation: ${images[activeImageIndex].label}` : 'Select Variation'}
                                 </p>
@@ -1248,7 +1248,7 @@ const ProductDetail = () => {
                                     ? (pickerAction === 'buy' ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
                                             <span style={{ fontSize: '1rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
-                                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>rs. {(activePrice * quantity).toLocaleString()}</span>
+                                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>Rs. {(activePrice * quantity).toLocaleString()}</span>
                                         </div>
                                     ) : 'Add to Cart') 
                                     : 'Please Select All Options'}
