@@ -14,7 +14,7 @@ const Footer = () => {
         <footer style={{ 
             background: '#0f172a', 
             color: '#f8fafc', 
-            padding: '4rem 1rem 2rem', 
+            padding: '2rem 1rem 1rem', 
             borderTop: '1px solid rgba(255,255,255,0.05)',
             marginTop: 'auto'
         }}>
@@ -48,17 +48,6 @@ const Footer = () => {
                 <div>
                     <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Shop Now</h3>
                     <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
-                        <FooterLink to="/shop" label="All Products" />
-                        <FooterLink to="/shop" label="New Arrivals" />
-                        <FooterLink to="/shop" label="Best Sellers" />
-                        <FooterLink to="/shop" label="Shop Online" />
-                    </ul>
-                </div>
-
-                {/* Account & Support */}
-                <div>
-                    <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Account</h3>
-                    <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
                         <FooterLink to="/my-orders" label="Track Order" />
                         <FooterLink to="/cart" label="Shopping Cart" />
                         <FooterLink to="/my-orders?tab=settings" label="Profile Settings" />
@@ -80,8 +69,8 @@ const Footer = () => {
 
             <div className="container footer-bottom" style={{ 
                 borderTop: '1px solid rgba(255,255,255,0.05)', 
-                marginTop: '4rem', 
-                paddingTop: '2rem',
+                marginTop: '1.75rem', 
+                paddingTop: '1.25rem',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1rem',
@@ -101,20 +90,19 @@ const Footer = () => {
                 .footer-grid {
                     display: grid;
                     grid-template-columns: repeat(2, 1fr);
-                    gap: 2.5rem;
+                    gap: 1.75rem;
                 }
-                .footer-grid > div:first-child,
-                .footer-grid > div:last-child {
+                .footer-grid > div:first-child {
                     grid-column: span 2;
                 }
                 @media (min-width: 640px) {
                     .footer-grid { 
-                        gap: 3rem;
+                        gap: 2rem;
                     }
                 }
                 @media (min-width: 992px) {
                     .footer-grid { 
-                        grid-template-columns: 1.5fr 1fr 1fr 1fr; 
+                        grid-template-columns: 1.5fr 1fr 1fr; 
                     }
                     .footer-grid > div:first-child,
                     .footer-grid > div:last-child {
