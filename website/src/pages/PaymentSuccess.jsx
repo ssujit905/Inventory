@@ -85,7 +85,7 @@ const PaymentSuccess = () => {
 
                         const confirmedOrderNumber = createRes?.order_number || realOrderNumber;
                         const cleanAmount = String(total_amount).replace(/,/g, '');
-                        const paymentNote = `eSewa Payment Complete.\nTxn Code: ${transaction_code}\nTotal Paid: Rs. ${cleanAmount}`;
+                        const paymentNote = `eSewa Payment Complete.\nTxn Code: ${transaction_code}\nTotal Paid: rs. ${cleanAmount}`;
 
                         await supabase.rpc('confirm_website_payment', {
                             p_order_number: confirmedOrderNumber,
@@ -180,7 +180,7 @@ const PaymentSuccess = () => {
                         if (createError) throw new Error('Payment verified but order could not be created: ' + createError.message);
 
                         const confirmedOrderNumber = createRes?.order_number || PRN;
-                        const paymentNote = `Fonepay Payment Complete.\nUTN Ref: ${UTN}\nBill ID: ${BID}\nTotal Paid: Rs. ${AMT}`;
+                        const paymentNote = `Fonepay Payment Complete.\nUTN Ref: ${UTN}\nBill ID: ${BID}\nTotal Paid: rs. ${AMT}`;
 
                         await supabase.rpc('confirm_website_payment', {
                             p_order_number: confirmedOrderNumber,
@@ -280,7 +280,7 @@ const PaymentSuccess = () => {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#64748b' }}>Amount Paid</span>
-                        <strong style={{ color: '#60b524', fontSize: '1rem' }}>Rs. {orderInfo.totalAmount.toLocaleString()}</strong>
+                        <strong style={{ color: '#60b524', fontSize: '1rem' }}>rs. {orderInfo.totalAmount.toLocaleString()}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
                         <span style={{ color: '#64748b' }}>Customer Name</span>

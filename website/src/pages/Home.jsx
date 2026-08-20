@@ -289,10 +289,10 @@ const Home = () => {
                                         <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#ee4d2d', marginBottom: '2px' }}>
-                                                    Rs.{Number(product.price).toLocaleString()}
+                                                    rs.{Number(product.price).toLocaleString()}
                                                 </div>
                                                 <div style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#999' }}>
-                                                    Rs.{Number(product.original_price).toLocaleString()}
+                                                    rs.{Number(product.original_price).toLocaleString()}
                                                 </div>
                                             </div>
 

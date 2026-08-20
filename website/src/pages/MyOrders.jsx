@@ -817,7 +817,7 @@ const MyOrders = () => {
                                         <span style={{ padding: '0.4rem 1rem', borderRadius: '100px', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}` }}>
                                             {order.status}
                                         </span>
-                                        <p style={{ fontSize: '1rem', fontWeight: '900', marginTop: '0.5rem' }}>Rs. {order.total_amount.toLocaleString()}</p>
+                                        <p style={{ fontSize: '1rem', fontWeight: '900', marginTop: '0.5rem' }}>rs. {order.total_amount.toLocaleString()}</p>
                                     </div>
                                 </div>
                                 <div style={{ padding: '1.5rem' }}>

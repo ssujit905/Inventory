@@ -1248,7 +1248,7 @@ const ProductDetail = () => {
                                     ? (pickerAction === 'buy' ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: '1.2' }}>
                                             <span style={{ fontSize: '1rem' }}>{product.is_prebook ? 'Pre-Book' : 'Buy Now'}</span>
-                                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>Rs. {(activePrice * quantity).toLocaleString()}</span>
+                                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>rs. {(activePrice * quantity).toLocaleString()}</span>
                                         </div>
                                     ) : 'Add to Cart') 
                                     : 'Please Select All Options'}

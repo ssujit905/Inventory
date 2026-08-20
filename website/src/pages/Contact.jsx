@@ -20,7 +20,7 @@ const Contact = () => {
         },
         {
             q: "What is Shopy Coin?",
-            a: "Shopy Coin is our exclusive reward points system. 1 Shopy Coin is equal to Rs. 1. You can use these coins to get instant discounts on your future purchases."
+            a: "Shopy Coin is our exclusive reward points system. 1 Shopy Coin is equal to rs. 1. You can use these coins to get instant discounts on your future purchases."
         },
         {
             q: "How can I get Shopy Coins?",
