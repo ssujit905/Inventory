@@ -47,7 +47,7 @@ const Footer = () => {
                 {/* Quick Links */}
                 <div>
                     <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Shop Now</h3>
-                    <ul className="footer-shop-links" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
+                    <ul className="footer-shop-links" style={{ display: 'flex', listStyle: 'none', padding: 0 }}>
                         <FooterLink to="/my-orders" label="Track Order" />
                         <FooterLink to="/cart" label="Shopping Cart" />
                         <FooterLink to="/my-orders?tab=settings" label="Profile Settings" />
@@ -58,7 +58,7 @@ const Footer = () => {
                 {/* Contact Section */}
                 <div>
                     <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Get in Touch</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="footer-contact" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <ContactItem icon={<Phone size={16} />} text={settings.store_phone || '+977 1-4XXXXXX'} />
                         <ContactItem icon={<Mail size={16} />} text={settings.store_email || 'support@shopynepal.com'} />
                         <ContactItem icon={<MapPin size={16} />} text={settings.store_address || 'Kathmandu, Nepal'} />
@@ -89,17 +89,23 @@ const Footer = () => {
             <style>{`
                 .footer-grid {
                     display: grid;
-                    grid-template-columns: repeat(2, 1fr);
+                    grid-template-columns: 1fr;
                     gap: 1.75rem;
-                }
-                .footer-grid > div:first-child {
-                    grid-column: span 2;
                 }
                 .footer-shop-links {
                     flex-direction: row;
+                    flex-wrap: wrap;
                     gap: 0.5rem;
                 }
                 .footer-shop-links a {
+                    font-size: 0.78rem;
+                }
+                .footer-contact {
+                    flex-direction: row;
+                    flex-wrap: wrap;
+                    gap: 0.5rem;
+                }
+                .footer-contact div {
                     font-size: 0.78rem;
                 }
                 @media (min-width: 640px) {
@@ -111,15 +117,18 @@ const Footer = () => {
                     .footer-grid { 
                         grid-template-columns: 1.5fr 1fr 1fr; 
                     }
-                    .footer-grid > div:first-child,
-                    .footer-grid > div:last-child {
-                        grid-column: span 1;
-                    }
                     .footer-shop-links {
                         flex-direction: column;
                         gap: 0.75rem;
                     }
                     .footer-shop-links a {
+                        font-size: 0.9rem;
+                    }
+                    .footer-contact {
+                        flex-direction: column;
+                        gap: 0.75rem;
+                    }
+                    .footer-contact div {
                         font-size: 0.9rem;
                     }
                     .footer-bottom { 
@@ -171,7 +180,7 @@ const FooterLink = ({ to, label }) => (
 );
 
 const ContactItem = ({ icon, text }) => (
-    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', color: '#94a3b8', fontSize: '0.9rem', fontWeight: '600' }}>
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#94a3b8', fontWeight: '600' }}>
         <span style={{ color: 'var(--primary-red)' }}>{icon}</span>
         <span>{text}</span>
     </div>
