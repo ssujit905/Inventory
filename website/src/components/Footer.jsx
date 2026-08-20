@@ -47,7 +47,7 @@ const Footer = () => {
                 {/* Quick Links */}
                 <div>
                     <h3 style={{ fontSize: '0.85rem', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.5rem' }}>Shop Now</h3>
-                    <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', listStyle: 'none', padding: 0 }}>
+                    <ul className="footer-shop-links" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
                         <FooterLink to="/my-orders" label="Track Order" />
                         <FooterLink to="/cart" label="Shopping Cart" />
                         <FooterLink to="/my-orders?tab=settings" label="Profile Settings" />
@@ -95,6 +95,13 @@ const Footer = () => {
                 .footer-grid > div:first-child {
                     grid-column: span 2;
                 }
+                .footer-shop-links {
+                    flex-direction: row;
+                    gap: 0.5rem;
+                }
+                .footer-shop-links a {
+                    font-size: 0.78rem;
+                }
                 @media (min-width: 640px) {
                     .footer-grid { 
                         gap: 2rem;
@@ -107,6 +114,13 @@ const Footer = () => {
                     .footer-grid > div:first-child,
                     .footer-grid > div:last-child {
                         grid-column: span 1;
+                    }
+                    .footer-shop-links {
+                        flex-direction: column;
+                        gap: 0.75rem;
+                    }
+                    .footer-shop-links a {
+                        font-size: 0.9rem;
                     }
                     .footer-bottom { 
                         flex-direction: row !important; 
@@ -143,7 +157,6 @@ const FooterLink = ({ to, label }) => (
             style={{ 
                 color: '#94a3b8', 
                 textDecoration: 'none', 
-                fontSize: '0.9rem', 
                 fontWeight: '600',
                 transition: 'all 0.2s ease',
                 padding: '4px 0',
