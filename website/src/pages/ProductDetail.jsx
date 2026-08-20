@@ -1,4 +1,4 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
@@ -452,7 +452,7 @@ const ProductDetail = () => {
                             paddingTop: 'env(safe-area-inset-top)'
                         }}>
                             <div
-                                onClick={() => navigate(-1)}
+                                onClick={() => navigate('/')}
                                 style={{
                                     width: '44px', height: '44px', borderRadius: '50%',
                                     backgroundColor: 'rgba(255, 255, 255, 0.95)', color: '#0f172a',
@@ -934,6 +934,7 @@ const ProductDetail = () => {
                 }}>
                     <Link
                         to={`/store/${storeSlug(vendorProfile)}`}
+                        state={{ from: location.pathname }}
                         style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', textDecoration: 'none', cursor: 'pointer' }}
                     >
                         {vendorProfile.avatar_url ? (
