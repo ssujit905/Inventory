@@ -1,4 +1,4 @@
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
@@ -934,7 +934,6 @@ const ProductDetail = () => {
                 }}>
                     <Link
                         to={`/store/${storeSlug(vendorProfile)}`}
-                        state={{ from: location.pathname }}
                         style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '14px', textDecoration: 'none', cursor: 'pointer' }}
                     >
                         {vendorProfile.avatar_url ? (
