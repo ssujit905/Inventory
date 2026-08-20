@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -74,6 +74,37 @@ export default function StaffManagementPage() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const isReadOnly = currentUserProfile?.permissions === 'read_only';
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!actionLoading) return;
+        const t = setTimeout(() => {
+            setActionLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [actionLoading]);
 
     // Message State
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -190,10 +221,17 @@ export default function StaffManagementPage() {
         }
     };
 
-    const handleAddStaff = async (e: React.FormEvent) => {
+const handleAddStaff = async (e: React.FormEvent) => {
         e.preventDefault();
         setActionLoading(true);
         setMessage(null);
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
 
         try {
             // Logic to create a user without signing out the current admin:
@@ -222,7 +260,7 @@ data: {
                             role: newRole,
                             permissions: newPermissions,
                             plan: newRole === 'vendor' ? newPlan : null
-                        }
+                    }
                 }
             });
 
@@ -230,17 +268,20 @@ data: {
             if (!authData.user) throw new Error("Personnel creation failed in authentication layer.");
 
             // 2. Insert Profile Entry manually via the admin's session
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .upsert({
-                    id: authData.user.id,
-                    full_name: newName,
-                    email: newEmail,
-                    store_name: newRole === 'vendor' ? newStoreName : null,
-                    role: newRole,
-                    permissions: newPermissions,
-                    plan: newRole === 'vendor' ? newPlan : null
-                });
+            const { error: profileError } = await supabaseWithTimeout(
+                supabase
+                    .from('profiles')
+                    .upsert({
+                        id: authData.user.id,
+                        full_name: newName,
+                        email: newEmail,
+                        store_name: newRole === 'vendor' ? newStoreName : null,
+                        role: newRole,
+                        permissions: newPermissions,
+                        plan: newRole === 'vendor' ? newPlan : null
+                    })
+                    .abortSignal(controller.signal)
+            );
 
             if (profileError) {
                 console.warn('Profile creation failed, but user was created in auth:', profileError);
@@ -251,7 +292,7 @@ data: {
                 text: `Successfully created ${newRole === 'vendor' ? 'Vendor Partner' : newRole} account for ${newName}!`
             });
 
-            fetchProfiles();
+            await supabaseWithTimeout(fetchProfiles());
             clearDraft();
             setIsAddModalOpen(false);
 
@@ -264,7 +305,11 @@ data: {
             setNewPermissions('read_only');
 
         } catch (error: any) {
-            if (error.message?.includes('already registered')) {
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else if (error.message?.includes('already registered')) {
                 setMessage({
                     type: 'error',
                     text: 'Email already exists. Update their role in the list below if they are already registered.'
@@ -273,6 +318,7 @@ data: {
                 setMessage({ type: 'error', text: error.message });
             }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setActionLoading(false);
         }
     };
@@ -294,17 +340,27 @@ data: {
         setActionLoading(true);
         setMessage(null);
 
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .update({
-                    full_name: editName,
-                    email: editEmail,
-                    store_name: editingProfile.role === 'vendor' ? editStoreName : editingProfile.store_name,
-                    permissions: editPermissions,
-                    plan: editingProfile.role === 'vendor' ? editPlan : editingProfile.plan,
-                })
-                .eq('id', editingProfile.id);
+            const { error: profileError } = await supabaseWithTimeout(
+                supabase
+                    .from('profiles')
+                    .update({
+                        full_name: editName,
+                        email: editEmail,
+                        store_name: editingProfile.role === 'vendor' ? editStoreName : editingProfile.store_name,
+                        permissions: editPermissions,
+                        plan: editingProfile.role === 'vendor' ? editPlan : editingProfile.plan,
+                    })
+                    .eq('id', editingProfile.id)
+                    .abortSignal(controller.signal)
+            );
 
             if (profileError) throw profileError;
 
@@ -313,11 +369,18 @@ data: {
                 text: `Profile updated for ${editName}.`
             });
 
-            fetchProfiles();
+            await supabaseWithTimeout(fetchProfiles());
             setEditingProfile(null);
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setActionLoading(false);
         }
     };

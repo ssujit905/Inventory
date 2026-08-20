@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     Plus, Trash2, Edit3, X, Upload, Image, Star, Eye, EyeOff,
     Package, Loader2, Check, AlertTriangle, Globe, Video
@@ -75,6 +75,39 @@ export default function WebsiteProductsPage() {
     const [imageProgress, setImageProgress] = useState<{current: number, total: number, pct: number} | null>(null);
     const [adsOptions, setAdsOptions] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: the save flow includes video (up to 5 min) and image
+    // uploads, so allow a long window, but the button can never spin forever.
+    useEffect(() => {
+        if (!saving) return;
+        const t = setTimeout(() => {
+            setSaving(false);
+            setVideoProgress(null);
+            setImageProgress(null);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 360000);
+        return () => clearTimeout(t);
+    }, [saving]);
 
     const emptyForm = {
         title: '', description: '', price: '', original_price: '',
@@ -295,6 +328,14 @@ export default function WebsiteProductsPage() {
         if (saving) return;
         setSaving(true);
         let createdProductId: number | null = null;
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             const prices = variants.map(v => Number(v.price)).filter(p => !isNaN(p) && p > 0);
             const computedBasePrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -512,13 +553,20 @@ export default function WebsiteProductsPage() {
             // save does not create duplicate products.
             if (createdProductId) {
                 try {
-                    await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', createdProductId));
+                    await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', createdProductId).abortSignal(controller.signal));
                 } catch (rollbackErr) {
                     console.warn('Failed to roll back created product:', rollbackErr);
                 }
             }
-            showToast(err.message || 'Save failed', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Save interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Save failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
             setVideoProgress(null);
             setImageProgress(null);
@@ -528,16 +576,29 @@ export default function WebsiteProductsPage() {
     const handleDelete = async () => {
         if (!deleteConfirm.id) return;
         setSaving(true);
+
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
-            await supabase.from('website_product_images').delete().eq('product_id', deleteConfirm.id);
-            const { error } = await supabase.from('website_products').delete().eq('id', deleteConfirm.id);
+            await supabaseWithTimeout(supabase.from('website_product_images').delete().eq('product_id', deleteConfirm.id).abortSignal(controller.signal));
+            const { error } = await supabaseWithTimeout(supabase.from('website_products').delete().eq('id', deleteConfirm.id).abortSignal(controller.signal));
             if (error) throw error;
             showToast('Product deleted successfully');
             setDeleteConfirm({ show: false, id: null });
-            fetchProducts();
+            await supabaseWithTimeout(fetchProducts());
         } catch (err: any) {
-            showToast(err.message || 'Delete failed', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Delete interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Delete failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
         }
     };

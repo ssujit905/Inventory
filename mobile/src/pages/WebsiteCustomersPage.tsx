@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     Users, Search, Loader2, Phone, MapPin, 
     Coins, Key, Trash2, Edit2, Check, X, 
@@ -33,6 +33,38 @@ export default function WebsiteCustomersPage() {
     const [updatingCoins, setUpdatingCoins] = useState(false);
     const [resettingPin, setResettingPin] = useState(false);
 
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!updatingCoins && !resettingPin) return;
+        const t = setTimeout(() => {
+            setUpdatingCoins(false);
+            setResettingPin(false);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [updatingCoins, resettingPin]);
+
     useEffect(() => {
         fetchCustomers();
     }, []);
@@ -57,15 +89,26 @@ export default function WebsiteCustomersPage() {
     const handleUpdateCoins = async () => {
         if (!selectedCustomer) return;
         setUpdatingCoins(true);
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             const updates = {
                 shopy_coins: Number(newCoins),
                 updated_at: new Date().toISOString()
             };
-            const { error } = await supabase
-                .from('website_customers')
-                .update(updates)
-                .eq('phone', selectedCustomer.phone);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_customers')
+                    .update(updates)
+                    .eq('phone', selectedCustomer.phone)
+                    .abortSignal(controller.signal)
+            );
 
             if (error) throw error;
 
@@ -76,8 +119,15 @@ export default function WebsiteCustomersPage() {
             setSelectedCustomer(updatedCustomer);
             showToast('Coins updated successfully');
         } catch (err: any) {
-            showToast(err.message, 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Submission interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message, 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setUpdatingCoins(false);
         }
     };
@@ -90,37 +140,72 @@ export default function WebsiteCustomersPage() {
         }
 
         setResettingPin(true);
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
-            const { data: reset, error: resetError } = await supabase.rpc('admin_reset_customer_pin', {
-                p_phone: selectedCustomer.phone,
-                p_new_pin: newPin
-            });
+            const { data: reset, error: resetError } = await supabaseWithTimeout(
+                supabase.rpc('admin_reset_customer_pin', {
+                    p_phone: selectedCustomer.phone,
+                    p_new_pin: newPin
+                }).abortSignal(controller.signal)
+            );
             if (resetError) throw resetError;
             if (!reset) throw new Error('PIN reset was denied. Run secure_customer_sessions.sql, then sign in with an admin or staff account.');
 
             setNewPin('');
             showToast('PIN reset successfully');
         } catch (err: any) {
-            showToast(err.message, 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Submission interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message, 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setResettingPin(false);
         }
     };
 
     const handleDeleteCustomer = async (phone: string) => {
         if (!window.confirm('Are you sure you want to delete this customer?')) return;
-        
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
-            const { error } = await supabase
-                .from('website_customers')
-                .delete()
-                .eq('phone', phone);
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_customers')
+                    .delete()
+                    .eq('phone', phone)
+                    .abortSignal(controller.signal)
+            );
             
             if (error) throw error;
             showToast('Customer deleted');
             setCustomers(prev => prev.filter(c => c.phone !== phone));
         } catch (err: any) {
-            showToast(err.message, 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Action interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message, 'error');
+            }
+        } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
         }
     };
 

@@ -5,7 +5,7 @@ import { Printer, Calendar, Search, Loader2, CheckCircle2, Package, Eye, X, Sett
 import ReceiptTemplate from '../components/ReceiptTemplate'
 import { useAuthStore } from '../hooks/useAuthStore'
 import DashboardLayout from '../layouts/DashboardLayout'
-import { isVendorMember } from '../lib/vendorHelpers'
+import { getVendorId, isVendorMember } from '../lib/vendorHelpers'
 
 type Sale = {
     id: string
@@ -84,17 +84,24 @@ export default function PrintCenter() {
         setSelectedIds(new Set())
 
         try {
-            const { data, error } = await supabase
+            const vendorId = getVendorId(profile)
+            let query = supabase
                 .from('sales')
                 .select(`
           *,
-          sale_items (
+          sale_items!inner (
             quantity,
-            product:products(sku)
+            product:products!inner(sku, vendor_id)
           )
         `)
                 .eq('order_date', date)
                 .order('created_at', { ascending: true })
+            if (vendorId) {
+                query = query.eq('sale_items.product.vendor_id', vendorId)
+            } else {
+                query = query.is('sale_items.product.vendor_id', null)
+            }
+            const { data, error } = await query
 
             if (error) {
                 console.error('Fetch error:', error)

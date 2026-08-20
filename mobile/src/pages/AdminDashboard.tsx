@@ -79,8 +79,9 @@ export default function AdminDashboard() {
 
             const vendorId = getVendorId(profile);
 
-            let salesQ = supabase.from('sales').select(vendorId ? 'parcel_status, order_date, sale_items!inner(product:products!inner(vendor_id))' : 'parcel_status, order_date').gte('order_date', format(yearStart, 'yyyy-MM-dd')).limit(10000);
+            let salesQ = supabase.from('sales').select('parcel_status, order_date, sale_items!inner(product:products!inner(vendor_id))').gte('order_date', format(yearStart, 'yyyy-MM-dd')).limit(10000);
             if (vendorId) salesQ = salesQ.eq('sale_items.product.vendor_id', vendorId);
+            else salesQ = salesQ.is('sale_items.product.vendor_id', null);
 
             let prodQ = supabase.from('products').select(`
                 id,
@@ -95,13 +96,16 @@ export default function AdminDashboard() {
                 )
             `);
             if (vendorId) prodQ = prodQ.eq('vendor_id', vendorId);
+            else prodQ = prodQ.is('vendor_id', null);
 
-            let webQ = supabase.from('website_orders').select(vendorId ? 'id, status, website_order_items!inner(vendor_id)' : 'id, status').or('status.eq.processing,status.eq.pending');
+            let webQ = supabase.from('website_orders').select('id, status, website_order_items!inner(vendor_id)').or('status.eq.processing,status.eq.pending');
             if (vendorId) webQ = webQ.eq('website_order_items.vendor_id', vendorId);
+            else webQ = webQ.is('website_order_items.vendor_id', null);
 
             const buildSalesCountQuery = (status: string, gteDate?: string, lteDate?: string) => {
-                let q = supabase.from('sales').select(vendorId ? '*, sale_items!inner(product:products!inner(vendor_id))' : '*', { count: 'exact', head: true }).eq('parcel_status', status);
+                let q = supabase.from('sales').select('*, sale_items!inner(product:products!inner(vendor_id))', { count: 'exact', head: true }).eq('parcel_status', status);
                 if (vendorId) q = q.eq('sale_items.product.vendor_id', vendorId);
+                else q = q.is('sale_items.product.vendor_id', null);
                 if (gteDate) q = q.gte('order_date', gteDate);
                 if (lteDate) q = q.lte('order_date', lteDate);
                 return q;
@@ -181,17 +185,20 @@ export default function AdminDashboard() {
             const pendingTotal = processingCount + sentCount;
 
             const last30StartStr = format(subDays(now, 29), 'yyyy-MM-dd');
-            const { data: movementRows, error: movementError } = await supabase
+            let movementQuery = supabase
                 .from('transactions')
                 .select(`
                     quantity_changed,
                     sale:sales!inner(order_date, parcel_status),
                     lot:product_lots(
-                        products(sku)
+                        products(sku, vendor_id)
                     )
                 `)
                 .eq('type', 'sale')
                 .gte('sales.order_date', last30StartStr);
+            if (vendorId) movementQuery = movementQuery.eq('lot.products.vendor_id', vendorId);
+            else movementQuery = movementQuery.is('lot.products.vendor_id', null);
+            const { data: movementRows, error: movementError } = await movementQuery;
 
             if (movementError) throw movementError;
 

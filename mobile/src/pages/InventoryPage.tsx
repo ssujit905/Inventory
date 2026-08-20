@@ -60,6 +60,8 @@ export default function InventoryPage() {
 
             if (vendorId) {
                 lotsQuery = lotsQuery.eq('products.vendor_id', vendorId);
+            } else {
+                lotsQuery = lotsQuery.is('products.vendor_id', null);
             }
 
             const { data: lotsData, error: lotsError } = await lotsQuery;

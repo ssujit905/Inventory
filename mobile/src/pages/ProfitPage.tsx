@@ -73,6 +73,8 @@ export default function ProfitPage() {
 
             if (vendorId) {
                 txQuery = txQuery.eq('lot.products.vendor_id', vendorId);
+            } else {
+                txQuery = txQuery.is('lot.products.vendor_id', null);
             }
 
             const { data: lotSales, error: lotSalesError } = await txQuery;
@@ -93,16 +95,26 @@ export default function ProfitPage() {
                 saleTotals.set(t.sale_id, (saleTotals.get(t.sale_id) || 0) + qty);
             });
 
-            const { data: adsData } = await supabase
+            const { data: rawAdsData } = await supabase
                 .from('expenses')
-                .select('id, amount')
+                .select('id, amount, recorded_by, profile:profiles!expenses_recorded_by_fkey(role)')
                 .eq('category', 'ads');
 
-            const { data: packagingData } = await supabase
+            const { data: rawPackagingData } = await supabase
                 .from('expenses')
-                .select('amount, description, created_at, expense_date')
+                .select('amount, description, expense_date, recorded_by, profile:profiles!expenses_recorded_by_fkey(role)')
                 .eq('category', 'packaging')
-                .order('created_at', { ascending: true });
+                .order('expense_date', { ascending: true });
+
+            const scopeExpenses = (rows: any[]) =>
+                (rows || []).filter((e: any) =>
+                    vendorId
+                        ? e.recorded_by === profile?.id || e.vendor_id === vendorId
+                        : (e.profile?.role ?? null) !== 'vendor'
+                );
+
+            const adsData = scopeExpenses(rawAdsData || []);
+            const packagingData = scopeExpenses(rawPackagingData || []);
 
             const adBudgetMap = new Map<string, number>();
             (adsData || []).forEach((a: any) => adBudgetMap.set(a.id, Number(a.amount || 0)));

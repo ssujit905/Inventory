@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId } from '../lib/vendorHelpers';
@@ -56,6 +56,17 @@ export default function StockInPage() {
             window.removeEventListener('visibilitychange', handleVisibility);
         };
     }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
 
     // Admin Cost Update State
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -128,6 +139,8 @@ export default function StockInPage() {
 
         if (vendorId) {
             txQuery = txQuery.eq('product.vendor_id', vendorId);
+        } else {
+            txQuery = txQuery.is('product.vendor_id', null);
         }
 
         const { data, error } = await supabaseWithTimeout(txQuery
@@ -202,6 +215,10 @@ export default function StockInPage() {
         if (!user) return;
         setLoading(true);
 
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
         const controller = new AbortController();
         activeSubmitRef.current = controller;
 
@@ -211,6 +228,8 @@ export default function StockInPage() {
             let prodSearchQuery = supabase.from('products').select('id').eq('sku', sku);
             if (vendorId) {
                 prodSearchQuery = prodSearchQuery.eq('vendor_id', vendorId);
+            } else {
+                prodSearchQuery = prodSearchQuery.is('vendor_id', null);
             }
             const { data: existingProd } = await supabaseWithTimeout(
                 prodSearchQuery.abortSignal(controller.signal).maybeSingle()

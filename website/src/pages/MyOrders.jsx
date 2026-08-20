@@ -11,6 +11,7 @@ import {
     ArrowLeft, Share2
 } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
+import heic2any from 'heic2any';
 
 const MyOrders = () => {
     const { customer, login, logout, register, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
@@ -316,13 +317,68 @@ const MyOrders = () => {
         }
     };
 
-    const handleFileChange = (e) => {
+    const isHeic = (file) => {
+        const name = file.name.toLowerCase();
+        return /\.(heic|heif)$/.test(name) || ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'].includes(file.type);
+    };
+
+    const convertHeic = async (file) => {
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+        return Array.isArray(converted) ? converted[0] : converted;
+    };
+
+    const compressImage = (file, maxDim = 1024, quality = 0.82) => new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new window.Image();
+        img.onload = () => {
+            try {
+                const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Compression failed')), 'image/jpeg', quality);
+            } catch (err) {
+                URL.revokeObjectURL(url);
+                reject(err);
+            }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unsupported image format')); };
+        img.src = url;
+    });
+
+    const handleFileChange = async (e) => {
         const files = Array.from(e.target.files);
-        setReturnFiles(prev => [...prev, ...files.map(file => ({
-            id: Math.random().toString(36).substr(2, 9),
-            file: file,
-            preview: URL.createObjectURL(file)
-        }))]);
+        const processed = [];
+        for (const file of files) {
+            try {
+                let source = file;
+                if (isHeic(file)) {
+                    source = await convertHeic(file);
+                }
+                let uploadBlob;
+                try {
+                    uploadBlob = await compressImage(source);
+                } catch (compressErr) {
+                    console.warn('Compression failed, using original file:', compressErr);
+                    uploadBlob = source;
+                }
+                const base = file.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '-') || 'photo';
+                processed.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    file: uploadBlob,
+                    name: base,
+                    preview: URL.createObjectURL(uploadBlob)
+                });
+            } catch (err) {
+                console.error('Return image processing failed:', err);
+                showNotification('This image format could not be processed. Please try a JPG/PNG photo.', 'error');
+            }
+        }
+        setReturnFiles(prev => [...prev, ...processed]);
+        if (e.target) e.target.value = '';
     };
 
     const removeFile = (id) => setReturnFiles(prev => prev.filter(f => f.id !== id));
@@ -332,8 +388,8 @@ const MyOrders = () => {
         try {
             const mediaUrls = [];
             for (const f of returnFiles) {
-                const path = `returns/${selectedReturnOrder.id}/${Date.now()}-${f.file.name}`;
-                await supabase.storage.from('images').upload(path, f.file);
+                const path = `returns/${selectedReturnOrder.id}/${Date.now()}-${f.name}.jpg`;
+                await supabase.storage.from('images').upload(path, f.file, { contentType: 'image/jpeg' });
                 const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(path);
                 mediaUrls.push({ url: publicUrl, type: 'image' });
             }
@@ -349,6 +405,9 @@ const MyOrders = () => {
             setRequestedReturnStatuses(prev => ({ ...prev, [selectedReturnOrder.id]: 'pending' }));
             setReturnSuccess(true);
             setTimeout(() => { setShowReturnModal(false); setReturnSuccess(false); setReturnMessage(''); setReturnFiles([]); }, 2500);
+        } catch (err) {
+            console.error('Return request failed:', err);
+            showNotification(err?.message || 'Could not submit your return request. Please try again.', 'error');
         } finally {
             setIsSubmittingReturn(false);
         }

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { format } from 'date-fns';
 import {
@@ -56,12 +56,45 @@ export default function WebsiteReturnsPage() {
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'completed'>('all');
     const isReadOnly = profile?.permissions === 'read_only';
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
+
     const isVendorUser = isVendorMember(profile);
 
     useEffect(() => {
         fetchRequests();
-        
+
         const channel = supabase
             .channel('website_returns_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'website_order_returns' }, () => {
@@ -125,19 +158,48 @@ export default function WebsiteReturnsPage() {
     };
 
     const updateStatus = async (id: number, status: string) => {
-        const { error } = await supabase
-            .from('website_order_returns')
-            .update({ status })
-            .eq('id', id);
-        
-        if (error) return showToast(error.message, 'error');
-        setRequests(rs => rs.map(r => r.id === id ? { ...r, status: status as any } : r));
-        showToast(`Request ${status}!`);
+        // Re-establish a healthy session/connection before writing.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
+        try {
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_order_returns')
+                    .update({ status })
+                    .eq('id', id)
+                    .abortSignal(controller.signal)
+            );
+
+            if (error) throw error;
+            setRequests(rs => rs.map(r => r.id === id ? { ...r, status: status as any } : r));
+            showToast(`Request ${status}!`);
+        } catch (err: any) {
+            if (err?.name === 'AbortError') {
+                showToast('Update interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message, 'error');
+            }
+        } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
+        }
     };
 
-    const filteredRequests = activeTab === 'all' 
-        ? requests 
-        : requests.filter(r => r.type === activeTab);
+    const filteredRequests = requests
+        .filter(r => activeTab === 'all' || r.type === activeTab)
+        .filter(r => filterStatus === 'all' || r.status === filterStatus);
+
+    const tabScopedRequests = activeTab === 'all' ? requests : requests.filter(r => r.type === activeTab);
+    const statusCounts = {
+        pending: tabScopedRequests.filter(r => r.status === 'pending').length,
+        approved: tabScopedRequests.filter(r => r.status === 'approved').length,
+        rejected: tabScopedRequests.filter(r => r.status === 'rejected').length,
+        completed: tabScopedRequests.filter(r => r.status === 'completed').length,
+    };
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
@@ -162,9 +224,35 @@ export default function WebsiteReturnsPage() {
                         </div>
                         <div>
                             <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Active Requests</p>
-                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{requests.length} Submissions</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{filteredRequests.length} {activeTab === 'all' ? 'Total' : activeTab} Requests</p>
                         </div>
                     </div>
+                </div>
+
+                {/* Status Summary Cards */}
+                <div className="grid grid-cols-5 gap-2">
+                    <button
+                        onClick={() => setFilterStatus('all')}
+                        className={`p-3 rounded-2xl border transition-all text-left ${filterStatus === 'all' ? 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 shadow-sm' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}
+                    >
+                        <p className="text-lg font-black text-gray-900 dark:text-gray-100 leading-none">{requests.length}</p>
+                        <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mt-1.5">All</p>
+                    </button>
+                    {(['pending', 'approved', 'rejected', 'completed'] as const).map(s => {
+                        const cfg = STATUS_CONFIG[s];
+                        const count = statusCounts[s];
+                        const isAlert = s === 'pending' && count > 0;
+                        return (
+                            <button
+                                key={s}
+                                onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
+                                className={`p-3 rounded-2xl border transition-all text-left ${filterStatus === s ? cfg.color + ' border-opacity-100 shadow-sm' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}
+                            >
+                                <p className={`text-lg font-black leading-none ${isAlert ? 'text-rose-500 animate-pulse' : 'text-gray-900 dark:text-gray-100'}`}>{count}</p>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mt-1.5">{cfg.label}</p>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Filter Tabs */}

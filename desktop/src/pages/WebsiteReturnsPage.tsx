@@ -56,6 +56,7 @@ export default function WebsiteReturnsPage() {
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'return' | 'exchange' | 'message'>('all');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'completed'>('all');
     const isReadOnly = profile?.permissions === 'read_only';
     const isVendorUser = isVendorMember(profile);
 
@@ -139,9 +140,17 @@ let query = supabase
         showToast(`Request ${status}!`);
     };
 
-    const filteredRequests = activeTab === 'all' 
-        ? requests 
-        : requests.filter(r => r.type === activeTab);
+    const filteredRequests = requests
+        .filter(r => activeTab === 'all' || r.type === activeTab)
+        .filter(r => filterStatus === 'all' || r.status === filterStatus);
+
+    const tabScopedRequests = activeTab === 'all' ? requests : requests.filter(r => r.type === activeTab);
+    const statusCounts = {
+        pending: tabScopedRequests.filter(r => r.status === 'pending').length,
+        approved: tabScopedRequests.filter(r => r.status === 'approved').length,
+        rejected: tabScopedRequests.filter(r => r.status === 'rejected').length,
+        completed: tabScopedRequests.filter(r => r.status === 'completed').length,
+    };
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
@@ -167,6 +176,32 @@ let query = supabase
                         <p className="text-2xl font-black text-gray-900 dark:text-gray-100">{filteredRequests.length}</p>
                         <p className="text-xs text-gray-400 uppercase tracking-widest">{activeTab === 'all' ? 'Total' : activeTab} Requests</p>
                     </div>
+                </div>
+
+                {/* Status Summary Cards */}
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                    <button
+                        onClick={() => setFilterStatus('all')}
+                        className={`p-3 rounded-2xl border text-left transition-all hover:shadow-md ${filterStatus === 'all' ? 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}
+                    >
+                        <p className="text-xl font-black text-gray-900 dark:text-gray-100">{requests.length}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">All</p>
+                    </button>
+                    {(['pending', 'approved', 'rejected', 'completed'] as const).map(s => {
+                        const cfg = STATUS_CONFIG[s];
+                        const count = statusCounts[s];
+                        const isAlert = s === 'pending' && count > 0;
+                        return (
+                            <button
+                                key={s}
+                                onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
+                                className={`p-3 rounded-2xl border text-left transition-all hover:shadow-md ${filterStatus === s ? cfg.color + ' border-opacity-100 shadow-sm' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}
+                            >
+                                <p className={`text-xl font-black ${isAlert ? 'text-rose-500 animate-pulse' : 'text-gray-900 dark:text-gray-100'}`}>{count}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">{cfg.label}</p>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Tabs Menu */}

@@ -136,7 +136,7 @@ function App() {
         } />
 
         <Route path="/admin/website/customers" element={
-          user ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
+          user && profile?.role === 'admin' ? <WebsiteCustomersPage /> : <Navigate to="/" replace />
         } />
 
 

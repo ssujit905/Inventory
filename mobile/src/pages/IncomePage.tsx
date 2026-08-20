@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
@@ -33,6 +33,37 @@ export default function IncomePage() {
     const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
 
     const isVendorStaff = profile?.role === 'staff' && Boolean(profile?.vendor_id);
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
 
     const canEditEntry = (entry: IncomeEntry) =>
         !isReadOnly && !isVendorStaff && (profile?.role === 'admin' || profile?.role === 'vendor' || entry.recorded_by === user?.id);
@@ -141,35 +172,55 @@ export default function IncomePage() {
         if (!user) return;
         setLoading(true);
 
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             if (editingId) {
-                const { error } = await supabase
-                    .from('income_entries')
-                    .update({ description, amount, income_date: incomeDate, category })
-                    .eq('id', editingId);
+                const { error } = await supabaseWithTimeout(
+                    supabase
+                        .from('income_entries')
+                        .update({ description, amount, income_date: incomeDate, category })
+                        .eq('id', editingId)
+                        .abortSignal(controller.signal)
+                );
                 if (error) throw error;
                 setMessage({ type: 'success', text: 'Income entry updated successfully!' });
             } else {
-                const { error } = await supabase.from('income_entries').insert([{
-                    description,
-                    amount,
-                    income_date: incomeDate,
-                    category,
-                    recorded_by: user.id
-                }]);
+                const { error } = await supabaseWithTimeout(
+                    supabase.from('income_entries').insert([{
+                        description,
+                        amount,
+                        income_date: incomeDate,
+                        category,
+                        recorded_by: user.id
+                    }])
+                    .abortSignal(controller.signal)
+                );
                 if (error) throw error;
                 setMessage({ type: 'success', text: 'Income recorded successfully!' });
             }
 
             clearDraft();
-            fetchIncomeEntries();
+            await supabaseWithTimeout(fetchIncomeEntries());
 
             setTimeout(() => {
                 setIsFormOpen(false);
             }, 800);
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            if (error?.name === 'AbortError') {
+                setMessage({ type: 'error', text: 'Submission interrupted when you left the app. Please try again.' });
+            } else if (error?.message === 'NETWORK_TIMEOUT') {
+                setMessage({ type: 'error', text: 'Network timeout. Check your connection and try again.' });
+            } else {
+                setMessage({ type: 'error', text: error.message });
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setLoading(false);
         }
     };

@@ -55,18 +55,28 @@ export default function DashboardLayout({ children, role }: { children: React.Re
             setPendingCostCount(count || 0);
         }
 
-        const { count: orders } = await supabase
+        let ordersQuery = supabase
             .from('website_orders')
-            .select('id', { count: 'exact', head: true })
+            .select('id, website_order_items!inner(vendor_id)', { count: 'exact', head: true })
             .eq('status', 'processing');
+        if (vendorId) ordersQuery = ordersQuery.eq('website_order_items.vendor_id', vendorId);
+        else ordersQuery = ordersQuery.is('website_order_items.vendor_id', null);
+        const { count: orders } = await ordersQuery;
         setPendingOrdersCount(orders || 0);
 
-        const { count: returns } = await supabase
+        let returnsQuery = supabase
             .from('website_order_returns')
             .select('id', { count: 'exact', head: true })
             .eq('status', 'pending');
+        if (vendorId) returnsQuery = returnsQuery.eq('vendor_id', vendorId);
+        else returnsQuery = returnsQuery.is('vendor_id', null);
+        const { count: returns } = await returnsQuery;
         setPendingReturnsCount(returns || 0);
     };
+
+    useEffect(() => {
+        fetchCounts();
+    }, [role, profile]);
 
     useRealtimeRefresh(
         () => fetchCounts(),
@@ -84,17 +94,27 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                 return;
             }
 
-            const { data: salesData } = await supabase
+            const vendorId = getVendorId(profile);
+
+            let salesQuery = supabase
                 .from('sales')
-                .select('customer_name, phone1, parcel_status')
+                .select('customer_name, phone1, parcel_status, sale_items!inner(product:products!inner(vendor_id))')
                 .or(`customer_name.ilike.%${query}%,phone1.ilike.%${query}%,parcel_status.ilike.%${query}%`)
                 .limit(10);
+            if (vendorId) salesQuery = salesQuery.eq('sale_items.product.vendor_id', vendorId);
+            else salesQuery = salesQuery.is('sale_items.product.vendor_id', null);
 
-            const { data: productData } = await supabase
+            let productsQuery = supabase
                 .from('products')
                 .select('sku')
                 .ilike('sku', `%${query}%`)
                 .limit(10);
+            if (vendorId) productsQuery = productsQuery.eq('vendor_id', vendorId);
+            else productsQuery = productsQuery.is('vendor_id', null);
+
+            const { data: salesData } = await salesQuery;
+
+            const { data: productData } = await productsQuery;
 
             const unique = new Set<string>();
             const results: { text: string; type: 'name' | 'phone' | 'status' | 'sku' }[] = [];
@@ -347,7 +367,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                             <div className="space-y-1">
                                 <MenuLink icon={<LayoutDashboard className="text-cyan-500" />} label="Dashboard" path="/admin/dashboard" onSelect={() => setIsMenuOpen(false)} />
                                 <MenuLink icon={<Package className="text-indigo-500" />} label="Inventory" path="/admin/inventory" onSelect={() => setIsMenuOpen(false)} />
-                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} badge={role === 'admin' || getVendorId(profile) ? pendingCostCount : undefined} />
+                                <MenuLink icon={<ArrowDownCircle className="text-blue-500" />} label="Stock In" path="/admin/stock-in" onSelect={() => setIsMenuOpen(false)} badge={role === 'admin' || profile?.role === 'vendor' ? pendingCostCount : undefined} />
                                 {!isBasicPlan && (
                                     <MenuLink icon={<DollarSign className="text-amber-500" />} label="Expenses" path="/admin/expenses" onSelect={() => setIsMenuOpen(false)} />
                                 )}
@@ -368,7 +388,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Customers" path="/admin/website/customers" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
-                                {!isBasicPlan && (role === 'admin' || profile?.role === 'vendor' || isVendorStaff) && (
+                                {!isBasicPlan && (
                                     <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 {(role === 'admin' || profile?.role === 'vendor') && (

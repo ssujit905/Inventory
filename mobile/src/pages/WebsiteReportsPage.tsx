@@ -87,6 +87,8 @@ export default function WebsiteReportsPage() {
 
             if (vendorId) {
                 woQuery = woQuery.eq('website_order_items.vendor_id', vendorId);
+            } else {
+                woQuery = woQuery.is('website_order_items.vendor_id', null);
             }
 
             const { data: webOrders, error: woErr } = await woQuery.order('created_at', { ascending: false });

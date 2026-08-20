@@ -1,7 +1,7 @@
--- 1. Create the 'images' bucket (if doesn't exist)
+-- 1. Create the 'images' bucket (if doesn't exist) and FORCE it public
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('images', 'images', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- 2. Allow public read access to the 'images' bucket
 CREATE POLICY "Public Access"

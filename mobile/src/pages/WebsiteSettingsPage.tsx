@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard, Store, Camera, Copy, Link2 } from 'lucide-react';
 import { buildStoreLink } from '../lib/storeLink';
 
@@ -135,6 +135,40 @@ export default function WebsiteSettingsPage() {
     });
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        const busy = saving || uploading !== null || uploadingAvatar;
+        if (!busy) return;
+        const t = setTimeout(() => {
+            setSaving(false);
+            setUploading(null);
+            setUploadingAvatar(false);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [saving, uploading, uploadingAvatar]);
+
     useEffect(() => { 
         if (isVendorMember(profile)) {
             fetchVendorProfile();
@@ -174,30 +208,47 @@ export default function WebsiteSettingsPage() {
     const handleSaveVendor = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             const vendorId = getVendorId(profile);
             if (!vendorId) return;
-            const { error } = await supabase.from('profiles').update({
-                full_name: vendorForm.contact_person,
-                store_name: vendorForm.store_name,
-                phone: vendorForm.phone,
-                whatsapp: vendorForm.whatsapp,
-                address: vendorForm.address,
-                city: vendorForm.city,
-                description: vendorForm.description,
-                avatar_url: vendorForm.avatar_url,
-                bank_name: vendorForm.bank_name,
-                bank_account_holder: vendorForm.bank_account_holder,
-                bank_account_number: vendorForm.bank_account_number,
-                bank_branch: vendorForm.bank_branch,
-                esewa_id: vendorForm.esewa_id
-            }).eq('id', getVendorId(profile));
+            const { error } = await supabaseWithTimeout(
+                supabase.from('profiles').update({
+                    full_name: vendorForm.contact_person,
+                    store_name: vendorForm.store_name,
+                    phone: vendorForm.phone,
+                    whatsapp: vendorForm.whatsapp,
+                    address: vendorForm.address,
+                    city: vendorForm.city,
+                    description: vendorForm.description,
+                    avatar_url: vendorForm.avatar_url,
+                    bank_name: vendorForm.bank_name,
+                    bank_account_holder: vendorForm.bank_account_holder,
+                    bank_account_number: vendorForm.bank_account_number,
+                    bank_branch: vendorForm.bank_branch,
+                    esewa_id: vendorForm.esewa_id
+                }).eq('id', getVendorId(profile)).abortSignal(controller.signal)
+            );
 
             if (error) throw error;
             showToast('Vendor store settings saved successfully!');
         } catch (err: any) {
-            showToast(err.message || 'Failed to save vendor settings', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Save interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Failed to save vendor settings', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
         }
     };
@@ -249,7 +300,14 @@ export default function WebsiteSettingsPage() {
 
     const fetchProducts = async () => {
         setLoadingProducts(true);
-        const { data } = await supabase.from('website_products').select('id, title, price, website_product_images(image_url, is_primary)').order('title');
+        const vendorId = getVendorId(profile);
+        let query = supabase.from('website_products').select('id, title, price, website_product_images(image_url, is_primary)').order('title');
+        if (vendorId) {
+            query = query.eq('vendor_id', vendorId);
+        } else {
+            query = query.is('vendor_id', null);
+        }
+        const { data } = await query;
         // Simple map to flatten the primary image
         const formatted = (data || []).map(p => ({
             ...p,
@@ -355,6 +413,14 @@ export default function WebsiteSettingsPage() {
 
     const handleSave = async () => {
         setSaving(true);
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
         try {
             const currentSettings = { ...settings };
             currentSettings['flash_sale_config'] = JSON.stringify(flashSaleProducts);
@@ -362,13 +428,22 @@ export default function WebsiteSettingsPage() {
             const upserts = Object.entries(currentSettings).map(([key, value]) => ({
                 key, value: value || '', updated_at: new Date().toISOString()
             }));
-            const { error } = await supabase.from('website_settings').upsert(upserts, { onConflict: 'key' });
+            const { error } = await supabaseWithTimeout(
+                supabase.from('website_settings').upsert(upserts, { onConflict: 'key' }).abortSignal(controller.signal)
+            );
             if (error) throw error;
             clearDraft();
             showToast('Settings saved!');
         } catch (err: any) {
-            showToast(err.message || 'Save failed', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Save interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Save failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setSaving(false);
         }
     };

@@ -15,6 +15,8 @@ import {
     MoreVertical,
     ChevronRight,
     ChevronLeft,
+    ChevronDown,
+    ChevronUp,
     Play,
     X,
     Star,
@@ -22,7 +24,7 @@ import {
     Loader2,
     Store
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { storeSlug } from '../lib/storeSlug';
 import { useNotification } from '../context/NotificationContext';
@@ -151,6 +153,20 @@ const ProductDetail = () => {
     // Ratings state
     const [ratings, setRatings] = useState([]);
     const [loadingRatings, setLoadingRatings] = useState(true);
+
+    // Description expand/collapse
+    const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+    const [descriptionOverflows, setDescriptionOverflows] = useState(false);
+    const descriptionRef = useRef(null);
+
+    useEffect(() => {
+        const el = descriptionRef.current;
+        if (!el || !product?.description) return;
+        if (descriptionExpanded) return;
+        // When collapsed the div is clamped to a max height, so a taller
+        // scrollHeight tells us the description needs a "See more" toggle.
+        setDescriptionOverflows(el.scrollHeight > el.clientHeight + 1);
+    }, [product?.description, descriptionExpanded]);
 
     useEffect(() => {
         if (id) fetchRatings();
@@ -768,15 +784,38 @@ const ProductDetail = () => {
                 }}>
                     Description
                 </h3>
-                <div style={{ 
+                <div ref={descriptionRef} style={{ 
                     fontSize: '0.95rem', 
                     color: '#444', 
                     lineHeight: '1.6', 
                     whiteSpace: 'pre-wrap', 
-                    wordBreak: 'break-word'
+                    wordBreak: 'break-word',
+                    maxHeight: descriptionExpanded ? 'none' : '100px',
+                    overflow: 'hidden',
+                    transition: 'max-height 0.3s ease'
                 }}>
                     {product.description || 'No description provided for this product.'}
                 </div>
+                {descriptionOverflows && (
+                    <button
+                        onClick={() => setDescriptionExpanded(prev => !prev)}
+                        style={{
+                            marginTop: '8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '700',
+                            color: 'var(--primary-red)'
+                        }}
+                    >
+                        {descriptionExpanded ? <>See less <ChevronUp size={16} /></> : <>See more <ChevronDown size={16} /></>}
+                    </button>
+                )}
             </div>
 
             {/* Ratings & Reviews Section */}

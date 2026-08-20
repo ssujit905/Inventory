@@ -60,7 +60,7 @@ BEGIN
       AND NOT EXISTS (
         SELECT 1 FROM website_order_returns wor
         WHERE wor.order_id = o.id
-          AND wor.status IN ('pending', 'approved', 'completed')
+          AND wor.status IN ('pending', 'approved', 'completed', 'rejected')
       )
     RETURNING r.id
   )
@@ -85,7 +85,7 @@ BEGIN
       OR EXISTS (
         SELECT 1 FROM website_order_returns wor
         WHERE wor.order_id = o.id
-          AND wor.status IN ('pending', 'approved', 'completed')
+          AND wor.status IN ('pending', 'approved', 'completed', 'rejected')
       )
     );
 

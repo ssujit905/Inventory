@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     MapPin, Plus, Trash2, Loader2,
     AlertTriangle, CheckCircle, Truck, Info, Pencil, X, Clock
@@ -33,6 +33,38 @@ export default function WebsiteDeliveryPage() {
         shipping_fee: '' as string | number,
         delivery_time: '2-4 Days'
     });
+
+    // When the WebView is backgrounded, in-flight requests can hang forever.
+    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    const activeSubmitRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        const handleResume = () => {
+            activeSubmitRef.current?.abort();
+            activeSubmitRef.current = null;
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') handleResume();
+        };
+        window.addEventListener('focus', handleResume);
+        window.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleResume);
+            window.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!saving && deleting === null) return;
+        const t = setTimeout(() => {
+            setSaving(false);
+            setDeleting(null);
+            showToast('Request timed out. Please check your connection and try again.', 'error');
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [saving, deleting]);
 
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
@@ -73,7 +105,7 @@ export default function WebsiteDeliveryPage() {
         let query = supabase.from('website_delivery_branches').select('*');
         if (vendorId) {
             query = query.eq('vendor_id', vendorId);
-        } else if (profile?.role === 'admin') {
+        } else {
             query = query.is('vendor_id', null);
         }
         const { data, error } = await query.order('city', { ascending: true });
@@ -93,22 +125,42 @@ export default function WebsiteDeliveryPage() {
             delivery_time: newBranch.delivery_time.trim(),
             vendor_id: getVendorId(profile)
         };
-        const { data, error } = await supabase
-            .from('website_delivery_branches')
-            .insert(branchPayload)
-            .select()
-            .single();
 
-        if (error) {
-            showToast(error.message, 'error');
-        } else {
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
+        try {
+            const { data, error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_delivery_branches')
+                    .insert(branchPayload)
+                    .select()
+                    .abortSignal(controller.signal)
+                    .single()
+            );
+
+            if (error) throw error;
             setBranches(prev => [...prev, data].sort((a, b) => a.city.localeCompare(b.city)));
             setNewBranch({ city: '', coverage_area: '', shipping_fee: '', delivery_time: '2-4 Days' });
             clearDraft();
             setIsFormOpen(false);
             showToast('Branch added!');
+        } catch (err: any) {
+            if (err?.name === 'AbortError') {
+                showToast('Save interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Save failed', 'error');
+            }
+        } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async (e: React.MouseEvent, id: number) => {
@@ -125,37 +177,66 @@ export default function WebsiteDeliveryPage() {
 
         setDeleting(id);
         setConfirmingDelete(null);
-        
-        try {
-            const { error } = await supabase
-                .from('website_delivery_branches')
-                .delete()
-                .eq('id', id);
 
-            if (error) {
-                showToast(error.message, 'error');
-            } else {
-                setBranches(prev => prev.filter(b => b.id !== id));
-                showToast('Deleted');
-            }
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
+        try {
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_delivery_branches')
+                    .delete()
+                    .eq('id', id)
+                    .abortSignal(controller.signal)
+            );
+
+            if (error) throw error;
+            setBranches(prev => prev.filter(b => b.id !== id));
+            showToast('Deleted');
         } catch (err: any) {
-            showToast('Error', 'error');
+            if (err?.name === 'AbortError') {
+                showToast('Delete interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Delete failed', 'error');
+            }
         } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
             setDeleting(null);
         }
     };
 
     const handleUpdateField = async (id: number, field: string, value: any) => {
-        const { error } = await supabase
-            .from('website_delivery_branches')
-            .update({ [field]: value })
-            .eq('id', id);
-        if (error) {
-            showToast('Error', 'error');
-        } else {
+        await warmUpSupabase(6000);
+
+        const controller = new AbortController();
+        activeSubmitRef.current = controller;
+
+        try {
+            const { error } = await supabaseWithTimeout(
+                supabase
+                    .from('website_delivery_branches')
+                    .update({ [field]: value })
+                    .eq('id', id)
+                    .abortSignal(controller.signal)
+            );
+            if (error) throw error;
             setBranches(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
+        } catch (err: any) {
+            if (err?.name === 'AbortError') {
+                showToast('Update interrupted when you left the app. Please try again.', 'error');
+            } else if (err?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection and try again.', 'error');
+            } else {
+                showToast(err.message || 'Update failed', 'error');
+            }
+        } finally {
+            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
+            setEditingBranch(null);
         }
-        setEditingBranch(null);
     };
 
     return (

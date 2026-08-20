@@ -1319,14 +1319,17 @@ export default function SalesPage() {
                                                     setPendingStatus(null);
                                                     handleStatusUpdate(status);
                                                 }}
-                                                disabled={loading}
+disabled={loading}
                                                 className={`h-14 w-full px-6 rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-between border-2 ${selectedSale.parcel_status === status
                                                     ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
-                                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
+                                                    : pendingStatus === status
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-400 dark:bg-amber-500/10 dark:text-amber-300'
+                                                        : 'bg-gray-50 dark:bg-gray-800 text-gray-500 border-transparent hover:border-primary/30'
                                                     }`}
                                             >
                                                 {status}
                                                 {selectedSale.parcel_status === status && <CheckCircle2 size={18} />}
+                                                {pendingStatus === status && <span className="text-[9px] font-black uppercase tracking-widest animate-pulse">Enter amount to confirm</span>}
                                             </button>
 
                                             {status === 'delivered' && pendingStatus === 'delivered' && (

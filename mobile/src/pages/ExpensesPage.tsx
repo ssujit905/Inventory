@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
@@ -54,6 +54,17 @@ export default function ExpensesPage() {
         };
     }, []);
 
+    // Final failsafe: regardless of what the underlying promises do, the button
+    // can never stay in its "Processing..." state longer than this.
+    useEffect(() => {
+        if (!loading) return;
+        const t = setTimeout(() => {
+            setLoading(false);
+            setMessage({ type: 'error', text: 'Request timed out. Please check your connection and try again.' });
+        }, 40000);
+        return () => clearTimeout(t);
+    }, [loading]);
+
     // --- DRAFT PERSISTENCE ---
     useEffect(() => {
         const savedDraft = localStorage.getItem('mobile_expense_draft');
@@ -101,11 +112,10 @@ export default function ExpensesPage() {
     );
 
     const fetchExpenses = async () => {
-        let query = supabase.from('expenses').select('*');
+        let query = supabase.from('expenses').select('*, profile:profiles!expenses_recorded_by_fkey(role)');
         const vendorId = getVendorId(profile);
-        const profileId = profile?.id;
-        if (vendorId && profileId) {
-            query = query.or(`recorded_by.eq.${profileId},vendor_id.eq.${vendorId}`);
+        if (vendorId) {
+            query = query.or(`recorded_by.eq.${profile?.id},vendor_id.eq.${vendorId}`);
         }
         const { data, error } = await supabaseWithTimeout(query
             .order('created_at', { ascending: false })
@@ -116,7 +126,13 @@ export default function ExpensesPage() {
             return;
         }
 
-        if (data) setExpenses(data);
+        if (data) {
+            let filtered = data;
+            if (!isVendorMember(profile)) {
+                filtered = data.filter((e: any) => (e.profile?.role ?? null) !== 'vendor');
+            }
+            setExpenses(filtered);
+        }
     };
 
     const openEntryForm = () => {
@@ -134,16 +150,20 @@ export default function ExpensesPage() {
         if (!user) return;
         setLoading(true);
 
+        if (category === 'packaging' && packagingQuantity < 1) {
+            setMessage({ type: 'error', text: 'Please enter packaging quantity.' });
+            setLoading(false);
+            return;
+        }
+
+        // Ensure the session/connection is healthy before writing, so we don't
+        // hang on a stale connection left over from backgrounding.
+        await warmUpSupabase(6000);
+
         const controller = new AbortController();
         activeSubmitRef.current = controller;
 
         try {
-            if (category === 'packaging' && packagingQuantity < 1) {
-                setMessage({ type: 'error', text: 'Please enter packaging quantity.' });
-                setLoading(false);
-                return;
-            }
-
             const finalDescription = category === 'packaging'
                 ? `Qty: ${packagingQuantity} | ${description}`
                 : description;
