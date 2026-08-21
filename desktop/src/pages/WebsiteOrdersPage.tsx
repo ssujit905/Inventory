@@ -253,6 +253,8 @@ export default function WebsiteOrdersPage() {
         const vendorId = getVendorId(profile);
         if (vendorId) {
             ordersQuery = ordersQuery.eq('website_order_items.vendor_id', vendorId);
+        } else {
+            ordersQuery = ordersQuery.is('website_order_items.vendor_id', null);
         }
 
         const { data, error } = await ordersQuery.order('created_at', { ascending: false });
