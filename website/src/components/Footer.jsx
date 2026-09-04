@@ -23,7 +23,7 @@ const Footer = () => {
 
                 {/* Brand Section */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: '950', color: 'white', letterSpacing: '-0.02em' }}>
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: '950', color: 'white', letterSpacing: '-0.02em' }}>
                         {firstPart} {restPart && <span style={{ color: 'var(--primary-red)' }}>{restPart}</span>}
                         <span style={{ color: 'var(--primary-red)' }}>.</span>
                     </h2>
