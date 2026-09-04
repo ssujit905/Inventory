@@ -21,7 +21,7 @@ const ProductCard = ({ product }) => {
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            aspectRatio: '3 / 5.5',
+            aspectRatio: '3 / 4',
             border: '1px solid transparent',
             borderBottom: isSoldOut ? '3px solid var(--primary-red)' : '3px solid #000'
         }}
@@ -42,6 +42,8 @@ const ProductCard = ({ product }) => {
                 <img
                     src={product.image}
                     alt={product.title}
+                    loading="lazy"
+                    decoding="async"
                     style={{
                         width: '100%',
                         height: '100%',
@@ -65,15 +67,15 @@ const ProductCard = ({ product }) => {
                 )}
             </Link>
 
-            <div style={{ padding: '0.4rem 0.6rem 0.4rem', display: 'flex', flexDirection: 'column', flexShrink: 0, gap: '0.3rem', justifyContent: 'center' }}>
+            <div style={{ padding: '0.35rem 0.55rem 0.4rem', display: 'flex', flexDirection: 'column', flexShrink: 0, gap: '0.2rem', justifyContent: 'center' }}>
                 {/* Title */}
                 <Link to={`/product/${product.id}`}>
                     <h3 style={{
-                        fontSize: '0.78rem',
+                        fontSize: '0.75rem',
                         fontWeight: '400',
-                        lineHeight: '1.3',
+                        lineHeight: '1.25',
                         display: '-webkit-box',
-                        WebkitLineClamp: 2,
+                        WebkitLineClamp: 1,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
                         color: isSoldOut ? 'var(--text-gray)' : 'var(--text-dark)'
