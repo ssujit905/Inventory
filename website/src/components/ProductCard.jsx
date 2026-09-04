@@ -21,7 +21,7 @@ const ProductCard = ({ product }) => {
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            aspectRatio: '3 / 4.6',
+            aspectRatio: '3 / 4.8',
             border: '1px solid transparent',
             borderBottom: isSoldOut ? '3px solid var(--primary-red)' : '3px solid #000'
         }}
