@@ -21,7 +21,7 @@ const ProductCard = ({ product }) => {
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            aspectRatio: '3 / 4',
+            aspectRatio: '3 / 4.3',
             border: '1px solid transparent',
             borderBottom: isSoldOut ? '3px solid var(--primary-red)' : '3px solid #000'
         }}
@@ -72,7 +72,7 @@ const ProductCard = ({ product }) => {
                 <Link to={`/product/${product.id}`}>
                     <h3 style={{
                         fontSize: '0.75rem',
-                        fontWeight: '400',
+                        fontWeight: '700',
                         lineHeight: '1.25',
                         display: '-webkit-box',
                         WebkitLineClamp: 1,
@@ -87,8 +87,8 @@ const ProductCard = ({ product }) => {
                 {/* Price */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     <span style={{
-                        fontWeight: '800',
-                        fontSize: '0.68rem',
+                        fontWeight: '900',
+                        fontSize: '0.75rem',
                         color: isSoldOut ? 'var(--text-gray)' : 'var(--primary-red)',
                         whiteSpace: 'nowrap'
                     }}>
