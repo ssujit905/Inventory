@@ -6,13 +6,20 @@ const Signup = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
     const { signup } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        signup({ email, name });
-        navigate('/');
+        // Email signup is disabled (see AuthContext): customers register with
+        // phone + PIN. Never navigate home pretending an account was created.
+        const result = signup({ email, name });
+        if (result && result.success) {
+            navigate('/');
+        } else {
+            setError((result && result.error) || 'Signup is disabled. Please register with phone + PIN on My Orders.');
+        }
     };
 
     return (
@@ -20,6 +27,19 @@ const Signup = () => {
             <div className="container">
                 <div className="auth-form">
                     <h2 style={{ textAlign: 'center', marginBottom: '2rem' }}>Create Account</h2>
+                    {error && (
+                        <div style={{
+                            backgroundColor: '#fee2e2',
+                            color: '#dc2626',
+                            padding: '0.75rem',
+                            borderRadius: '0.5rem',
+                            marginBottom: '1.5rem',
+                            fontSize: '0.875rem',
+                            textAlign: 'center'
+                        }}>
+                            {error}
+                        </div>
+                    )}
                     <form onSubmit={handleSubmit}>
                         <div className="form-group">
                             <label>Full Name</label>

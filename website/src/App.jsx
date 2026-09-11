@@ -1,42 +1,61 @@
+import { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import { useSettings } from './context/SettingsContext';
-import Home from './pages/Home';
-import Shop from './pages/Shop';
-import ProductDetail from './pages/ProductDetail';
-import AllReviews from './pages/AllReviews';
-import StorePage from './pages/StorePage';
-import AdminDashboard from './pages/AdminDashboard';
-import Cart from './pages/Cart';
-import Checkout from './pages/Checkout';
-import Contact from './pages/Contact';
-import MyOrders from './pages/MyOrders';
-import PaymentSuccess from './pages/PaymentSuccess';
-import PaymentFailure from './pages/PaymentFailure';
 import ScrollToTop from './components/ScrollToTop';
+import { trackPageView } from './lib/analyticsTracker';
+
+// PERF: route-level code-splitting so the homepage doesn't ship Checkout,
+// MyOrders (heic2any), StorePage, etc. Each page becomes its own chunk
+// loaded on demand. Home stays eager (landing page); the rest lazy.
+import Home from './pages/Home';
+const Shop = lazy(() => import('./pages/Shop'));
+const ProductDetail = lazy(() => import('./pages/ProductDetail'));
+const AllReviews = lazy(() => import('./pages/AllReviews'));
+const StorePage = lazy(() => import('./pages/StorePage'));
+const Cart = lazy(() => import('./pages/Cart'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Contact = lazy(() => import('./pages/Contact'));
+const MyOrders = lazy(() => import('./pages/MyOrders'));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
+const PaymentFailure = lazy(() => import('./pages/PaymentFailure'));
+
+// Minimal skeleton shown while a route chunk loads
+const RouteFallback = () => (
+  <div style={{ padding: '4rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
+    Loading…
+  </div>
+);
 
 function App() {
   const location = useLocation();
   const isProductDetail = location.pathname.startsWith('/product/');
-  const isAdminPage = location.pathname.startsWith('/admin');
-  const isMyOrders = location.pathname.startsWith('/my-orders');
   const { settings } = useSettings();
   const supportPhone = settings.support_phone || settings.store_phone || '9779845877777'; 
-  const hideGlobalElements = isProductDetail || isAdminPage;
+
+  // Automatic analytics: track page views across routes
+  useEffect(() => {
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+
+  // NOTE: there is intentionally no /admin surface on the public website.
+  // Staff/admin tooling lives in the inventory desktop/mobile apps behind
+  // Supabase Auth + is_admin_or_staff() RLS.
+  const hideGlobalElements = isProductDetail;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <ScrollToTop />
       {!hideGlobalElements && <Header />}
       <main style={{ flex: 1 }}>
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/product/:id/reviews" element={<AllReviews />} />
           <Route path="/store/:vendorId" element={<StorePage />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/contact" element={<Contact />} />
@@ -44,6 +63,7 @@ function App() {
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/payment-failure" element={<PaymentFailure />} />
         </Routes>
+        </Suspense>
       </main>
       {!hideGlobalElements && <Footer />}
 

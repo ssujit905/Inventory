@@ -11,7 +11,6 @@ import {
     ArrowLeft, Share2
 } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
-import heic2any from 'heic2any';
 
 const MyOrders = () => {
     const { customer, login, logout, register, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
@@ -153,7 +152,8 @@ const MyOrders = () => {
             setCurrentPin(''); setNewPin(''); setConfirmPin('');
             setTimeout(() => { setShowChangePinModal(false); setPinMsg({ text: '', type: '' }); }, 2000);
         } catch (err) {
-            setPinMsg({ text: 'Failed to change PIN. Please try again.', type: 'error' });
+            const locked = /ACCOUNT_LOCKED|too many failed attempts/i.test(String(err?.message || ''));
+            setPinMsg({ text: locked ? 'Too many failed attempts. Please try again in 15 minutes.' : 'Failed to change PIN. Please try again.', type: 'error' });
         } finally {
             setPinLoading(false);
         }
@@ -194,7 +194,10 @@ const MyOrders = () => {
             });
 
             if (resetErr || !success) {
-                throw new Error('Verification failed. Please check your order details.');
+                const raw = String(resetErr?.message || '');
+                throw new Error(/ACCOUNT_LOCKED|too many failed attempts/i.test(raw)
+                    ? 'Too many failed attempts. Please try again in 15 minutes.'
+                    : 'Verification failed. Please check your order details.');
             }
 
             showNotification('PIN reset successfully! You can now login.', 'success');
@@ -301,9 +304,12 @@ const MyOrders = () => {
     const confirmCancelOrder = async () => {
         setIsCancelling(true);
         try {
+            // SECURITY: session token proves order ownership server-side.
+            // Tokenless calls are rejected (NOT_AUTHORIZED).
             const { error: cancelError } = await supabase.rpc('handle_website_order_cancellation', {
                 p_order_id: cancellingOrderId,
-                p_reason: `CUSTOMER: ${cancelReason}`
+                p_reason: `CUSTOMER: ${cancelReason}`,
+                p_token: sessionStorage.getItem('shopy_customer_session')
             });
             if (cancelError) throw cancelError;
             
@@ -311,7 +317,14 @@ const MyOrders = () => {
             setShowCancelModal(false);
         } catch (err) {
             console.error('Cancel error:', err);
-            showNotification('Could not cancel order. Please contact support.', 'error');
+            const msg = String(err?.message || '');
+            if (/ORDER_NOT_CANCELLABLE/i.test(msg)) {
+                showNotification('This order can no longer be cancelled. Please contact support.', 'error');
+            } else if (/SESSION_EXPIRED/i.test(msg)) {
+                showNotification('Session expired. Please login again to manage orders.', 'error');
+            } else {
+                showNotification('Could not cancel order. Please contact support.', 'error');
+            }
         } finally {
             setIsCancelling(false);
         }
@@ -323,6 +336,9 @@ const MyOrders = () => {
     };
 
     const convertHeic = async (file) => {
+        // PERF: heic2any is ~1.3MB — load it only when a HEIC file is picked,
+        // never as part of the route bundle.
+        const { default: heic2any } = await import('heic2any');
         const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
         return Array.isArray(converted) ? converted[0] : converted;
     };
@@ -389,25 +405,42 @@ const MyOrders = () => {
             const mediaUrls = [];
             for (const f of returnFiles) {
                 const path = `returns/${selectedReturnOrder.id}/${Date.now()}-${f.name}.jpg`;
-                await supabase.storage.from('images').upload(path, f.file, { contentType: 'image/jpeg' });
+                const { error: uploadError } = await supabase.storage.from('images').upload(path, f.file, { contentType: 'image/jpeg' });
+                if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(path);
                 mediaUrls.push({ url: publicUrl, type: 'image' });
             }
-            await supabase.from('website_order_returns').insert({
-                order_id: selectedReturnOrder.id,
-                order_number: selectedReturnOrder.order_number,
-                customer_phone: customer.phone,
-                type: returnType,
-                message: returnMessage,
-                media: mediaUrls,
-                status: 'pending'
+            // SECURITY: return requests go through the session-authed RPC,
+            // which enforces ownership, delivered status, the 2-day window
+            // and media binding server-side. Direct table inserts are revoked.
+            const { data, error: returnError } = await supabase.rpc('customer_request_return', {
+                p_token: sessionStorage.getItem('shopy_customer_session'),
+                p_order_id: selectedReturnOrder.id,
+                p_type: returnType,
+                p_message: returnMessage.trim(),
+                p_media: mediaUrls
             });
+            if (returnError || !data?.success) {
+                throw new Error(returnError?.message || data?.error || 'Return request failed');
+            }
             setRequestedReturnStatuses(prev => ({ ...prev, [selectedReturnOrder.id]: 'pending' }));
             setReturnSuccess(true);
             setTimeout(() => { setShowReturnModal(false); setReturnSuccess(false); setReturnMessage(''); setReturnFiles([]); }, 2500);
         } catch (err) {
             console.error('Return request failed:', err);
-            showNotification(err?.message || 'Could not submit your return request. Please try again.', 'error');
+            const msg = String(err?.message || '');
+            if (/RETURN_WINDOW_CLOSED/i.test(msg)) {
+                showNotification('The 2-day return window for this order has passed.', 'error');
+            } else if (/RETURN_ALREADY_REQUESTED/i.test(msg)) {
+                setRequestedReturnStatuses(prev => ({ ...prev, [selectedReturnOrder.id]: 'pending' }));
+                showNotification('A return request for this order is already open.', 'error');
+            } else if (/SESSION_EXPIRED/i.test(msg)) {
+                showNotification('Session expired. Please login again to request a return.', 'error');
+            } else if (/RETURN_NOT_ELIGIBLE/i.test(msg)) {
+                showNotification('Only delivered orders can be returned.', 'error');
+            } else {
+                showNotification(msg || 'Could not submit your return request. Please try again.', 'error');
+            }
         } finally {
             setIsSubmittingReturn(false);
         }
@@ -479,6 +512,7 @@ const MyOrders = () => {
                                     <img
                                         src="/logo.png"
                                         alt="Shopy Nepal"
+                                        decoding="async"
                                         style={{ height: '64px', width: 'auto', objectFit: 'contain' }}
                                     />
                                 </div>
@@ -826,10 +860,10 @@ const MyOrders = () => {
                                             <div key={item.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                                 {item.product_image && item.product_id ? (
                                                     <Link to={`/product/${item.product_id}`}>
-                                                        <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                        <img src={item.product_image} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
                                                     </Link>
                                                 ) : (
-                                                    item.product_image && <img src={item.product_image} alt="" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                    item.product_image && <img src={item.product_image} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
                                                 )}
                                                 <div style={{ flex: 1 }}>
                                                     {item.product_id ? (

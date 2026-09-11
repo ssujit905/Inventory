@@ -3,6 +3,7 @@ import { useProducts } from '../context/ProductContext';
 import ProductCard from '../components/ProductCard';
 import { useState, useEffect, useMemo } from 'react';
 import { Filter, X, ChevronDown, LayoutGrid, ListFilter, SlidersHorizontal, Search } from 'lucide-react';
+import { trackSearch } from '../lib/analyticsTracker';
 
 const Shop = () => {
     const { products, loading } = useProducts();
@@ -51,6 +52,13 @@ const Shop = () => {
         return result;
     }, [products, searchQuery, selectedCategory, sortBy]);
 
+    // Automatically record search intent and match count for AI analysis
+    useEffect(() => {
+        if (!loading && searchQuery && searchQuery.trim().length >= 2) {
+            trackSearch(searchQuery.trim(), filteredProducts.length);
+        }
+    }, [loading, searchQuery, filteredProducts.length]);
+
     // Masonry Columns for Mobile
     const leftColumn = filteredProducts.filter((_, idx) => idx % 2 === 0);
     const rightColumn = filteredProducts.filter((_, idx) => idx % 2 !== 0);
@@ -83,7 +91,7 @@ const Shop = () => {
                 </div>
             </div>
 
-            <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '5rem' }}>
+            <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '5rem', paddingLeft: '0.4rem', paddingRight: '0.4rem' }}>
                 {/* Header & Controls */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', padding: '0 0.25rem' }}>
                     <div>
@@ -120,10 +128,10 @@ const Shop = () => {
                     </div>
                 ) : filteredProducts.length > 0 ? (
                     <div className="shop-grid">
-                        <div className="grid-column" style={{ paddingTop: '20px' }}>
+                        <div className="grid-column" style={{ paddingTop: '12px' }}>
                             {leftColumn.map(p => <ProductCard key={p.id} product={p} />)}
                         </div>
-                        <div className="grid-column">
+                        <div className="grid-column" style={{ marginTop: '-4px' }}>
                             {rightColumn.map(p => <ProductCard key={p.id} product={p} />)}
                         </div>
                     </div>
@@ -215,19 +223,19 @@ const Shop = () => {
                 .shop-grid {
                     display: grid;
                     grid-template-columns: repeat(2, 1fr);
-                    gap: 8px;
+                    gap: 4px;
                 }
                 .grid-column {
                     display: flex;
                     flex-direction: column;
-                    gap: 8px;
+                    gap: 4px;
                 }
                 .container::-webkit-scrollbar { display: none; }
                 
                 @media (min-width: 992px) {
                     .shop-grid {
                         grid-template-columns: repeat(5, 1fr);
-                        gap: 12px;
+                        gap: 8px;
                     }
                     .grid-column { display: contents; }
                     .grid-column:first-child { padding-top: 0 !important; }

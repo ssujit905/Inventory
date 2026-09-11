@@ -160,7 +160,7 @@ const StorePage = () => {
 
     return (
         <div className="shop-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '5rem' }}>
-            <div className="container" style={{ paddingTop: '1.5rem', maxWidth: '1100px' }}>
+            <div className="container" style={{ paddingTop: '1.5rem', maxWidth: '1100px', paddingLeft: '0.375rem', paddingRight: '0.375rem' }}>
                 <Link
                     to={backTarget}
                     style={{
@@ -202,6 +202,7 @@ const StorePage = () => {
                                     <img
                                         src={vendorProfile.avatar_url}
                                         alt={storeName}
+                                        decoding="async"
                                         style={{
                                             width: '56px', height: '56px', borderRadius: '16px',
                                             objectFit: 'cover', border: '2px solid #f1f5f9',
@@ -348,7 +349,7 @@ const StorePage = () => {
 
                         {products.length > 0 ? (
                             <div className="shop-grid">
-                                <div className="grid-column" style={{ paddingTop: '20px' }}>
+                                <div className="grid-column" style={{ paddingTop: '10px' }}>
                                     {products.filter((_, idx) => idx % 2 === 0).map(p => <ProductCard key={p.id} product={p} />)}
                                 </div>
                                 <div className="grid-column">
@@ -371,13 +372,18 @@ const StorePage = () => {
             <style>{`
                 .shop-grid {
                     display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 8px;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 6px;
+                    width: 100%;
+                    max-width: 100%;
+                    overflow: hidden;
                 }
                 .grid-column {
                     display: flex;
                     flex-direction: column;
-                    gap: 8px;
+                    gap: 6px;
+                    min-width: 0;
+                    max-width: 100%;
                 }
                 @media (min-width: 992px) {
                     .shop-grid {

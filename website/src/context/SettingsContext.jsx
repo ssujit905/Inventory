@@ -25,19 +25,14 @@ export const SettingsProvider = ({ children }) => {
         fetchSettings();
     }, []);
 
-    const saveSetting = async (key, value) => {
-        const { error } = await supabase
-            .from('website_settings')
-            .upsert({ key, value }, { onConflict: 'key' });
-        
-        if (!error) {
-            setSettings(prev => ({ ...prev, [key]: value }));
-        }
-        return { error };
-    };
-
+    // SECURITY: read-only on the public website. Settings (flash sale toggles,
+    // store info, payment config) must only be changed from the inventory
+    // desktop/mobile apps by authenticated staff — enforced by the
+    // website_settings RLS policies (see fix_website_settings_rls.sql).
+    // A previous version exposed saveSetting() (anon upsert) here, which let
+    // any visitor rewrite store settings. Do not re-add a client write path.
     return (
-        <SettingsContext.Provider value={{ settings, settingsLoading, saveSetting }}>
+        <SettingsContext.Provider value={{ settings, settingsLoading }}>
             {children}
         </SettingsContext.Provider>
     );

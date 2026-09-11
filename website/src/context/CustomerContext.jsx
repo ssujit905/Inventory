@@ -5,6 +5,16 @@ const CustomerContext = createContext();
 
 export const useCustomer = () => useContext(CustomerContext);
 
+// SECURITY: the PIN RPCs now throttle server-side (5 fails / 15 min per
+// phone, 30 / 15 min per IP). Locked responses carry an ACCOUNT_LOCKED error;
+// surface it as a friendly message instead of "invalid PIN".
+const LOCKOUT_RE = /ACCOUNT_LOCKED|too many failed attempts/i;
+const isAuthLockedOut = (msg) => LOCKOUT_RE.test(String(msg || ''));
+const friendlyAuthError = (serverError, fallback) =>
+    isAuthLockedOut(serverError)
+        ? 'Too many failed attempts. Please try again in 15 minutes.'
+        : (serverError || fallback);
+
 export const CustomerProvider = ({ children }) => {
     const [customer, setCustomer] = useState(() => {
         const saved = sessionStorage.getItem('shopy_customer');
@@ -22,7 +32,7 @@ export const CustomerProvider = ({ children }) => {
 
             if (error || !data?.success) {
                 console.error('Login failure:', error || 'No data');
-                throw new Error('Invalid phone number or PIN');
+                throw new Error(friendlyAuthError(data?.error, 'Invalid phone number or PIN'));
             }
 
             const customerData = data.customer;
@@ -45,7 +55,7 @@ export const CustomerProvider = ({ children }) => {
         
         try {
             const { data, error } = await supabase.rpc('customer_register', { p_name: name, p_phone: cleanPhone, p_pin: String(pin), p_address: null, p_city: null });
-            if (error || !data?.success) throw error || new Error(data?.error || 'Registration failed');
+            if (error || !data?.success) throw new Error(friendlyAuthError(data?.error || error?.message, 'Registration failed'));
             setCustomer(data.customer);
             sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));
             sessionStorage.setItem('shopy_customer_session', data.session_token);
@@ -122,7 +132,7 @@ export const CustomerProvider = ({ children }) => {
             });
 
             if (error || !data?.success) {
-                throw new Error(data?.error || error?.message || 'Failed to set up account');
+                throw new Error(friendlyAuthError(data?.error || error?.message, 'Failed to set up account'));
             }
 
             setCustomer(data.customer);

@@ -10,8 +10,10 @@ import {
 } from 'recharts';
 import {
     Globe, TrendingUp, ShoppingBag, Loader2, IndianRupee,
-    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package
+    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package,
+    Sparkles, BarChart3
 } from 'lucide-react';
+import AIStoreDoctor from '../components/AIStoreDoctor';
 
 interface WebStats {
     totalRevenue: number;
@@ -51,6 +53,7 @@ export default function WebsiteReportsPage() {
     const [monthlyRevenue, setMonthlyRevenue] = useState<any[]>([]);
     const [monthlyOrders, setMonthlyOrders] = useState<any[]>([]);
     const [statusData, setStatusData] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<'revenue' | 'ai-doctor'>('revenue');
 
     useEffect(() => { fetchStats(); }, []);
 
@@ -214,12 +217,12 @@ export default function WebsiteReportsPage() {
             <div className="max-w-7xl mx-auto space-y-8 pb-12">
                 
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Website Performance</h1>
-                        <p className="text-sm text-gray-400 font-bold uppercase tracking-widest">E-Commerce Revenue & Fulfillment</p>
+                        <p className="text-sm text-gray-400 font-bold uppercase tracking-widest">E-Commerce Analytics & AI Intelligence</p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         <button 
                             onClick={fetchStats}
                             className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-gray-100 transition-colors"
@@ -233,8 +236,46 @@ export default function WebsiteReportsPage() {
                     </div>
                 </div>
 
-                {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Sub-Navigation Tabs */}
+                <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    <button
+                        onClick={() => setActiveTab('revenue')}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all ${
+                            activeTab === 'revenue'
+                                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-md'
+                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                    >
+                        <BarChart3 size={15} />
+                        <span>Revenue & Fulfillment</span>
+                    </button>
+
+                    <button
+                        onClick={() => setActiveTab('ai-doctor')}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all relative ${
+                            activeTab === 'ai-doctor'
+                                ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md shadow-amber-500/20'
+                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                    >
+                        <Sparkles size={15} className={activeTab === 'ai-doctor' ? 'animate-pulse' : 'text-amber-500'} />
+                        <span>AI Store Doctor & Searches</span>
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-white/20 text-white">
+                            Free AI
+                        </span>
+                    </button>
+                </div>
+
+                {/* AI Store Doctor View */}
+                {activeTab === 'ai-doctor' && (
+                    <AIStoreDoctor />
+                )}
+
+                {/* Standard Revenue & Fulfillment View */}
+                {activeTab === 'revenue' && (
+                    <>
+                        {/* KPI Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <KpiCard
                         title="Gross Revenue"
                         value={`Rs. ${stats.totalRevenue.toLocaleString()}`}
@@ -412,6 +453,8 @@ export default function WebsiteReportsPage() {
                         </div>
                     </div>
                 </div>
+                </>
+                )}
 
             </div>
         </DashboardLayout>

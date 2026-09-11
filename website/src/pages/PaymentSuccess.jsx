@@ -35,9 +35,14 @@ const PaymentSuccess = () => {
 
                 if (dataParam) {
                     // ─── ESEWA FLOW ───
+                    // The edge function verifies the gateway signature, binds the
+                    // callback to the stored payment intent (amount + reference
+                    // match), creates the order from the server snapshot and
+                    // marks it paid — all server-side. The browser never creates
+                    // orders or flips payment status anymore.
                     const decodedString = atob(dataParam);
                     const paymentDetails = JSON.parse(decodedString);
-                    const { transaction_uuid, transaction_code, total_amount, status } = paymentDetails;
+                    const { transaction_uuid, transaction_code, status } = paymentDetails;
 
                     if (status !== 'COMPLETE') {
                         setErrorMsg(`Payment was not completed. Status: ${status}`);
@@ -45,83 +50,46 @@ const PaymentSuccess = () => {
                         return;
                     }
 
-                    const { data: verification, error: verificationError } = await supabase.functions.invoke('payment-gateway', {
-                        body: { action: 'verify-esewa-response', paymentDetails }
-                    });
-                    const isSignatureValid = !verificationError && verification?.valid === true;
-
-                    if (!isSignatureValid) {
-                        console.error('Invalid eSewa payment signature:', { received: paymentDetails.signature });
-                        setErrorMsg('Security check failed. The payment signature is invalid.');
+                    const cacheKey = `last_esewa_success_${transaction_uuid}`;
+                    const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_esewa_success');
+                    // Refresh-safe: a cached summary means this callback already
+                    // completed server-side (intents are single-use).
+                    if (cachedSummary) {
+                        orderSummary = JSON.parse(cachedSummary);
+                        showNotification('eSewa Payment verified successfully!', 'success');
+                        setOrderInfo(orderSummary);
                         setLoading(false);
                         return;
                     }
 
-                    const realOrderNumber = transaction_uuid.includes('-')
-                        ? transaction_uuid.substring(0, transaction_uuid.lastIndexOf('-'))
-                        : transaction_uuid;
-
-                    const rawPending = sessionStorage.getItem('pending_esewa_order');
-                    const cacheKey = `last_esewa_success_${realOrderNumber}`;
-                    const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_esewa_success');
-
-                    if (rawPending) {
-                        const pending = JSON.parse(rawPending);
-                        const { data: createRes, error: createError } = await supabase.rpc('create_atomic_website_order', {
-                            p_customer_name: pending.customer_name,
-                            p_phone: pending.phone,
-                            p_phone2: pending.phone2,
-                            p_address: pending.address,
-                            p_city: pending.city,
-                            p_payment_method: 'eSewa',
-                            p_shipping_fee: pending.shipping_fee,
-                            p_total_amount: pending.total_amount,
-                            p_items: pending.items,
-                            p_coins_used: pending.coins_used,
-                            p_ad_id: pending.ad_id
-                        });
-
-                        if (createError) throw new Error('Payment was verified but order could not be created: ' + createError.message);
-
-                        const confirmedOrderNumber = createRes?.order_number || realOrderNumber;
-                        const cleanAmount = String(total_amount).replace(/,/g, '');
-                        const paymentNote = `eSewa Payment Complete.\nTxn Code: ${transaction_code}\nTotal Paid: Rs. ${cleanAmount}`;
-
-                        await supabase.rpc('confirm_website_payment', {
-                            p_order_number: confirmedOrderNumber,
-                            p_payment_details: paymentNote,
-                            p_status: 'paid'
-                        });
-
-                        orderSummary = {
-                            orderNumber: confirmedOrderNumber,
-                            customerName: pending.customer_name,
-                            phone: pending.phone,
-                            address: pending.address,
-                            city: pending.city,
-                            totalAmount: Number(pending.total_amount),
-                            txnCode: transaction_code,
-                            paymentMethod: 'eSewa'
-                        };
-
-                        sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
-                        sessionStorage.setItem('last_esewa_success', JSON.stringify(orderSummary));
-                        sessionStorage.removeItem('pending_esewa_order');
-                    } else if (cachedSummary) {
-                        orderSummary = JSON.parse(cachedSummary);
-                    } else {
-                        const cleanAmount = String(total_amount).replace(/,/g, '');
-                        orderSummary = {
-                            orderNumber: realOrderNumber,
-                            customerName: 'Customer',
-                            phone: 'N/A',
-                            address: 'N/A',
-                            city: '',
-                            totalAmount: Number(cleanAmount) || 0,
-                            txnCode: transaction_code,
-                            paymentMethod: 'eSewa'
-                        };
+                    const stored = JSON.parse(sessionStorage.getItem('pending_esewa_intent') || 'null');
+                    if (!stored?.intent_token) {
+                        setErrorMsg('We could not match this payment to a checkout session. If money was deducted, please contact support.');
+                        setLoading(false);
+                        return;
                     }
+
+                    const { data: completed, error: completeError } = await supabase.functions.invoke('payment-gateway', {
+                        body: { action: 'complete-esewa-order', paymentDetails, intentToken: stored.intent_token }
+                    });
+                    if (completeError || !completed?.success) {
+                        throw new Error(completeError?.message || completed?.error || 'Payment verification failed.');
+                    }
+
+                    orderSummary = {
+                        orderNumber: completed.order_number,
+                        customerName: completed.customer_name,
+                        phone: completed.phone,
+                        address: completed.address,
+                        city: completed.city,
+                        totalAmount: Number(completed.total_amount),
+                        txnCode: completed.txn_code || transaction_code,
+                        paymentMethod: 'eSewa'
+                    };
+
+                    sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
+                    sessionStorage.setItem('last_esewa_success', JSON.stringify(orderSummary));
+                    sessionStorage.removeItem('pending_esewa_intent');
                     showNotification('eSewa Payment verified successfully!', 'success');
 
                 } else {
@@ -137,7 +105,7 @@ const PaymentSuccess = () => {
                         DV: searchParams.get('DV')
                     };
 
-                    const { PRN, BID, AMT, UTN, P_STAT } = fonepayDetails;
+                    const { PRN, P_STAT } = fonepayDetails;
 
                     if (P_STAT !== 'SUCCESS' && P_STAT !== 'COMPLETED') {
                         setErrorMsg(`Payment was not completed. Status: ${P_STAT}`);
@@ -145,77 +113,41 @@ const PaymentSuccess = () => {
                         return;
                     }
 
-                    const { data: verification, error: verificationError } = await supabase.functions.invoke('payment-gateway', {
-                        body: { action: 'verify-fonepay-response', paymentDetails: fonepayDetails }
-                    });
-                    const isSignatureValid = !verificationError && verification?.valid === true;
-
-                    if (!isSignatureValid) {
-                        console.error('Invalid Fonepay signature:', { received: fonepayDetails.DV });
-                        setErrorMsg('Security check failed. The Fonepay signature is invalid.');
+                    const fonepayCacheKey = `last_fonepay_success_${PRN}`;
+                    const fonepayCached = sessionStorage.getItem(fonepayCacheKey) || sessionStorage.getItem('last_fonepay_success');
+                    // Refresh-safe: cached means the callback already completed.
+                    if (fonepayCached) {
+                        orderSummary = JSON.parse(fonepayCached);
+                        showNotification('Bank Transfer Payment verified successfully!', 'success');
+                        setOrderInfo(orderSummary);
                         setLoading(false);
                         return;
                     }
 
-                    const rawPending = sessionStorage.getItem('pending_fonepay_order');
-                    const cacheKey = `last_fonepay_success_${PRN}`;
-                    const cachedSummary = sessionStorage.getItem(cacheKey) || sessionStorage.getItem('last_fonepay_success');
-
-                    if (rawPending) {
-                        const pending = JSON.parse(rawPending);
-                        const { data: createRes, error: createError } = await supabase.rpc('create_atomic_website_order', {
-                            p_customer_name: pending.customer_name,
-                            p_phone: pending.phone,
-                            p_phone2: pending.phone2,
-                            p_address: pending.address,
-                            p_city: pending.city,
-                            p_payment_method: 'Bank Transfer',
-                            p_shipping_fee: pending.shipping_fee,
-                            p_total_amount: pending.total_amount,
-                            p_items: pending.items,
-                            p_coins_used: pending.coins_used,
-                            p_ad_id: pending.ad_id
-                        });
-
-                        if (createError) throw new Error('Payment verified but order could not be created: ' + createError.message);
-
-                        const confirmedOrderNumber = createRes?.order_number || PRN;
-                        const paymentNote = `Fonepay Payment Complete.\nUTN Ref: ${UTN}\nBill ID: ${BID}\nTotal Paid: Rs. ${AMT}`;
-
-                        await supabase.rpc('confirm_website_payment', {
-                            p_order_number: confirmedOrderNumber,
-                            p_payment_details: paymentNote,
-                            p_status: 'paid'
-                        });
-
-                        orderSummary = {
-                            orderNumber: confirmedOrderNumber,
-                            customerName: pending.customer_name,
-                            phone: pending.phone,
-                            address: pending.address,
-                            city: pending.city,
-                            totalAmount: Number(pending.total_amount),
-                            txnCode: UTN,
-                            paymentMethod: 'Bank Transfer'
-                        };
-
-                        sessionStorage.setItem(cacheKey, JSON.stringify(orderSummary));
-                        sessionStorage.setItem('last_fonepay_success', JSON.stringify(orderSummary));
-                        sessionStorage.removeItem('pending_fonepay_order');
-                    } else if (cachedSummary) {
-                        orderSummary = JSON.parse(cachedSummary);
-                    } else {
-                        orderSummary = {
-                            orderNumber: PRN,
-                            customerName: 'Customer',
-                            phone: 'N/A',
-                            address: 'N/A',
-                            city: '',
-                            totalAmount: Number(AMT) || 0,
-                            txnCode: UTN,
-                            paymentMethod: 'Bank Transfer'
-                        };
+                    // The PRN is the server-assigned intent ref; completion binds
+                    // amount + signature server-side and creates/marks the order
+                    // there. No pending-order blob is trusted from the browser.
+                    const { data: fonepayDone, error: fonepayError } = await supabase.functions.invoke('payment-gateway', {
+                        body: { action: 'complete-fonepay-order', paymentDetails: fonepayDetails }
+                    });
+                    if (fonepayError || !fonepayDone?.success) {
+                        throw new Error(fonepayError?.message || fonepayDone?.error || 'Payment verification failed.');
                     }
+
+                    orderSummary = {
+                        orderNumber: fonepayDone.order_number,
+                        customerName: fonepayDone.customer_name,
+                        phone: fonepayDone.phone,
+                        address: fonepayDone.address,
+                        city: fonepayDone.city,
+                        totalAmount: Number(fonepayDone.total_amount),
+                        txnCode: fonepayDone.txn_code,
+                        paymentMethod: 'Bank Transfer'
+                    };
+
+                    sessionStorage.setItem(fonepayCacheKey, JSON.stringify(orderSummary));
+                    sessionStorage.setItem('last_fonepay_success', JSON.stringify(orderSummary));
+                    sessionStorage.removeItem('pending_fonepay_intent');
                     showNotification('Bank Transfer Payment verified successfully!', 'success');
                 }
 

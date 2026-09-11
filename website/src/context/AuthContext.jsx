@@ -1,38 +1,25 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+// SECURITY: This is a deprecated legacy context. It previously contained a
+// hardcoded mock admin credential (admin@shopy.com / admin123) that granted an
+// 'admin' role purely client-side via localStorage — anyone could forge it and
+// open /admin/dashboard. That backdoor has been removed.
+//
+// - Customer auth lives in CustomerContext.jsx (phone + PIN via server RPCs).
+// - Staff/admin auth lives in the inventory desktop/mobile apps (Supabase Auth
+//   + public.is_admin_or_staff() RLS check). There is no admin surface on the
+//   public website anymore; /admin/dashboard route was removed in App.jsx.
+// The stubs below are kept so unrouted legacy pages (Login/Signup) don't crash,
+// but they never authenticate anyone and never persist a role.
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(() => {
-        const savedUser = localStorage.getItem('shopy-nepal-user');
-        return savedUser ? JSON.parse(savedUser) : null;
-    });
+    const [user, setUser] = useState(null);
 
-    const login = (email, password) => {
-        // Admin credentials check
-        if (email === 'admin@shopy.com' && password === 'admin123') {
-            const adminUser = {
-                email,
-                name: 'Admin User',
-                role: 'admin',
-                joined: 'Feb 2026'
-            };
-            setUser(adminUser);
-            localStorage.setItem('shopy-nepal-user', JSON.stringify(adminUser));
-            return { success: true, role: 'admin' };
-        }
-
-        // Regular user mock login
-        const regularUser = {
-            email,
-            name: email.split('@')[0],
-            role: 'user'
-        };
-        setUser(regularUser);
-        localStorage.setItem('shopy-nepal-user', JSON.stringify(regularUser));
-        return { success: true, role: 'user' };
+    const login = () => {
+        return { success: false, error: 'Email login is disabled. Customers sign in with phone + PIN on My Orders.' };
     };
 
     const logout = () => {
@@ -40,10 +27,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('shopy-nepal-user');
     };
 
-    const signup = (userData) => {
-        const newUser = { ...userData, role: 'user' };
-        setUser(newUser);
-        localStorage.setItem('shopy-nepal-user', JSON.stringify(newUser));
+    const signup = () => {
+        return { success: false, error: 'Email signup is disabled. Customers register with phone + PIN on My Orders.' };
     };
 
     return (

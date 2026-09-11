@@ -93,7 +93,7 @@ const Cart = () => {
                                         style={{ width: '18px', height: '18px', accentColor: 'var(--primary-red)' }}
                                     />
                                 </div>
-                                <img src={item.image} alt={item.title} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '0.25rem', border: '1px solid #f1f5f9' }} />
+                                <img src={item.image} alt={item.title} loading="lazy" decoding="async" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '0.25rem', border: '1px solid #f1f5f9' }} />
 
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

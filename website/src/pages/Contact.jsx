@@ -49,19 +49,23 @@ const Contact = () => {
         }
 
         try {
-            const { error: err } = await supabase.from('website_order_returns').insert({
-                order_number: 'CONTACT',
-                customer_phone: formData.phone,
-                type: 'message',
-                message: `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage: ${formData.message}`,
-                status: 'pending'
+            // SECURITY: contact messages go through a validated + throttled
+            // RPC. Direct table inserts are revoked for the anon key.
+            const { data, error: err } = await supabase.rpc('submit_contact_message', {
+                p_name: formData.name,
+                p_email: formData.email,
+                p_phone: formData.phone,
+                p_message: formData.message
             });
-            if (err) throw err;
+            if (err || !data?.success) throw new Error(err?.message || data?.error || 'Failed to send message.');
             setSuccess(true);
             setFormData({ name: '', email: '', phone: '', message: '' });
             setTimeout(() => setSuccess(false), 5000);
         } catch (err) {
-            setError(err.message || 'Failed to send message. Please try again.');
+            const msg = String(err?.message || '');
+            setError(/TOO_MANY_MESSAGES/i.test(msg)
+                ? 'You have sent several messages recently. Please try again later.'
+                : (msg || 'Failed to send message. Please try again.'));
         } finally {
             setLoading(false);
         }

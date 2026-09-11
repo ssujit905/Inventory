@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCustomer } from '../context/CustomerContext';
 import { useNotification } from '../context/NotificationContext';
+import { trackFunnelEvent } from '../lib/analyticsTracker';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
@@ -40,6 +41,10 @@ const Checkout = () => {
 
     const [isOrdered, setIsOrdered] = useState(false);
     const [orderNumber, setOrderNumber] = useState('');
+    // SECURITY: the order RPC reprices everything server-side (unit prices,
+    // shipping, coins). The total below is the AUTHORITATIVE server total —
+    // the success screen and Pixel must use it, never the client estimate.
+    const [placedTotal, setPlacedTotal] = useState(null);
     const [saving, setSaving] = useState(false);
     const [pin, setPin] = useState('');
     const [creatingAccount, setCreatingAccount] = useState(false);
@@ -70,6 +75,19 @@ const Checkout = () => {
         const clearPaymentRedirect = () => setPaymentRedirecting(false);
         window.addEventListener('pageshow', clearPaymentRedirect);
         return () => window.removeEventListener('pageshow', clearPaymentRedirect);
+    }, []);
+
+    // Telemetry: record begin_checkout funnel step
+    useEffect(() => {
+        if (checkoutItems.length > 0) {
+            trackFunnelEvent('begin_checkout', {
+                cartTotal: checkoutSubtotal,
+                metadata: {
+                    itemCount: checkoutItems.length,
+                    isBuyNow
+                }
+            });
+        }
     }, []);
 
     useEffect(() => {
@@ -187,12 +205,12 @@ const Checkout = () => {
 
     const grandTotal = checkoutSubtotal + shippingFee - appliedCoinDiscount;
 
-    // Meta Pixel: Track Purchase Success
+    // Meta Pixel: Track Purchase Success (server-priced total)
     useEffect(() => {
         if (isOrdered && window.fbq) {
             try {
                 window.fbq('track', 'Purchase', {
-                    value: grandTotal,
+                    value: placedTotal ?? grandTotal,
                     currency: 'USD',
                     content_ids: checkoutItems.map(item => String(item.variant_id || item.id || '')).filter(Boolean),
                     content_type: 'product',
@@ -202,7 +220,7 @@ const Checkout = () => {
                 console.warn('[Meta Pixel] Purchase tracking failed:', e);
             }
         }
-    }, [isOrdered]);
+    }, [isOrdered, placedTotal]);
 
     // Hold render until hydration is done
     if (!cartReady && !isOrdered) return null;
@@ -261,20 +279,36 @@ const Checkout = () => {
                 setPaymentRedirecting(true);
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-                const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
-                const transactionUuid = `${tempOrderNumber}-${Date.now()}`;
+                // 1. Server prices the order and freezes the quote in a payment
+                //    intent. Only variant ids + quantities leave the browser —
+                //    amounts are never trusted from here.
+                const { data: intent, error: intentError } = await supabase.rpc('create_payment_intent', {
+                    p_customer_name: formData.fullName,
+                    p_phone: formData.phone,
+                    p_phone2: formData.phone2,
+                    p_address: formData.address,
+                    p_city: formData.city,
+                    p_payment_method: 'eSewa',
+                    p_items: checkoutItems.map(item => ({ variant_id: item.variant_id, quantity: item.quantity })),
+                    p_coins_used: appliedCoinDiscount,
+                    p_ad_id: checkoutItems[0]?.ad_id || null
+                });
+                if (intentError || !intent?.intent_token) {
+                    if (/PRODUCT_SOLD_OUT|PRODUCT_UNAVAILABLE|PAYMENT_METHOD_NOT_ALLOWED|INVALID_VARIANT|INVALID_QUANTITY/.test(intentError?.message || '')) {
+                        setCheckoutError(`This order can't be placed: ${intentError.message}. Please review your cart and try again.`);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    throw new Error(intentError?.message || 'Unable to start the eSewa payment.');
+                }
+                // Only the opaque token is kept client-side; the quote lives server-side.
+                sessionStorage.setItem('pending_esewa_intent', JSON.stringify({ intent_token: intent.intent_token }));
 
-                const fmt = (n) => Number(n).toFixed(2);
-                const totalAmountStr = fmt(grandTotal);
-                const amountStr = fmt(grandTotal - shippingFee);
-                const deliveryChargeStr = fmt(shippingFee);
+                // 2. Edge function signs the INTENT totals (not browser amounts).
                 const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
                     body: {
                         action: 'create-esewa-payment',
-                        totalAmount: totalAmountStr,
-                        amount: amountStr,
-                        deliveryCharge: deliveryChargeStr,
-                        transactionUuid,
+                        intentToken: intent.intent_token,
                         successUrl: `${window.location.origin}/payment-success`,
                         failureUrl: `${window.location.origin}/payment-failure`
                     }
@@ -282,25 +316,6 @@ const Checkout = () => {
                 if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
                     throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the eSewa payment.');
                 }
-
-                // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
-                const pendingOrderData = {
-                    customer_name: formData.fullName,
-                    phone: formData.phone,
-                    phone2: formData.phone2,
-                    address: formData.address,
-                    city: formData.city,
-                    payment_method: 'eSewa',
-                    shipping_fee: shippingFee,
-                    total_amount: grandTotal,
-                    items: orderItems,
-                    coins_used: appliedCoinDiscount,
-                    ad_id: checkoutItems[0]?.ad_id || null,
-                    order_number: tempOrderNumber,
-                    transaction_uuid: transactionUuid,
-                    is_buy_now: isBuyNow
-                };
-                sessionStorage.setItem('pending_esewa_order', JSON.stringify(pendingOrderData));
 
                 const form = document.createElement('form');
                 form.method = 'POST';
@@ -321,44 +336,43 @@ const Checkout = () => {
 
             // ── Bank Transfer / Fonepay Payment Flow (Deferred Order Creation) ───────────────────────────
             if (formData.paymentMethod === 'Bank Transfer') {
-                const tempOrderNumber = `SN-${Date.now().toString().slice(-6)}`;
-                const fmt = (n) => Number(n).toFixed(2);
-                const totalAmountStr = fmt(grandTotal);
+                // 1. Server-priced payment intent (amounts never leave the browser).
+                const { data: intent, error: intentError } = await supabase.rpc('create_payment_intent', {
+                    p_customer_name: formData.fullName,
+                    p_phone: formData.phone,
+                    p_phone2: formData.phone2,
+                    p_address: formData.address,
+                    p_city: formData.city,
+                    p_payment_method: 'Bank Transfer',
+                    p_items: checkoutItems.map(item => ({ variant_id: item.variant_id, quantity: item.quantity })),
+                    p_coins_used: appliedCoinDiscount,
+                    p_ad_id: checkoutItems[0]?.ad_id || null
+                });
+                if (intentError || !intent?.intent_token) {
+                    if (/PRODUCT_SOLD_OUT|PRODUCT_UNAVAILABLE|PAYMENT_METHOD_NOT_ALLOWED|INVALID_VARIANT|INVALID_QUANTITY/.test(intentError?.message || '')) {
+                        setCheckoutError(`This order can't be placed: ${intentError.message}. Please review your cart and try again.`);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    throw new Error(intentError?.message || 'Unable to start the Bank Transfer payment.');
+                }
+                sessionStorage.setItem('pending_fonepay_intent', JSON.stringify({ intent_token: intent.intent_token }));
 
-                // Date in MM/DD/YYYY format
+                // Date in MM/DD/YYYY format (required for the Fonepay signature)
                 const today = new Date();
                 const mm = String(today.getMonth() + 1).padStart(2, '0');
                 const dd = String(today.getDate()).padStart(2, '0');
                 const yyyy = today.getFullYear();
                 const dateStr = `${mm}/${dd}/${yyyy}`;
 
-                const r1 = `Order ${tempOrderNumber}`;
-                const r2 = `Shipping Rs. ${fmt(shippingFee)}`;
+                // 2. Edge signs the INTENT total; PRN is assigned server-side.
                 const returnUrl = `${window.location.origin}/payment-success`;
                 const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
-                    body: { action: 'create-fonepay-payment', amount: totalAmountStr, prn: tempOrderNumber, date: dateStr, r1, r2, returnUrl }
+                    body: { action: 'create-fonepay-payment', intentToken: intent.intent_token, date: dateStr, returnUrl }
                 });
                 if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
                     throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the Fonepay payment.');
                 }
-
-                // Save pending order details in sessionStorage so PaymentSuccess can create the order AFTER payment succeeds
-                const pendingOrderData = {
-                    customer_name: formData.fullName,
-                    phone: formData.phone,
-                    phone2: formData.phone2,
-                    address: formData.address,
-                    city: formData.city,
-                    payment_method: 'Bank Transfer',
-                    shipping_fee: shippingFee,
-                    total_amount: grandTotal,
-                    items: orderItems,
-                    coins_used: appliedCoinDiscount,
-                    ad_id: checkoutItems[0]?.ad_id || null,
-                    order_number: tempOrderNumber,
-                    is_buy_now: isBuyNow
-                };
-                sessionStorage.setItem('pending_fonepay_order', JSON.stringify(pendingOrderData));
 
                 const form = document.createElement('form');
                 form.method = 'POST';
@@ -405,23 +419,33 @@ const Checkout = () => {
                     setCheckoutError(`Oops! We just ran out of stock for "${itemName}". Please remove it from your cart or adjust the quantity to continue.`);
                     return;
                 }
+                // Server-side pricing rejections (tampered/expired catalog data)
+                if (/PRODUCT_SOLD_OUT|PRODUCT_UNAVAILABLE|PAYMENT_METHOD_NOT_ALLOWED|INVALID_VARIANT|INVALID_QUANTITY/.test(rpcError.message || '')) {
+                    setCheckoutError(`This order can't be placed: ${rpcError.message}. Please review your cart and try again.`);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
                 throw rpcError;
             }
 
             if (result && result.order_number) {
-                // Bank Transfer: save transaction reference into order notes
-                if (formData.paymentMethod === 'Bank Transfer') {
-                    const { error: confirmError } = await supabase.rpc('confirm_website_payment', {
-                        p_order_number: result.order_number,
-                        p_payment_details: `Mobile Banking / Bank Transfer. Reference ID: ${txnRef}`,
-                        p_status: 'unpaid'
-                    });
-                    if (confirmError) {
-                        console.error("Bank Transfer confirmation failed:", confirmError.message);
-                    }
+                // Authoritative server-priced total (ignore the client estimate)
+                if (result.total_amount != null && !Number.isNaN(Number(result.total_amount))) {
+                    setPlacedTotal(Number(result.total_amount));
                 }
 
-                // COD & Bank Transfer: show local success screen
+                // Telemetry: record successful order
+                trackFunnelEvent('order_completed', {
+                    cartTotal: Number(result.total_amount || checkoutSubtotal),
+                    stepName: 'completed',
+                    metadata: {
+                        orderNumber: result.order_number,
+                        paymentMethod: formData.paymentMethod,
+                        city: formData.city
+                    }
+                });
+
+                // COD: show local success screen
                 setOrderNumber(result.order_number);
                 setIsOrdered(true);
                 showNotification('Order placed successfully!', 'success');
@@ -433,6 +457,12 @@ const Checkout = () => {
             }
         } catch (err) {
             setPaymentRedirecting(false);
+            trackFunnelEvent('abandon_checkout', {
+                cartTotal: checkoutSubtotal,
+                stepName: 'order_submission',
+                dropReason: err.message || 'Submission error',
+                metadata: { paymentMethod: formData.paymentMethod }
+            });
             showNotification('Order failed: ' + (err.message || 'Please try again'), 'error');
         } finally {
             setSaving(false);
@@ -524,7 +554,7 @@ const Checkout = () => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ color: '#64748b' }}>Total Amount</span>
-                                    <strong style={{ color: '#059669', fontSize: '1rem' }}>Rs. {grandTotal.toLocaleString()}</strong>
+                                    <strong style={{ color: '#059669', fontSize: '1rem' }}>Rs. {(placedTotal ?? grandTotal).toLocaleString()}</strong>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.8rem' }}>
                                     <span style={{ color: '#64748b' }}>Customer Name</span>
@@ -755,7 +785,7 @@ const Checkout = () => {
                                                     <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{paymentAvailability.eSewa ? 'Pay instantly via secure eSewa gateway' : 'Not available for the selected product'}</p>
                                                 </div>
                                                 <div style={{ padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                    <img src="/esewa-seeklogo.png" alt="eSewa"
+                                                    <img src="/esewa-seeklogo.png" alt="eSewa" loading="lazy" decoding="async"
                                                         style={{ height: '26px', objectFit: 'contain' }} />
                                                 </div>
                                             </div>
@@ -778,7 +808,7 @@ const Checkout = () => {
                                                     <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>{paymentAvailability['Bank Transfer'] ? 'Automatic Fonepay payment verification is coming soon.' : 'Not available for the selected product'}</p>
                                                 </div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem', flexShrink: 0 }}>
-                                                    <img src="/fonepay-seeklogo.png" alt="Fonepay"
+                                                    <img src="/fonepay-seeklogo.png" alt="Fonepay" loading="lazy" decoding="async"
                                                         style={{ height: '28px', objectFit: 'contain' }} />
                                                     <span style={{ padding: '0.2rem 0.5rem', borderRadius: '999px', background: '#fff1f2', color: '#be123c', fontSize: '0.62rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Coming soon</span>
                                                 </div>

@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS public.coin_transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.coin_transactions ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION credit_coins_on_return_rejected()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER

@@ -363,7 +363,7 @@ CREATE TABLE IF NOT EXISTS public.chatbot_shortcuts (
 -- 5. VIEWS
 -- Inventory Stock View
 DROP VIEW IF EXISTS public.inventory_stock_view CASCADE;
-CREATE OR REPLACE VIEW public.inventory_stock_view AS
+CREATE OR REPLACE VIEW public.inventory_stock_view WITH (security_invoker = true) AS
 SELECT
     p.id,
     p.name,
@@ -378,7 +378,8 @@ GROUP BY p.id, p.name, p.sku, p.description, p.image_url, p.vendor_id;
 
 -- Website Variant Stock View
 DROP VIEW IF EXISTS public.website_variant_stock_view CASCADE;
-CREATE OR REPLACE VIEW public.website_variant_stock_view AS
+CREATE OR REPLACE VIEW public.website_variant_stock_view
+WITH (security_invoker = on) AS
 WITH lot_summaries AS (
     SELECT id, available_stock FROM public.inventory_stock_view
 ),
@@ -409,7 +410,8 @@ LEFT JOIN lot_summaries     ls ON ls.id = v.inventory_product_id;
 
 -- Vendor Store Profiles View
 DROP VIEW IF EXISTS public.vendor_store_profiles CASCADE;
-CREATE OR REPLACE VIEW public.vendor_store_profiles AS
+CREATE OR REPLACE VIEW public.vendor_store_profiles
+WITH (security_invoker = on) AS
 SELECT
     id,
     store_name,
@@ -1189,7 +1191,10 @@ ALTER TABLE public.website_order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.website_order_returns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.website_customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.website_otps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.coin_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customer_auth_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.website_payment_intents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.website_delivery_branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.website_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.website_product_ratings ENABLE ROW LEVEL SECURITY;

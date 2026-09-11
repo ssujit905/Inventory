@@ -137,6 +137,11 @@ const Home = () => {
                                         <img 
                                             src={slide.image} 
                                             alt="Hero Banner" 
+                                            // First real slide is the LCP element: load it eagerly
+                                            // with high priority; clones and others lazy.
+                                            loading={idx === 1 ? 'eager' : 'lazy'}
+                                            fetchpriority={idx === 1 ? 'high' : 'auto'}
+                                            decoding="async"
                                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                                         />
                                     </div>
@@ -284,7 +289,7 @@ const Home = () => {
                                             {product.discount}% OFF
                                         </div>
 
-                                        <img src={product.image} alt={product.title} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                        <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />
                                         
                                         <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                             <div>
@@ -373,7 +378,7 @@ const Home = () => {
 
             {/* ─── Product Discovery ─── */}
             <section className="section" style={{ padding: '2rem 0 5rem' }}>
-                <div className="container" style={{ padding: '0 1rem' }}>
+                <div className="container" style={{ padding: '0 0.4rem' }}>
                     <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -418,18 +423,18 @@ const Home = () => {
                         <div className="discovery-masonry" style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(2, 1fr)',
-                            gap: '8px',
+                            gap: '4px',
                             alignItems: 'start'
                         }}>
                             {/* Column 1 - Slightly Offset */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '1.5rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingTop: '12px' }}>
                                 {leftColumn.map(product => (
                                     <ProductCard key={product.id} product={product} />
                                 ))}
                             </div>
 
                             {/* Column 2 */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '-4px' }}>
                                 {rightColumn.map(product => (
                                     <ProductCard key={product.id} product={product} />
                                 ))}
@@ -459,7 +464,7 @@ const Home = () => {
                     .hero-visual { display: flex !important; }
                     .discovery-masonry {
                         grid-template-columns: repeat(4, 1fr) !important;
-                        gap: 0.75rem !important;
+                        gap: 0.4rem !important;
                     }
                     .discovery-masonry > div {
                         display: contents !important;

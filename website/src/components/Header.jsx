@@ -2,7 +2,6 @@ import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, Menu, X, Search, Home, ShoppingBag, MessageSquare, User, Settings as SettingsIcon, ChevronRight, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useCustomer } from '../context/CustomerContext';
 

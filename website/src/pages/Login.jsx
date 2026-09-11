@@ -16,13 +16,9 @@ const Login = () => {
         const result = login(email, password);
 
         if (result.success) {
-            if (result.role === 'admin') {
-                navigate('/admin/dashboard');
-            } else {
-                navigate('/');
-            }
+            navigate('/');
         } else {
-            setError('Invalid credentials');
+            setError(result.error || 'Invalid credentials');
         }
     };
 
@@ -92,11 +88,6 @@ const Login = () => {
                         </p>
                     </div>
 
-                    <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f0f9ff', borderRadius: '0.75rem', fontSize: '0.8rem' }}>
-                        <p style={{ color: '#0369a1', fontWeight: '700', marginBottom: '4px' }}>Admin Demo Login:</p>
-                        <p style={{ color: '#0c4a6e' }}>Email: <strong>admin@shopy.com</strong></p>
-                        <p style={{ color: '#0c4a6e' }}>Pass: <strong>admin123</strong></p>
-                    </div>
                 </div>
             </div>
         </div>

@@ -15,7 +15,8 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- 2. Safe public view exposing ONLY storefront-safe vendor fields
 --    (bank / payout / email fields stay hidden from the public)
 DROP VIEW IF EXISTS public.vendor_store_profiles;
-CREATE OR REPLACE VIEW public.vendor_store_profiles AS
+CREATE OR REPLACE VIEW public.vendor_store_profiles
+WITH (security_invoker = on) AS
 SELECT
     id,
     store_name,
@@ -26,7 +27,8 @@ SELECT
     address,
     city,
     description
-FROM public.profiles;
+FROM public.profiles
+WHERE role = 'vendor';
 
 GRANT SELECT ON public.vendor_store_profiles TO anon, authenticated;
 

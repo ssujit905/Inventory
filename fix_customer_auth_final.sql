@@ -138,6 +138,8 @@ CREATE TABLE IF NOT EXISTS website_otps (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE website_otps ENABLE ROW LEVEL SECURITY;
+
 -- Function to verify OTP and reset PIN
 CREATE OR REPLACE FUNCTION verify_whatsapp_otp(
     p_phone TEXT,

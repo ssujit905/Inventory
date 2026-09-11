@@ -4,7 +4,7 @@
 
 -- 1️⃣ CREATE INVENTORY STOCK VIEW (Real-time warehouse levels)
 DROP VIEW IF EXISTS inventory_stock_view CASCADE;
-CREATE OR REPLACE VIEW inventory_stock_view AS
+CREATE OR REPLACE VIEW inventory_stock_view WITH (security_invoker = true) AS
 WITH lot_totals AS (
     SELECT 
         product_id,

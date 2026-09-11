@@ -10,8 +10,10 @@ import {
 } from 'recharts';
 import {
     Globe, TrendingUp, ShoppingBag, Loader2, IndianRupee,
-    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package
+    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package,
+    Sparkles, BarChart3
 } from 'lucide-react';
+import AIStoreDoctor from '../components/AIStoreDoctor';
 
 interface WebStats {
     totalRevenue: number;
@@ -51,6 +53,7 @@ export default function WebsiteReportsPage() {
     const [monthlyRevenue, setMonthlyRevenue] = useState<any[]>([]);
     const [monthlyOrders, setMonthlyOrders] = useState<any[]>([]);
     const [statusData, setStatusData] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<'revenue' | 'ai-doctor'>('revenue');
 
     useEffect(() => { fetchStats(); }, []);
 
@@ -230,19 +233,65 @@ export default function WebsiteReportsPage() {
             <div className="px-5 max-w-7xl mx-auto space-y-6 pb-20">
 
                 {/* Standard Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Website Performance</h1>
-                        <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">E-Commerce Revenue & Fulfillment</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                        <h1 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Website Performance</h1>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">E-Commerce Analytics & AI Intelligence</p>
                     </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl">
-                        <Globe size={12} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">{stats.totalWebOrders} Web Orders</span>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                            <Globe size={12} />
+                            <span>{stats.totalWebOrders} Orders</span>
+                        </div>
+                        <button 
+                            onClick={fetchStats}
+                            className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-xl text-[10px] font-bold uppercase tracking-widest"
+                        >
+                            Refresh
+                        </button>
                     </div>
                 </div>
 
-                {/* KPI Strip */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Sub-Navigation Tabs */}
+                <div className="flex items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    <button
+                        onClick={() => setActiveTab('revenue')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                            activeTab === 'revenue'
+                                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
+                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500'
+                        }`}
+                    >
+                        <BarChart3 size={13} />
+                        <span>Revenue</span>
+                    </button>
+
+                    <button
+                        onClick={() => setActiveTab('ai-doctor')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                            activeTab === 'ai-doctor'
+                                ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-sm shadow-amber-500/20'
+                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500'
+                        }`}
+                    >
+                        <Sparkles size={13} className={activeTab === 'ai-doctor' ? 'animate-pulse' : 'text-amber-500'} />
+                        <span>AI Doctor</span>
+                        <span className="px-1 py-0.2 rounded-full text-[8px] font-black uppercase bg-white/20 text-white">
+                            Free
+                        </span>
+                    </button>
+                </div>
+
+                {/* AI Store Doctor Tab */}
+                {activeTab === 'ai-doctor' && (
+                    <AIStoreDoctor />
+                )}
+
+                {/* Revenue & Orders Tab */}
+                {activeTab === 'revenue' && (
+                    <>
+                        {/* KPI Strip */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <KpiCard
                         title="Gross Revenue"
                         value={`Rs. ${stats.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
@@ -444,6 +493,8 @@ export default function WebsiteReportsPage() {
                             </div>
                         </div>
                     </div>
+                )}
+                </>
                 )}
 
             </div>
