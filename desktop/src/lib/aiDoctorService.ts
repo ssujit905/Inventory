@@ -270,7 +270,7 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            model: 'qwen/qwen3.8-27b',
+            model: 'llama-3.1-8b-instant',
             messages: [
                 {
                     role: 'system',
@@ -282,7 +282,7 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
                 }
             ],
             temperature: 0.3,
-            max_tokens: 1500
+            max_tokens: 900
         })
     });
 
