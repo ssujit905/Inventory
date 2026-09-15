@@ -19,6 +19,7 @@ import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
 import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
+import AIStoreDoctorPage from './pages/AIStoreDoctorPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { getVendorId } from './lib/vendorHelpers';
 import { useEffect } from 'react';
@@ -129,6 +130,9 @@ function App() {
 
         <Route path="/admin/website/reports" element={
           user && (profile?.role === 'admin' || profile?.role === 'staff' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/ai-store-doctor" element={
+          user && profile?.role === 'admin' ? <AIStoreDoctorPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/chatbot" element={

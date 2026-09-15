@@ -10,10 +10,8 @@ import {
 } from 'recharts';
 import {
     Globe, TrendingUp, ShoppingBag, Loader2, IndianRupee,
-    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package,
-    Sparkles, BarChart3
+    RotateCcw, CheckCircle2, ArrowUpRight, ArrowDownRight, Package
 } from 'lucide-react';
-import AIStoreDoctor from '../components/AIStoreDoctor';
 
 interface WebStats {
     totalRevenue: number;
@@ -53,7 +51,6 @@ export default function WebsiteReportsPage() {
     const [monthlyRevenue, setMonthlyRevenue] = useState<any[]>([]);
     const [monthlyOrders, setMonthlyOrders] = useState<any[]>([]);
     const [statusData, setStatusData] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'revenue' | 'ai-doctor'>('revenue');
 
     useEffect(() => { fetchStats(); }, []);
 
@@ -252,46 +249,8 @@ export default function WebsiteReportsPage() {
                     </div>
                 </div>
 
-                {/* Sub-Navigation Tabs */}
-                <div className="flex items-center gap-1.5 border-b border-gray-100 dark:border-gray-800 pb-2">
-                    <button
-                        onClick={() => setActiveTab('revenue')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
-                            activeTab === 'revenue'
-                                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500'
-                        }`}
-                    >
-                        <BarChart3 size={13} />
-                        <span>Revenue</span>
-                    </button>
-
-                    <button
-                        onClick={() => setActiveTab('ai-doctor')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
-                            activeTab === 'ai-doctor'
-                                ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-sm shadow-amber-500/20'
-                                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500'
-                        }`}
-                    >
-                        <Sparkles size={13} className={activeTab === 'ai-doctor' ? 'animate-pulse' : 'text-amber-500'} />
-                        <span>AI Doctor</span>
-                        <span className="px-1 py-0.2 rounded-full text-[8px] font-black uppercase bg-white/20 text-white">
-                            Free
-                        </span>
-                    </button>
-                </div>
-
-                {/* AI Store Doctor Tab */}
-                {activeTab === 'ai-doctor' && (
-                    <AIStoreDoctor />
-                )}
-
-                {/* Revenue & Orders Tab */}
-                {activeTab === 'revenue' && (
-                    <>
-                        {/* KPI Strip */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* KPI Strip */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <KpiCard
                         title="Gross Revenue"
                         value={`Rs. ${stats.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
@@ -493,8 +452,6 @@ export default function WebsiteReportsPage() {
                             </div>
                         </div>
                     </div>
-                )}
-                </>
                 )}
 
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, cloneElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare, Globe, Settings, MapPin, RotateCcw, DollarSign, ShoppingBag } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, ArrowDownCircle, IndianRupee, TrendingUp, Activity, Menu, X, ChevronRight, Search, User, Phone, CircleDot, Barcode, RefreshCw, Printer, MessageSquare, Globe, Settings, MapPin, RotateCcw, DollarSign, ShoppingBag, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -390,6 +390,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 <MenuLink icon={<MapPin className="text-emerald-500" />} label="Delivery" path="/admin/website/delivery" onSelect={() => setIsMenuOpen(false)} />
                                 {!isBasicPlan && (
                                     <MenuLink icon={<Activity className="text-cyan-500" />} label="Reports" path="/admin/website/reports" onSelect={() => setIsMenuOpen(false)} />
+                                )}
+                                {role === 'admin' && (
+                                    <MenuLink icon={<Sparkles className="text-amber-500" />} label="AI Store Doctor" path="/admin/ai-store-doctor" onSelect={() => setIsMenuOpen(false)} />
                                 )}
                                 {(role === 'admin' || profile?.role === 'vendor') && (
                                     <MenuLink icon={<Settings className="text-gray-500" />} label="Settings" path="/admin/website/settings" onSelect={() => setIsMenuOpen(false)} />
