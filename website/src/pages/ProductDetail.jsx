@@ -178,18 +178,6 @@ const ProductDetail = () => {
         if (id) fetchRatings();
     }, [id]);
 
-    // Meta Pixel: Track Product View
-    useEffect(() => {
-        if (product && window.fbq) {
-            window.fbq('track', 'ViewContent', {
-                content_name: product.title,
-                content_ids: [id],
-                content_type: 'product',
-                value: activePrice,
-                currency: 'NPR'
-            });
-        }
-    }, [product, id, activePrice]);
 
     const fetchRatings = async () => {
         try {
@@ -338,20 +326,6 @@ const ProductDetail = () => {
             setIsPickerOpen(false);
             navigate('/checkout', { state: { buyNowItem: cartItem } });
         } else {
-            // Meta Pixel: Track Add to Cart
-            if (window.fbq) {
-                try {
-                    window.fbq('track', 'AddToCart', {
-                        content_name: cartItem.title,
-                        content_ids: [String(cartItem.variant_id || cartItem.id || '')].filter(Boolean),
-                        content_type: 'product',
-                        value: cartItem.price,
-                        currency: 'USD'
-                    });
-                } catch (e) {
-                    console.warn('[Meta Pixel] AddToCart tracking failed:', e);
-                }
-            }
             addToCart(cartItem);
             trackFunnelEvent('add_to_cart', {
                 productId: cartItem.id,

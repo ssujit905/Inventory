@@ -205,22 +205,7 @@ const Checkout = () => {
 
     const grandTotal = checkoutSubtotal + shippingFee - appliedCoinDiscount;
 
-    // Meta Pixel: Track Purchase Success (server-priced total)
-    useEffect(() => {
-        if (isOrdered && window.fbq) {
-            try {
-                window.fbq('track', 'Purchase', {
-                    value: placedTotal ?? grandTotal,
-                    currency: 'USD',
-                    content_ids: checkoutItems.map(item => String(item.variant_id || item.id || '')).filter(Boolean),
-                    content_type: 'product',
-                    num_items: checkoutItems.reduce((sum, item) => sum + (item.quantity || 1), 0)
-                });
-            } catch (e) {
-                console.warn('[Meta Pixel] Purchase tracking failed:', e);
-            }
-        }
-    }, [isOrdered, placedTotal]);
+
 
     // Hold render until hydration is done
     if (!cartReady && !isOrdered) return null;
