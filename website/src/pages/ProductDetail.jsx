@@ -595,7 +595,7 @@ const ProductDetail = () => {
                                     alt={product.title}
                                     // Main gallery image is the PDP LCP element
                                     loading="eager"
-                                    fetchpriority="high"
+                                    fetchPriority="high"
                                     decoding="async"
                                     onClick={() => setIsFullscreenOpen(true)}
                                     style={{ 
