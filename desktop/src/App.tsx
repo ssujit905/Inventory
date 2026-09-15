@@ -19,6 +19,7 @@ import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
 import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
+import AIStoreDoctorPage from './pages/AIStoreDoctorPage';
 import { useAuthStore } from './hooks/useAuthStore';
 import { warmUpSupabase } from './lib/supabase';
 import { useEffect } from 'react';
@@ -145,6 +146,9 @@ function App() {
         } />
         <Route path="/admin/website/reports" element={
           user && (profile?.role === 'admin' || profile?.role === 'staff' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/ai-store-doctor" element={
+          user && profile?.role === 'admin' ? <AIStoreDoctorPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/customers" element={
           user && profile?.role === 'admin' ? <WebsiteCustomersPage /> : <Navigate to="/" replace />

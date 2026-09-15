@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare, Globe, ShoppingBag, Settings, MapPin, RotateCcw } from 'lucide-react';
+import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Search, Bell, ArrowDownCircle, DollarSign, User, Phone, TrendingUp, Activity, Menu, X, CircleDot, Barcode, Printer, MessageSquare, Globe, ShoppingBag, Settings, MapPin, RotateCcw, Sparkles } from 'lucide-react';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase } from '../lib/supabase';
@@ -331,6 +331,9 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     )}
                     {!isBasicPlan && (
                         <NavItem icon={<Activity size={18} strokeWidth={1.5} />} label="Website Reports" path="/admin/website/reports" active={location.pathname === '/admin/website/reports'} />
+                    )}
+                    {role === 'admin' && (
+                        <NavItem icon={<Sparkles size={18} strokeWidth={1.5} />} label="AI Store Doctor" path="/admin/ai-store-doctor" active={location.pathname === '/admin/ai-store-doctor'} />
                     )}
                     {(role === 'admin' || profile?.role === 'vendor') && (
                         <NavItem icon={<Settings size={18} strokeWidth={1.5} />} label="Settings" path="/admin/website/settings" active={location.pathname === '/admin/website/settings'} />

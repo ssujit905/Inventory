@@ -168,14 +168,14 @@ export async function getGroqApiKey(): Promise<string> {
         const { data } = await supabase
             .from('settings')
             .select('value')
-            .eq('key', 'groq_api_key')
+            .eq('key', 'ai_api_key')
             .maybeSingle();
 
         if (data?.value) return data.value.trim();
     } catch {
         // ignore
     }
-    return (import.meta as any).env?.VITE_GROQ_API_KEY || '';
+    return (import.meta as any).env?.VITE_AI_API_KEY || '';
 }
 
 /**
@@ -185,7 +185,7 @@ export async function updateGroqApiKey(apiKey: string): Promise<boolean> {
     const { error } = await supabase
         .from('settings')
         .upsert({
-            key: 'groq_api_key',
+            key: 'ai_api_key',
             value: apiKey.trim(),
             updated_at: new Date().toISOString()
         });
@@ -215,7 +215,7 @@ export async function generateAIStoreDiagnosis(periodDays: number = 7): Promise<
     const apiKey = await getGroqApiKey();
 
     if (!apiKey) {
-        throw new Error('Groq API Key is not configured. Please set your API key.');
+        throw new Error('AI API Key is not configured. Please set your API key.');
     }
 
     const promptContent = `
@@ -263,14 +263,14 @@ Provide your diagnosis in clean, modern Markdown using this exact structure:
 Keep advice direct, realistic, and tailored for online retail in Nepal.
 `;
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            model: 'llama-3.1-8b-instant',
+            model: 'sensenova/sensenova-6.8-flash-lite',
             messages: [
                 {
                     role: 'system',
@@ -288,7 +288,7 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
 
     if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Groq AI request failed (${response.status}): ${errText}`);
+        throw new Error(`AI request failed (${response.status}): ${errText}`);
     }
 
     const result = await response.json();
@@ -325,7 +325,7 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
             top_bottlenecks: record.top_bottlenecks,
             action_items: record.action_items,
             raw_metrics: record.raw_metrics,
-            created_by: 'Groq Cloud AI (Qwen 3.8 27B)'
+            created_by: 'Sensenova AI (sensenova-6.8-flash-lite)'
         })
         .select('*')
         .single();
@@ -336,3 +336,60 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
 
     return record;
 }
+
+/**
+ * Chat with the AI using store context + a user message.
+ */
+export async function chatWithAI(
+    userMessage: string,
+    metrics: AggregatedStoreData,
+    history: { role: 'user' | 'assistant'; content: string }[]
+): Promise<string> {
+    const apiKey = await getGroqApiKey();
+    if (!apiKey) throw new Error('AI API Key is not configured. Please set your API key.');
+
+    const systemPrompt = `You are an expert E-Commerce Advisor for "Shopy Nepal", an online store in Nepal.
+You have access to live store analytics data for the past ${metrics.periodDays} days:
+
+STORE METRICS:
+- Page Visits: ${metrics.funnel.totalPageVisits}
+- Product Views: ${metrics.funnel.totalProductViews}
+- Add to Cart: ${metrics.funnel.totalAddToCart} (${metrics.funnel.viewToCartRate}% view-to-cart)
+- Begin Checkout: ${metrics.funnel.totalBeginCheckout} (${metrics.funnel.cartToCheckoutRate}% cart-to-checkout)
+- Orders Completed: ${metrics.funnel.totalOrdersCompleted} (${metrics.funnel.checkoutToOrderRate}% checkout completion)
+- Overall Conversion: ${metrics.funnel.overallConversionRate}%
+- Total Revenue: Rs. ${metrics.totalRevenue.toLocaleString()}
+- Total Orders: ${metrics.totalOrders}
+
+TOP SEARCHES: ${metrics.topSearches.slice(0, 5).map(s => `"${s.query}" (${s.count}x)`).join(', ') || 'None'}
+ZERO-RESULT SEARCHES: ${metrics.zeroResultSearches.slice(0, 5).map(s => `"${s.query}" (${s.zeroResultsCount}x)`).join(', ') || 'None'}
+
+Answer questions concisely and practically. Use markdown formatting. Be direct and actionable.`;
+
+    const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'sensenova/sensenova-6.8-flash-lite',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                ...history,
+                { role: 'user', content: userMessage }
+            ],
+            temperature: 0.5,
+            max_tokens: 600
+        })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`AI request failed (${response.status}): ${errText}`);
+    }
+
+    const result = await response.json();
+    return result.choices?.[0]?.message?.content || 'No response generated.';
+}
+
