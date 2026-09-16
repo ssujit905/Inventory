@@ -1,16 +1,29 @@
-# Messenger Chatbot (Rule-Based)
+# Messenger Chatbot — 24/7 Cloud Deployment
 
-A rule-based Facebook Messenger chatbot built with Node.js that starts on the first customer message, supports English and Nepali, and collects complete order details.
+A rule-based Facebook Messenger chatbot built with Node.js. Deployed on Railway for 24/7 uptime — no laptop required.
 
-## 🚀 Features
-- **Auto-start on first message**: No trigger keyword required.
-- **Bilingual flow**: Detects user language (`English`/`Nepali`) and replies in that same language for the whole session.
-- **Step-by-step order capture**: Product, Quantity, Name, Phone, Address.
-- **Validations**: Quantity must be numeric and phone must be 10 digits.
-- **Local order store**: Saves orders in `chatbot/data/orders.json` (no inventory DB connection).
-- **Messenger webhook ready**: Use with `ngrok` or your production HTTPS endpoint.
+## 🚀 How It Works
+1. Customer sends a message to your Facebook Page
+2. Facebook sends it to your webhook (Railway server)
+3. Bot checks FAQs → Products → Human Handoff
+4. Response sent back via Messenger API
 
-## 🛠 Setup Instructions
+## ☁️ Production Deployment (Railway)
+
+The bot is deployed at Railway. To redeploy, just push to the `main` branch — Railway auto-deploys.
+
+**Webhook URL:** `https://<your-app>.up.railway.app/webhook`
+
+### Environment Variables (set in Railway dashboard)
+| Variable | Description |
+|----------|-------------|
+| `VERIFY_TOKEN` | Your Facebook webhook verify token |
+| `PAGE_ACCESS_TOKEN` | From your Facebook Page settings |
+| `FACEBOOK_APP_SECRET` | Your Meta app secret (for webhook signature verification) |
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_ANON_KEY` | Your Supabase anon key |
+
+## 💻 Local Development (with ngrok)
 
 1. **Install Dependencies**:
    ```bash
@@ -19,27 +32,30 @@ A rule-based Facebook Messenger chatbot built with Node.js that starts on the fi
    ```
 
 2. **Configure Environment Variables**:
-   Open `.env` and fill in your Messenger credentials:
-   - `VERIFY_TOKEN`: Any string (you'll set this in FB Developer Portal).
-   - `PAGE_ACCESS_TOKEN`: From your Facebook Page settings.
-   - `FACEBOOK_APP_SECRET`: Your Meta app secret. Required in production to verify webhook signatures.
+   Copy `.env.example` and fill in your credentials.
 
-3. **Start the Server**:
+3. **Start with ngrok tunnel**:
    ```bash
-   npm start
+   npm run start:local
    ```
+   This starts the server AND opens your static ngrok tunnel simultaneously.
 
-4. **Expose with ngrok**:
-   ```bash
-   ngrok http 3000
-   ```
-   Copy the HTTPS URL and set it as your Webhook URL in Facebook Developer Portal (e.g., `https://xxxx.ngrok.io/webhook`).
+## 🧩 Conversational Logic
 
-## 🧩 Conversational Flow
-1. **Start**: First message starts order flow immediately.
-2. **Product**: Ask product name.
-3. **Quantity**: Ask quantity (numbers only).
-4. **Name**: Ask customer full name.
-5. **Phone**: Ask 10-digit phone number.
-6. **Address**: Ask full address.
-7. **Complete**: Saves order to `chatbot/data/orders.json` and sends confirmation.
+| Priority | Action |
+|----------|--------|
+| 1 | Check if chatbot is enabled (DB setting) |
+| 2 | Check if human handoff is active for this user |
+| 3 | Match against FAQs (keyword match) |
+| 4 | Match against Products (keyword match → rich card) |
+| 5 | Fallback: notify admin + tell user human is coming |
+
+Quick Reply shortcuts are appended to every response automatically.
+
+## 📦 Deploy a New Instance
+
+1. Push code to GitHub
+2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
+3. Set Root Directory: `chatbot/`
+4. Add environment variables in Railway dashboard
+5. Get your Railway URL and set it as the Facebook webhook

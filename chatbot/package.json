@@ -1,8 +1,11 @@
 {
   "name": "chatbot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Facebook Messenger chatbot for Pasale - 24/7 cloud deployment",
   "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
