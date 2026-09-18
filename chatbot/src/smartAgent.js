@@ -178,6 +178,38 @@ function detectProduct(cleanText, products) {
 const pickLang = (session, cleanText) => session?.lang || 'roman';
 const say = (lang, en, ro) => (lang === 'en' ? en : ro);
 
+// Delivery zones + fees (single source of truth; keep in sync with shop profile).
+const INSIDE_KEYWORDS = ['inside valley', 'inside', 'valley vitra', 'kathmandu', 'ktm', 'lalitpur', 'patan',
+    'bhaktapur', 'kritipur'];
+const OUTSIDE_KEYWORDS = ['outside valley', 'outside', 'pokhara', 'butwal', 'biratnagar', 'chitwan',
+    'bharatpur', 'hetauda', 'dharan', 'nepalgunj', 'dhangadhi', 'birgunj'];
+
+function insideFee(shop) {
+    return Number(shop?.location?.delivery?.inside_valley?.charge_npr ?? 100) || 0;
+}
+function outsideFee(shop) {
+    return Number(shop?.location?.delivery?.outside_valley?.charge_npr ?? 200) || 0;
+}
+
+/** Classify a delivery address into a valley zone, or null when ambiguous. */
+function detectZone(cleanText, area = '') {
+    const t = ` ${cleanText} ${String(area || '').toLowerCase()} `;
+    if (OUTSIDE_KEYWORDS.some((k) => t.includes(k))) return 'outside';
+    if (INSIDE_KEYWORDS.some((k) => t.includes(k))) return 'inside';
+    const low = cleanText.toLowerCase();
+    if (VALLEY_AREAS.some((a) => low.includes(a.toLowerCase()))) return 'inside';
+    return null;
+}
+
+function feeForZone(zone, shop) {
+    const s = shop || DEFAULT_SHOP;
+    return zone === 'outside' ? outsideFee(s) : insideFee(s);
+}
+function zoneLabel(zone, lang) {
+    if (zone === 'outside') return lang === 'en' ? 'Outside Valley' : 'Valley bahira';
+    return lang === 'en' ? 'Inside Valley' : 'Valley vitra';
+}
+
 // --- order state machine (pure transitions; caller persists) ---------------
 
 function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage = '') {
@@ -226,8 +258,33 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
     }
     if (session.step === 'AWAITING_ADDRESS') {
         const lang = pickLang(session, cleanText);
-        session = { ...session, address: String(cleanText).slice(0, 200), step: 'AWAITING_PHONE' };
-        return { handled: true, reply: say(lang, 'Address confirmed! Please send your 10-digit phone number (e.g. 98XXXXXXXX) so our delivery rider can contact you 📱', 'Address confirm bhayo! Delivery dai le contact garna tapanko 10-digit phone number (e.g. 98XXXXXXXX) pathaidinu hola 📱'), session };
+        const address = String(cleanText).slice(0, 200);
+        const zone = detectZone(cleanText);
+        if (zone) {
+            const fee = feeForZone(zone);
+            session = { ...session, address, zone, delivery_fee: fee, step: 'AWAITING_PHONE' };
+            return { handled: true, reply: say(lang,
+                `Address confirmed! Delivery fee ${zoneLabel(zone, lang)}: Rs ${fee}. Please send your 10-digit phone number (e.g. 98XXXXXXXX) so our delivery rider can contact you 📱`,
+                `Address confirm bhayo! Delivery charge ${zoneLabel(zone, lang)}: Rs ${fee}. Delivery dai le contact garna tapanko 10-digit phone number (e.g. 98XXXXXXXX) pathaidinu hola 📱`), session };
+        }
+        session = { ...session, address, step: 'AWAITING_ZONE' };
+        return { handled: true, reply: say(lang,
+            'Noted! Is your address inside the valley or outside? (reply: inside / outside) 📍',
+            'Noted! Tapanko address valley vitra ho ki bahira? (inside / outside lekhnus) 📍'), session };
+    }
+    if (session.step === 'AWAITING_ZONE') {
+        const lang = pickLang(session, cleanText);
+        const zone = detectZone(cleanText);
+        if (zone) {
+            const fee = feeForZone(zone);
+            session = { ...session, zone, delivery_fee: fee, step: 'AWAITING_PHONE' };
+            return { handled: true, reply: say(lang,
+                `Got it — ${zoneLabel(zone, lang)}, delivery fee Rs ${fee}. Please send your 10-digit phone number (e.g. 98XXXXXXXX) 📱`,
+                `Bujhiyo — ${zoneLabel(zone, lang)}, delivery charge Rs ${fee}. Aba 10-digit phone number pathaidinu hola 📱`), session };
+        }
+        return { handled: true, reply: say(lang,
+            'Please reply with "inside" (valley) or "outside" (out of valley) 📍',
+            'Kripaya "inside" (valley vitra) ki "outside" (bahira) lekhnus 📍'), session };
     }
     if (session.step === 'AWAITING_PHONE') {
         const lang = pickLang(session, cleanText);
@@ -252,6 +309,8 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
         const prod = session.product || (products || [])[0];
         const qty = session.qty || 1;
         const unitPrice = prod?.price_npr ?? 0;
+        const zone = session.zone || detectZone(session.address || '') || 'inside';
+        const fee = session.delivery_fee ?? feeForZone(zone);
         const orderData = {
             customer_name: session.name,
             customer_phone: session.phone,
@@ -261,7 +320,9 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
             selected_color: session.color || null,
             selected_size: session.size || null,
             quantity: qty,
-            total_price: unitPrice * qty,
+            delivery_fee: fee,
+            delivery_zone: zone,
+            total_price: unitPrice * qty + fee,
         };
             const receiptProduct = prod;
             const rlang = session.lang || lang;
@@ -270,6 +331,7 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
                 ? `🎉 Order Confirmed!\n━━━━━━━━━━━━━━━━━━\n` +
                   `👤 Name: ${orderData.customer_name}\n` +
                   `📦 Item: ${receiptProduct?.name ?? orderData.product_name} (${orderData.selected_color || 'Standard'}) x ${orderData.quantity}\n` +
+                  `🚚 Delivery (${zoneLabel(orderData.delivery_zone, 'en')}): Rs ${Number(orderData.delivery_fee).toLocaleString()}\n` +
                   `💵 Total: Rs ${Number(orderData.total_price).toLocaleString()} (Cash on Delivery)\n` +
                   `📍 Address: ${orderData.delivery_address}\n` +
                   `📞 Phone: ${orderData.customer_phone}\n` +
@@ -278,6 +340,7 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
                 : `🎉 Order Confirmed!\n━━━━━━━━━━━━━━━━━━\n` +
                   `👤 Name: ${orderData.customer_name}\n` +
                   `📦 Item: ${receiptProduct?.name ?? orderData.product_name} (${orderData.selected_color || 'Standard'}) x ${orderData.quantity}\n` +
+                  `🚚 Delivery (${zoneLabel(orderData.delivery_zone, 'roman')}): Rs ${Number(orderData.delivery_fee).toLocaleString()}\n` +
                   `💵 Total: Rs ${Number(orderData.total_price).toLocaleString()} (Cash on Delivery)\n` +
                   `📍 Address: ${orderData.delivery_address}\n` +
                   `📞 Phone: ${orderData.customer_phone}\n` +
