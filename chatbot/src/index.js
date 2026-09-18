@@ -10,6 +10,7 @@ const { supabaseAdmin } = require('./supabase');
 const {
     DEFAULT_SHOP, listen, normalizeQuestion, toAgentProduct, detectLang, answerLang, langMatch,
     detectProduct, nextOrderStep, thinkRules, speakRuleTemplate, askLlmBrain, SmartAgent,
+    VALLEY_CITIES, VALLEY_AREAS,
 } = require('./smartAgent');
 const { getLlmConfig } = require('./smartConfig');
 
@@ -128,13 +129,21 @@ async function handleMessage(psid, text) {
     }
 
     // 5. TIER 1 — FAST RULES (Rs 0)
-    const { intent, product, qty } = thinkRules(clean, matched);
+    const { intent, product, qty, area, isCity } = thinkRules(clean, matched);
     if (intent !== 'UNKNOWN_HANDOFF') {
+        // Area disambiguation: bare city -> ask which place (+ area buttons for valley cities);
+        // known neighborhood / other no-product intents -> product buttons.
+        if (intent === 'AREA_QUERY' && isCity !== false && area && VALLEY_CITIES.has(area)) {
+            const reply = speakRuleTemplate(intent, null, DEFAULT_SHOP, products, { qty, lang, area, isCity });
+            const options = VALLEY_AREAS.slice(0, 10).map((a) => ({ title: a.slice(0, 20), payload: a }));
+            await sendQuickReplies(psid, reply, options);
+            return;
+        }
         // Product disambiguation fallback: no specific item -> ask with quick-reply buttons
         // (also used for greetings / bare quantities so the chat starts with one-tap options)
-        if (((intent === 'PRICE_QUERY' || intent === 'AVAILABILITY_QUERY' || intent === 'QUANTITY_QUERY') && !product && products.length > 0) ||
+        if (((intent === 'PRICE_QUERY' || intent === 'AVAILABILITY_QUERY' || intent === 'QUANTITY_QUERY' || intent === 'AREA_QUERY') && !product && products.length > 0) ||
             (intent === 'GREETING' && products.length > 0)) {
-            const reply = speakRuleTemplate(intent, null, DEFAULT_SHOP, products, { qty, lang });
+            const reply = speakRuleTemplate(intent, null, DEFAULT_SHOP, products, { qty, lang, area, isCity });
             const options = products.slice(0, 6).map((p) => ({ title: p.name.slice(0, 20), payload: p.name }));
             await sendQuickReplies(psid, reply, options);
             if (quickReplies.length > 0) await sendMessage(psid, { text: 'Tap a button above 👆 or type your question.', quick_replies: quickReplies });

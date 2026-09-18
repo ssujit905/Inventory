@@ -275,6 +275,32 @@ function nextOrderStep(session, cleanText, matchedProduct, products) {
 
 // --- Tier 1 rules ------------------------------------------------------------
 
+// Cities + well-known Kathmandu-valley neighborhoods for area disambiguation.
+const CITY_MAP = {
+    kathmandu: 'Kathmandu', ktm: 'Kathmandu',
+    lalitpur: 'Lalitpur', patan: 'Lalitpur',
+    bhaktapur: 'Bhaktapur', kritipur: 'Kritipur',
+    pokhara: 'Pokhara', butwal: 'Butwal', biratnagar: 'Biratnagar',
+};
+const VALLEY_CITIES = new Set(['Kathmandu', 'Lalitpur', 'Bhaktapur', 'Kritipur']);
+const VALLEY_AREAS = ['New Road', 'Putalisadak', 'Baneshwor', 'Kalimati', 'Kalanki', 'Koteshwor',
+    'Chabahil', 'Boudha', 'Kapan', 'Balaju', 'Gongabu', 'Swayambhu', 'Thankot', 'Jawalakhel', 'Pulchowk'];
+
+function findCity(cleanText) {
+    for (const [key, name] of Object.entries(CITY_MAP)) {
+        if (new RegExp(`\\b${key}\\b`).test(cleanText)) return name;
+    }
+    return null;
+}
+
+function findArea(cleanText) {
+    const low = ` ${cleanText} `;
+    for (const a of VALLEY_AREAS) {
+        if (low.includes(` ${a.toLowerCase()} `)) return a;
+    }
+    return null;
+}
+
 function thinkRules(cleanText, matchedProduct) {
     const has = (words) => words.some((w) => cleanText.includes(w));
     // STOP / opt-out first: never argue, never sell, never escalate
@@ -291,8 +317,19 @@ function thinkRules(cleanText, matchedProduct) {
     if (has(['cash on delivery', 'cod', 'esewa', 'khalti', 'fonepay', 'payment', 'pay', 'online pay', 'qr'])) {
         return { intent: 'PAYMENT_QUERY', product: matchedProduct };
     }
-    if (has(['delivery', 'deliver', 'courier', 'pathauna', 'pokhara', 'butwal', 'outside valley', 'valley vitra', 'delivery charge'])) {
+    if (has(['delivery', 'deliver', 'courier', 'pathauna', 'outside valley', 'valley vitra', 'delivery charge'])) {
         return { intent: 'DELIVERY_QUERY', product: matchedProduct };
+    }
+    // Area disambiguation: bare city ("kathmandu") -> ask WHICH PLACE in the city.
+    // Neighborhood ("kalimati") -> confirm delivery + ask which item.
+    // (Runs before generic LOCATION so a city never just dumps the shop address.)
+    const area = findArea(cleanText);
+    if (area && !matchedProduct) {
+        return { intent: 'AREA_QUERY', product: null, area, isCity: false };
+    }
+    const city = findCity(cleanText);
+    if (city && !matchedProduct) {
+        return { intent: 'AREA_QUERY', product: null, area: city, isCity: true };
     }
     // Location (shop address + city/area names so bare "kathmandu" answers instead of looping)
     if (has(['location', 'kata ho', 'address', 'thau', 'पसल कहाँ', 'kaha cha', 'kata cha', 'where',
@@ -341,6 +378,19 @@ function speakRuleTemplate(intent, product, shop, products = [], opts = {}) {
         return en
             ? `Sorry for the trouble! We won't message you again unless you reach out. 🙏`
             : `Maaf garnus! Tapainle message nagaresamma hamro bata kunai message aaudaina. 🙏`;
+    }
+    if (intent === 'AREA_QUERY') {
+        const place = opts.area || 'that city';
+        if (opts.isCity === false) {
+            // Known neighborhood: confirm delivery, ask which item
+            return en
+                ? `${place} — great, we deliver there! Inside-valley delivery Rs 100 (same day / 24 hrs). Which item would you like? 📦`
+                : `${place} — delivery huncha! Valley vitra Rs 100 (same day / 24 hrs). Kun item chahiyeko ho? 📦`;
+        }
+        // Bare city: ask WHICH PLACE inside it
+        return en
+            ? `Which place in ${place}? Please send your chowk, street, or nearby landmark so we can arrange delivery 📍`
+            : `${place} ko kun thau ma ho? Chowk / street / najikko landmark bhandinu na, delivery milaauchhau 📍`;
     }
     const fmt = (n) => Number(n || 0).toLocaleString();
     if (intent === 'PRICE_QUERY') {
@@ -470,9 +520,9 @@ class SmartAgent {
         if (orderRes.handled) {
             return { raw: rawMessage, source: 'order_flow', cost: 'Rs 0.00', intent: 'ORDER_PROCESSING', product: matched?.id || null, reply: orderRes.reply };
         }
-        const { intent, product, qty } = thinkRules(clean, matched);
+        const { intent, product, qty, area, isCity } = thinkRules(clean, matched);
         if (intent !== 'UNKNOWN_HANDOFF') {
-            return { raw: rawMessage, source: 'rules', cost: 'Rs 0.00', intent, product: product?.id || null, reply: speakRuleTemplate(intent, product, DEFAULT_SHOP, agentProducts, { qty, lang }) };
+            return { raw: rawMessage, source: 'rules', cost: 'Rs 0.00', intent, product: product?.id || null, reply: speakRuleTemplate(intent, product, DEFAULT_SHOP, agentProducts, { qty, lang, area, isCity }) };
         }
         return { raw: rawMessage, source: 'rules_escalation', cost: 'Rs 0.00', intent: 'UNKNOWN_HANDOFF', product: product?.id || null, reply: speakRuleTemplate('UNKNOWN_HANDOFF', null, DEFAULT_SHOP, agentProducts) };
     }
@@ -481,4 +531,5 @@ class SmartAgent {
 module.exports = {
     DEFAULT_SHOP, listen, normalizeQuestion, similarity, toAgentProduct, parseQuantity, detectLang, answerLang, langMatch,
     detectProduct, nextOrderStep, thinkRules, speakRuleTemplate, askLlmBrain, SmartAgent,
+    CITY_MAP, VALLEY_CITIES, VALLEY_AREAS, findCity, findArea,
 };
