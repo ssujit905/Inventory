@@ -341,6 +341,10 @@ app.post('/webhook', (req, res) => {
                 } else if (webhookEvent.message && webhookEvent.message.text) {
                     console.log(`[IN] PSID:${senderPsid} | Text: "${webhookEvent.message.text}"`);
                     handleMessage(senderPsid, webhookEvent.message.text).catch((e) => console.error('[WEBHOOK] handleMessage failed:', e.message));
+                } else if (webhookEvent.message && webhookEvent.message.attachments) {
+                    const atts = webhookEvent.message.attachments.map((a) => a.type).join(',');
+                    console.log(`[IN] PSID:${senderPsid} | attachment: ${atts}`);
+                    handlePhotoMessage(senderPsid, webhookEvent.message.attachments).catch((e) => console.error('[WEBHOOK] photo handler failed:', e.message));
                 } else if (webhookEvent.postback) {
                     console.log(`[IN] PSID:${senderPsid} | postback: ${webhookEvent.postback.payload || webhookEvent.postback.title}`);
                     handleMessage(senderPsid, webhookEvent.postback.payload || webhookEvent.postback.title).catch((e) => console.error('[WEBHOOK] handleMessage failed:', e.message));
@@ -357,4 +361,20 @@ if (require.main === module) {
     app.listen(process.env.PORT || 3000, () => console.log('Chatbot Command Center (smart agent) is live!'));
 }
 
-module.exports = { app, handleMessage, smartAgent };
+// Photo messages: no text to match, so acknowledge + ask WHICH item with
+// one-tap buttons (PLAN fallback). Full visual recognition (vision model vs
+// catalog images) can replace this once enabled.
+async function handlePhotoMessage(psid, attachments) {
+    const images = (attachments || []).filter((a) => a.type === 'image');
+    if (images.length === 0) return; // stickers/files: stay silent (current behavior)
+    const { data: productRows } = await supabase.from('chatbot_products').select('id, name').limit(10);
+    const products = productRows || [];
+    const text = 'Photo milyo! 📸 Yo kun item ho? Tap one 👇 / Got your photo! Which item is this? Tap one 👇';
+    if (products.length === 0) {
+        await sendMessage(psid, { text });
+        return;
+    }
+    await sendQuickReplies(psid, text, products.slice(0, 10).map((p) => ({ title: String(p.name).slice(0, 20), payload: String(p.name) })));
+}
+
+module.exports = { app, handleMessage, handlePhotoMessage, smartAgent };
