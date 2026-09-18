@@ -130,7 +130,7 @@ async function handleMessage(psid, text) {
     }
 
     // 5. TIER 1 — FAST RULES (Rs 0)
-    const { intent, product, qty, area, isCity } = thinkRules(clean, matched);
+    const { intent, product, qty, area, isCity, spec } = thinkRules(clean, matched);
     if (intent !== 'UNKNOWN_HANDOFF') {
         // Area disambiguation: bare city -> ask which place (+ area buttons for valley cities);
         // known neighborhood / other no-product intents -> product buttons.
@@ -142,9 +142,9 @@ async function handleMessage(psid, text) {
         }
         // Product disambiguation fallback: no specific item -> ask with quick-reply buttons
         // (also used for greetings / bare quantities so the chat starts with one-tap options)
-        if (((intent === 'PRICE_QUERY' || intent === 'AVAILABILITY_QUERY' || intent === 'QUANTITY_QUERY' || intent === 'AREA_QUERY') && !product && products.length > 0) ||
+        if (((intent === 'PRICE_QUERY' || intent === 'AVAILABILITY_QUERY' || intent === 'QUANTITY_QUERY' || intent === 'SPEC_QUERY' || intent === 'AREA_QUERY') && !product && products.length > 0) ||
             (intent === 'GREETING' && products.length > 0)) {
-            const reply = speakRuleTemplate(intent, null, DEFAULT_SHOP, products, { qty, lang, area, isCity });
+            const reply = speakRuleTemplate(intent, null, DEFAULT_SHOP, products, { qty, lang, area, isCity, spec });
             const options = products.slice(0, 6).map((p) => ({ title: p.name.slice(0, 20), payload: p.name }));
             await sendQuickReplies(psid, reply, options);
             if (quickReplies.length > 0) await sendMessage(psid, { text: 'Tap a button above 👆 or type your question.', quick_replies: quickReplies });
@@ -162,10 +162,10 @@ async function handleMessage(psid, text) {
                 image_url: product.image_url,
                 productId: product.id,
             });
-            await sendWithShortcuts(psid, { text: speakRuleTemplate(intent, product, DEFAULT_SHOP, products, { lang }) });
+            await sendWithShortcuts(psid, { text: speakRuleTemplate(intent, product, DEFAULT_SHOP, products, { lang, spec }) });
             return;
         }
-        await sendWithShortcuts(psid, { text: speakRuleTemplate(intent, product, DEFAULT_SHOP, products, { lang }) });
+        await sendWithShortcuts(psid, { text: speakRuleTemplate(intent, product, DEFAULT_SHOP, products, { lang, spec }) });
         return;
     }
 
@@ -198,7 +198,7 @@ async function handleMessage(psid, text) {
             console.error('[FAQ-CACHE] skipped (run add_smart_agent_upgrade.sql):', e.message);
         }
     }
-    const { data: faqs } = await supabase.from('chatbot_faqs').select('*');
+    const { data: faqs } = await supabase.from('chatbot_faqs').select('*').order('hit_count', { ascending: false });
     if (faqs) {
         // Legacy substring fallback: only match substantial questions (6+ chars).
         // One-word entries like "Order" would otherwise hijack any message

@@ -351,7 +351,30 @@ function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage 
     return { handled: false, reply: null, session };
 }
 
-// --- Tier 1 rules ------------------------------------------------------------
+// Specific-attribute keywords -> product field. Lets "battery kati?" answer
+// from the real catalog row instead of a generic template.
+const SPEC_MAP = [
+    { keys: ['battery', 'backup', 'betri'], label_en: 'Battery', label_ro: 'Battery', get: (p) => p.specs?.battery },
+    { keys: ['waterproof', 'water proof', 'water resistant', 'pani'], label_en: 'Water resistance', label_ro: 'Water resistance', get: (p) => p.specs?.waterproof },
+    { keys: ['warranty', 'guarantee'], label_en: 'Warranty', label_ro: 'Warranty', get: (p) => p.warranty },
+    { keys: ['display', 'screen'], label_en: 'Display', label_ro: 'Display', get: (p) => p.specs?.display },
+    { keys: ['sound', 'bass'], label_en: 'Sound', label_ro: 'Sound', get: (p) => p.specs?.sound },
+    { keys: ['calling', 'call'], label_en: 'Calling', label_ro: 'Calling', get: (p) => p.specs?.calling },
+    { keys: ['fabric', 'kapada', 'material'], label_en: 'Fabric', label_ro: 'Fabric', get: (p) => p.specs?.fabric },
+    { keys: ['fit', 'fitting'], label_en: 'Fit', label_ro: 'Fit', get: (p) => p.specs?.fit },
+    { keys: ['deal', 'offer', 'bundle', 'combo'], label_en: 'Deal', label_ro: 'Deal', get: (p) => (p.bundle_deals || []).map((d) => d.note || (d.qty ? `${d.qty} for Rs ${Number(d.price).toLocaleString()}` : '')).filter(Boolean).join('; ') || null },
+];
+
+function detectSpec(cleanText, product) {
+    if (!product) return null;
+    for (const spec of SPEC_MAP) {
+        if (spec.keys.some((k) => cleanText.includes(k))) {
+            const value = spec.get(product);
+            if (value) return { label_en: spec.label_en, label_ro: spec.label_ro, value: String(value) };
+        }
+    }
+    return null;
+}
 
 // Cities + well-known Kathmandu-valley neighborhoods for area disambiguation.
 const CITY_MAP = {
@@ -421,6 +444,12 @@ function thinkRules(cleanText, matchedProduct) {
     if (has(['available', 'stock', 'cha ki', 'baki cha'])) {
         return { intent: 'AVAILABILITY_QUERY', product: matchedProduct };
     }
+    // Specific product attribute ("battery kati?", "warranty cha?") -> exact catalog value.
+    // Runs before PRICE so "battery kati backup?" doesn't misroute to price.
+    if (matchedProduct) {
+        const spec = detectSpec(cleanText, matchedProduct);
+        if (spec) return { intent: 'SPEC_QUERY', product: matchedProduct, spec };
+    }
     if (has(['price', 'kati', 'rate', 'cost', 'parcha', 'mulya', 'मूल्य'])) {
         return { intent: 'PRICE_QUERY', product: matchedProduct };
     }
@@ -456,6 +485,12 @@ function speakRuleTemplate(intent, product, shop, products = [], opts = {}) {
         return en
             ? `Sorry for the trouble! We won't message you again unless you reach out. 🙏`
             : `Maaf garnus! Tapainle message nagaresamma hamro bata kunai message aaudaina. 🙏`;
+    }
+    if (intent === 'SPEC_QUERY' && product && opts.spec) {
+        const label = en ? opts.spec.label_en : opts.spec.label_ro;
+        return en
+            ? `${greeting}${product.name} — ${label}: ${opts.spec.value}.`
+            : `${greeting}${product.name} ko ${label}: ${opts.spec.value}.`;
     }
     if (intent === 'AREA_QUERY') {
         const place = opts.area || 'that city';
@@ -598,9 +633,9 @@ class SmartAgent {
         if (orderRes.handled) {
             return { raw: rawMessage, source: 'order_flow', cost: 'Rs 0.00', intent: 'ORDER_PROCESSING', product: matched?.id || null, reply: orderRes.reply };
         }
-        const { intent, product, qty, area, isCity } = thinkRules(clean, matched);
+        const { intent, product, qty, area, isCity, spec } = thinkRules(clean, matched);
         if (intent !== 'UNKNOWN_HANDOFF') {
-            return { raw: rawMessage, source: 'rules', cost: 'Rs 0.00', intent, product: product?.id || null, reply: speakRuleTemplate(intent, product, DEFAULT_SHOP, agentProducts, { qty, lang, area, isCity }) };
+            return { raw: rawMessage, source: 'rules', cost: 'Rs 0.00', intent, product: product?.id || null, reply: speakRuleTemplate(intent, product, DEFAULT_SHOP, agentProducts, { qty, lang, area, isCity, spec }) };
         }
         return { raw: rawMessage, source: 'rules_escalation', cost: 'Rs 0.00', intent: 'UNKNOWN_HANDOFF', product: product?.id || null, reply: speakRuleTemplate('UNKNOWN_HANDOFF', null, DEFAULT_SHOP, agentProducts) };
     }
@@ -608,6 +643,6 @@ class SmartAgent {
 
 module.exports = {
     DEFAULT_SHOP, listen, normalizeQuestion, similarity, toAgentProduct, parseQuantity, detectLang, answerLang, langMatch,
-    detectProduct, nextOrderStep, thinkRules, speakRuleTemplate, askLlmBrain, SmartAgent,
+    detectProduct, detectSpec, nextOrderStep, thinkRules, speakRuleTemplate, askLlmBrain, SmartAgent,
     CITY_MAP, VALLEY_CITIES, VALLEY_AREAS, findCity, findArea,
 };
