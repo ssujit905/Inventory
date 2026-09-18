@@ -564,6 +564,8 @@ async function askLlmBrain({ apiKey, baseUrl, model }, customerMessage, shop, pr
         `LANGUAGE RULE (strict): detect the customer's language and reply ONLY in it. ` +
         `English message -> reply ONLY in English. Roman Nepali message -> reply ONLY in Roman Nepali. ` +
         `Nepali (Devanagari) message -> reply ONLY in Nepali. Never mix. ` +
+        `LENGTH RULE (strict): ONE short sentence, max 25 words, like a busy shopkeeper texting. ` +
+        `No bullet lists, no spec dumps, no repeated questions. Answer only the exact thing asked. ` +
         `Keep it short (1-2 sentences). Only answer using the shop facts provided below. ` +
         `If the question is about complaints or unverified discounts, politely reply that you forwarded to the owner.\n\n` +
         `SHOP FACTS:\n${JSON.stringify(shop || DEFAULT_SHOP).slice(0, 4000)}\n` +
@@ -575,7 +577,7 @@ async function askLlmBrain({ apiKey, baseUrl, model }, customerMessage, shop, pr
             { role: 'user', content: customerMessage },
         ],
         temperature: 0.2,
-        max_tokens: 100,
+        max_tokens: 60,
     };
     // One retry on transient capacity/rate errors before giving up to handoff.
     let lastErr = null;
