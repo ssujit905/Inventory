@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "start:local": "concurrently \"npm run dev\" \"ngrok http --domain=adactylous-lewdly-gita.ngrok-free.dev 3000\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test_smart_agent.js"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,39 @@
+# ==========================================================
+# Inventory Chatbot (smart agent) - Render 24/7 deployment
+# Connect this repo in Render -> New -> Blueprint, or
+# New -> Web Service with these same settings.
+# After deploy, set the Meta webhook to https://<service>.onrender.com/webhook
+# ==========================================================
+services:
+  - type: web
+    name: inventory-chatbot
+    runtime: node
+    plan: free # upgrade to 'starter' (~$7/mo) for true 24/7 instant replies with no sleep
+    rootDir: chatbot
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false # optional; enables product writes + privileged reads
+      - key: VERIFY_TOKEN
+        sync: false # must match Meta app Verify Token (current: my_secure_token_123)
+      - key: PAGE_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false # set in production: enables HMAC webhook verification
+      - key: LLM_API_KEY
+        sync: false # optional: overrides shared AI Store Doctor key
+      - key: LLM_BASE_URL
+        sync: false # optional
+      - key: LLM_MODEL
+        sync: false # optional

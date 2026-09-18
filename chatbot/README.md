@@ -1,45 +1,40 @@
-# Messenger Chatbot (Rule-Based)
+# Messenger Chatbot — Smart Agent (Supabase-backed)
 
-A rule-based Facebook Messenger chatbot built with Node.js that starts on the first customer message, supports English and Nepali, and collects complete order details.
+Node.js + Express Facebook Messenger agent with a hybrid-cascade brain
+(ported from Pasale Helper): fuzzy Roman-Nepali product match, multi-turn
+COD order capture, Supabase FAQ auto-cache, and LLM fallback. All data lives
+in Supabase — no SQLite, no Python runtime.
 
-## 🚀 Features
-- **Auto-start on first message**: No trigger keyword required.
-- **Bilingual flow**: Detects user language (`English`/`Nepali`) and replies in that same language for the whole session.
-- **Step-by-step order capture**: Product, Quantity, Name, Phone, Address.
-- **Validations**: Quantity must be numeric and phone must be 10 digits.
-- **Local order store**: Saves orders in `chatbot/data/orders.json` (no inventory DB connection).
-- **Messenger webhook ready**: Use with `ngrok` or your production HTTPS endpoint.
+## 🚀 Smart pipeline (per message, Rs 0 first)
 
-## 🛠 Setup Instructions
+1. **Tier 0 — Order state machine**: `IDLE → COLOR/SIZE → ADDRESS → PHONE → saved to chatbot_orders`. Phone validated to 10 digits starting 98/97.
+2. **Tier 1 — Fast rules**: price / availability / location / delivery / hours / payment intents in Roman Nepali, Nepali, and English, with exact + fuzzy (0.82) product match and Devanagari support.
+3. **Tier 2 — FAQ auto-cache**: exact `normalized_question` match in `chatbot_faqs` (bumps `hit_count`); legacy substring fallback for old rows.
+4. **Tier 3 — LLM fallback** (Groq/Gemini/DeepSeek, OpenAI-compatible): short 1–2 sentence Roman-Nepali reply, auto-cached to `chatbot_faqs` so repeats cost Rs 0. No key → human-handoff escalation into `chatbot_notifications`.
+5. Product disambiguation: unknown item → quick-reply buttons; matched item with image → rich product card + `ORDER_<id>` postback.
 
-1. **Install Dependencies**:
+## 🛠 Setup
+
+1. **Supabase migration** (required for orders + smart columns; bot runs in legacy mode without it):
+   Run `add_smart_agent_upgrade.sql` (repo root) in the Supabase SQL Editor.
+2. **Install / configure**:
    ```bash
    cd chatbot
    npm install
    ```
+   `.env`: `VERIFY_TOKEN`, `PAGE_ACCESS_TOKEN`, `FACEBOOK_APP_SECRET`,
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, optional `SUPABASE_SERVICE_ROLE_KEY`
+   (bot writes via RLS-safe fallback when absent), optional
+   `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` (or set `llm_*` in the
+   `settings` table / Command Center → Smart Brain card).
+3. **Verify**: `npm test` — offline 20-case benchmark, must be 20/20.
+4. **Start**: `npm start` (`GET /health`, `GET/POST /webhook`), expose with ngrok.
 
-2. **Configure Environment Variables**:
-   Open `.env` and fill in your Messenger credentials:
-   - `VERIFY_TOKEN`: Any string (you'll set this in FB Developer Portal).
-   - `PAGE_ACCESS_TOKEN`: From your Facebook Page settings.
-   - `FACEBOOK_APP_SECRET`: Your Meta app secret. Required in production to verify webhook signatures.
+## 🧩 Files
 
-3. **Start the Server**:
-   ```bash
-   npm start
-   ```
-
-4. **Expose with ngrok**:
-   ```bash
-   ngrok http 3000
-   ```
-   Copy the HTTPS URL and set it as your Webhook URL in Facebook Developer Portal (e.g., `https://xxxx.ngrok.io/webhook`).
-
-## 🧩 Conversational Flow
-1. **Start**: First message starts order flow immediately.
-2. **Product**: Ask product name.
-3. **Quantity**: Ask quantity (numbers only).
-4. **Name**: Ask customer full name.
-5. **Phone**: Ask 10-digit phone number.
-6. **Address**: Ask full address.
-7. **Complete**: Saves order to `chatbot/data/orders.json` and sends confirmation.
+- `src/smartAgent.js` — pure brain (listen/fuzzy/rules/order-machine/templates/LLM).
+- `src/smartConfig.js` — LLM config (env → settings table).
+- `src/index.js` — Express webhook + Supabase pipeline orchestration.
+- `src/messenger.js` — text / quick-replies / product cards.
+- `test_smart_agent.js` + `data/smart_benchmark_cases.json` — 20/20 benchmark.
+- Dashboards: desktop + mobile `ChatbotPage.tsx` manage catalog (aliases, colors, stock, warranty), Brain FAQs (AI badge, hits), COD Orders, handoff, and LLM settings.

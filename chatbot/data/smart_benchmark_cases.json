@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "customer_message": "Ke price ho smartwatch ko?",
+    "expected_intent": "PRICE_QUERY",
+    "expected_product": "watch_ultra"
+  },
+  {
+    "id": 2,
+    "customer_message": "earbuds kati parcha bro?",
+    "expected_intent": "PRICE_QUERY",
+    "expected_product": "earbuds_pro"
+  },
+  {
+    "id": 3,
+    "customer_message": "price please",
+    "expected_intent": "PRICE_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 4,
+    "customer_message": "fast charger ko rate kati ho?",
+    "expected_intent": "PRICE_QUERY",
+    "expected_product": "fast_charger"
+  },
+  {
+    "id": 5,
+    "customer_message": "location kata ho tapaiharuko?",
+    "expected_intent": "LOCATION_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 6,
+    "customer_message": "Shop address bhandinu na",
+    "expected_intent": "LOCATION_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 7,
+    "customer_message": "Pokhara delivery huncha?",
+    "expected_intent": "DELIVERY_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 8,
+    "customer_message": "ktm vitra delivery charge kati lagcha?",
+    "expected_intent": "DELIVERY_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 9,
+    "customer_message": "aaja open cha shop?",
+    "expected_intent": "HOURS_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 10,
+    "customer_message": "kati baje samma khulla huncha?",
+    "expected_intent": "HOURS_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 11,
+    "customer_message": "esewa bata pay garna milcha?",
+    "expected_intent": "PAYMENT_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 12,
+    "customer_message": "cash on delivery huncha ki hudaina?",
+    "expected_intent": "PAYMENT_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 13,
+    "customer_message": "khalti accept huncha?",
+    "expected_intent": "PAYMENT_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 14,
+    "customer_message": "smartwatch available cha ki sakiyo?",
+    "expected_intent": "AVAILABILITY_QUERY",
+    "expected_product": "watch_ultra"
+  },
+  {
+    "id": 15,
+    "customer_message": "earbuds stock ma cha?",
+    "expected_intent": "AVAILABILITY_QUERY",
+    "expected_product": "earbuds_pro"
+  },
+  {
+    "id": 16,
+    "customer_message": "घडीको मूल्य कति हो?",
+    "expected_intent": "PRICE_QUERY",
+    "expected_product": "watch_ultra"
+  },
+  {
+    "id": 17,
+    "customer_message": "पसल कहाँ छ?",
+    "expected_intent": "LOCATION_QUERY",
+    "expected_product": null
+  },
+  {
+    "id": 18,
+    "customer_message": "15 din agadi kineko item exchange garna milcha?",
+    "expected_intent": "UNKNOWN_HANDOFF",
+    "expected_product": null
+  },
+  {
+    "id": 19,
+    "customer_message": "mero package ahile samma aipugenah tracking id dinu na",
+    "expected_intent": "UNKNOWN_HANDOFF",
+    "expected_product": null
+  },
+  {
+    "id": 20,
+    "customer_message": "wholesale ma 50 wata lida discount kati huncha?",
+    "expected_intent": "UNKNOWN_HANDOFF",
+    "expected_product": null
+  }
+]

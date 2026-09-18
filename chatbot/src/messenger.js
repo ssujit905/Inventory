@@ -24,4 +24,34 @@ async function sendMessage(senderPsid, response) {
     }
 }
 
-module.exports = { sendMessage };
+async function sendQuickReplies(senderPsid, text, options = []) {
+    const quick_replies = options.slice(0, 11).map((o) => ({
+        content_type: 'text',
+        title: String(o.title || '').slice(0, 20),
+        payload: String(o.payload || o.title || '').slice(0, 1000),
+    }));
+    return sendMessage(senderPsid, quick_replies.length ? { text, quick_replies } : { text });
+}
+
+async function sendProductCard(senderPsid, { title, subtitle, image_url, productId }) {
+    return sendMessage(senderPsid, {
+        attachment: {
+            type: 'template',
+            payload: {
+                template_type: 'generic',
+                elements: [{
+                    title: String(title || 'Product').slice(0, 80),
+                    subtitle: String(subtitle || 'In Stock • Same Day Delivery').slice(0, 80),
+                    image_url: image_url || undefined,
+                    buttons: [{
+                        type: 'postback',
+                        title: 'Order This Now',
+                        payload: `ORDER_${productId}`,
+                    }],
+                }],
+            },
+        },
+    });
+}
+
+module.exports = { sendMessage, sendQuickReplies, sendProductCard };
