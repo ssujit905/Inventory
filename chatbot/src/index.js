@@ -242,28 +242,40 @@ async function handleMessage(psid, text) {
         }
     }
 
-    // 8. FALLBACK: HUMAN HANDOFF + escalate ticket
-    // (retries legacy column set so handoff survives before migration is run)
+    // 8. FALLBACK: HUMAN HANDOFF + escalate ticket.
+    // Loop-breaker: if this customer already has an open ticket, do NOT pile
+    // up duplicates — just reassure once. (retries legacy column set so
+    // handoff survives before migration is run)
     console.log(`[NOMATCH] No match for "${raw}". Notifying admin...`);
     try {
-        const { error: escErr } = await supabaseAdmin.from('chatbot_notifications').insert([{
-            psid,
-            customer_name: 'Messenger User',
-            last_message: raw,
-            customer_message: raw,
-            shop_id: 'shop_ktm_gadget',
-            status: 'unresolved'
-        }]);
-        if (escErr) throw escErr;
-    } catch (e) {
-        console.error('[HANDOFF] smart insert failed, retrying legacy:', e.message);
-        try {
-            await supabaseAdmin.from('chatbot_notifications').insert([{
-                psid, customer_name: 'Messenger User', last_message: raw, status: 'unresolved'
-            }]);
-        } catch (e2) {
-            console.error('[HANDOFF] insert failed:', e2.message);
+        const { data: openTicket } = await supabaseAdmin.from('chatbot_notifications')
+            .select('id').eq('psid', psid).eq('status', 'unresolved').limit(1).maybeSingle();
+        if (!openTicket) {
+            try {
+                const { error: escErr } = await supabaseAdmin.from('chatbot_notifications').insert([{
+                    psid,
+                    customer_name: 'Messenger User',
+                    last_message: raw,
+                    customer_message: raw,
+                    shop_id: 'shop_ktm_gadget',
+                    status: 'unresolved'
+                }]);
+                if (escErr) throw escErr;
+            } catch (e) {
+                console.error('[HANDOFF] smart insert failed, retrying legacy:', e.message);
+                try {
+                    await supabaseAdmin.from('chatbot_notifications').insert([{
+                        psid, customer_name: 'Messenger User', last_message: raw, status: 'unresolved'
+                    }]);
+                } catch (e2) {
+                    console.error('[HANDOFF] insert failed:', e2.message);
+                }
+            }
+        } else {
+            console.log(`[HANDOFF] ticket already open for ${psid}, skipping duplicate.`);
         }
+    } catch (e) {
+        console.error('[HANDOFF] ticket check failed:', e.message);
     }
 
     await sendWithShortcuts(psid, {

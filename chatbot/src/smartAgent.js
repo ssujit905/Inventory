@@ -294,7 +294,10 @@ function thinkRules(cleanText, matchedProduct) {
     if (has(['delivery', 'deliver', 'courier', 'pathauna', 'pokhara', 'butwal', 'outside valley', 'valley vitra', 'delivery charge'])) {
         return { intent: 'DELIVERY_QUERY', product: matchedProduct };
     }
-    if (has(['location', 'kata ho', 'address', 'thau', 'पसल कहाँ', 'kaha cha', 'kata cha', 'where'])) {
+    // Location (shop address + city/area names so bare "kathmandu" answers instead of looping)
+    if (has(['location', 'kata ho', 'address', 'thau', 'पसल कहाँ', 'kaha cha', 'kata cha', 'where',
+        'kathmandu', 'ktm', 'lalitpur', 'patan', 'bhaktapur', 'kritipur', 'pokhara',
+        'butwal', 'biratnagar', 'nepal'])) {
         return { intent: 'LOCATION_QUERY', product: matchedProduct };
     }
     if (has(['open', 'close', 'baje', 'khulla', 'khulcha', 'timing', 'time', 'aaja', 'samma']) && !matchedProduct) {
