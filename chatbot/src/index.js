@@ -101,7 +101,7 @@ async function handleMessage(psid, text) {
     }
 
     // 4. TIER 0 — ORDER STATE MACHINE (multi-turn COD capture, Rs 0)
-    const orderRes = nextOrderStep(session, clean, matched, products);
+    const orderRes = nextOrderStep(session, clean, matched, products, raw);
     smartAgent.sessions.set(psid, orderRes.session);
     if (orderRes.handled) {
         if (orderRes.orderData) {
@@ -110,6 +110,7 @@ async function handleMessage(psid, text) {
             try {
                 await supabaseAdmin.from('chatbot_orders').insert([{
                     psid,
+                    customer_name: od.customer_name || 'Messenger User',
                     customer_phone: od.customer_phone,
                     delivery_address: od.delivery_address,
                     product_id: isUuid ? od.product_id : null,

@@ -180,7 +180,7 @@ const say = (lang, en, ro) => (lang === 'en' ? en : ro);
 
 // --- order state machine (pure transitions; caller persists) ---------------
 
-function nextOrderStep(session, cleanText, matchedProduct, products) {
+function nextOrderStep(session, cleanText, matchedProduct, products, rawMessage = '') {
     const orderWords = ['order', 'kinnu', 'linu', 'pathaidinu', 'kinne', 'deliver garidinus', 'buy', 'pathaunus', 'chahiyo'];
     const isOrderStart = orderWords.some((w) => cleanText.includes(w));
     const isOrderPayload = cleanText.startsWith('order_');
@@ -235,40 +235,55 @@ function nextOrderStep(session, cleanText, matchedProduct, products) {
         const m = digits.match(/\b(98\d{8}|97\d{8})\b/);
         if (m) {
             const phone = m[1];
-            const prod = session.product || (products || [])[0];
-            const qty = session.qty || 1;
-            const unitPrice = prod?.price_npr ?? 0;
-            const orderData = {
-                customer_phone: phone,
-                delivery_address: session.address || 'Kathmandu',
-                product_id: prod?._row?.id ?? prod?.id ?? null,
-                product_name: prod?.name ?? 'Item',
-                selected_color: session.color || null,
-                selected_size: session.size || null,
-                quantity: qty,
-                total_price: unitPrice * qty,
-            };
+            session = { ...session, phone, step: 'AWAITING_NAME' };
+            return { handled: true, reply: say(lang, 'Thanks! Lastly, please send your full name for the delivery slip 👤', 'Dhanyabad! Antima, delivery slip ko lagi tapanko pura naam bhandinu na 👤'), session };
+        }
+        return { handled: true, reply: say(lang, 'Please send a valid 10-digit Nepali phone number (e.g. 98XXXXXXXX) 🙏', 'Kripaya valid 10-digit Nepali phone number (e.g. 98XXXXXXXX) pathaidinu hola hai 🙏'), session };
+    }
+    if (session.step === 'AWAITING_NAME') {
+        const lang = pickLang(session, cleanText);
+        // Use the raw message to preserve the customer's name casing.
+        const name = String(rawMessage || cleanText).replace(/\s+/g, ' ').trim().slice(0, 60);
+        const looksPhone = /(\d[\s-]*){7,}/.test(name);
+        if (name.length < 2 || looksPhone) {
+            return { handled: true, reply: say(lang, 'Please send your full name (e.g. Ram Sharma) 👤', 'Kripaya tapanko pura naam bhandinu na (e.g. Ram Sharma) 👤'), session };
+        }
+        session = { ...session, name };
+        const prod = session.product || (products || [])[0];
+        const qty = session.qty || 1;
+        const unitPrice = prod?.price_npr ?? 0;
+        const orderData = {
+            customer_name: session.name,
+            customer_phone: session.phone,
+            delivery_address: session.address || 'Kathmandu',
+            product_id: prod?._row?.id ?? prod?.id ?? null,
+            product_name: prod?.name ?? 'Item',
+            selected_color: session.color || null,
+            selected_size: session.size || null,
+            quantity: qty,
+            total_price: unitPrice * qty,
+        };
             const receiptProduct = prod;
             const rlang = session.lang || lang;
             session = { step: 'IDLE', product: null, color: null, size: null, name: 'Customer', address: null, phone: null, lang: rlang };
             const receipt = rlang === 'en'
                 ? `🎉 Order Confirmed!\n━━━━━━━━━━━━━━━━━━\n` +
+                  `👤 Name: ${orderData.customer_name}\n` +
                   `📦 Item: ${receiptProduct?.name ?? orderData.product_name} (${orderData.selected_color || 'Standard'}) x ${orderData.quantity}\n` +
                   `💵 Total: Rs ${Number(orderData.total_price).toLocaleString()} (Cash on Delivery)\n` +
                   `📍 Address: ${orderData.delivery_address}\n` +
-                  `📞 Phone: ${phone}\n` +
+                  `📞 Phone: ${orderData.customer_phone}\n` +
                   `🚚 Expected Delivery: within 24-48 hours\n━━━━━━━━━━━━━━━━━━\n` +
                   `Our delivery rider will call you before arriving. Thank you! 🙏`
                 : `🎉 Order Confirmed!\n━━━━━━━━━━━━━━━━━━\n` +
+                  `👤 Name: ${orderData.customer_name}\n` +
                   `📦 Item: ${receiptProduct?.name ?? orderData.product_name} (${orderData.selected_color || 'Standard'}) x ${orderData.quantity}\n` +
                   `💵 Total: Rs ${Number(orderData.total_price).toLocaleString()} (Cash on Delivery)\n` +
                   `📍 Address: ${orderData.delivery_address}\n` +
-                  `📞 Phone: ${phone}\n` +
+                  `📞 Phone: ${orderData.customer_phone}\n` +
                   `🚚 Expected Delivery: 24-48 hours vitra\n━━━━━━━━━━━━━━━━━━\n` +
                   `Hamro delivery dai le aunu agadi phone garnu huncha. Dhanyabad! 🙏`;
             return { handled: true, reply: receipt, session, orderData };
-        }
-        return { handled: true, reply: say(lang, 'Please send a valid 10-digit Nepali phone number (e.g. 98XXXXXXXX) 🙏', 'Kripaya valid 10-digit Nepali phone number (e.g. 98XXXXXXXX) pathaidinu hola hai 🙏'), session };
     }
     return { handled: false, reply: null, session };
 }
@@ -515,7 +530,7 @@ class SmartAgent {
         const matched = detectProduct(clean, agentProducts);
         let session = this.getSession(sessionId);
         session.lang = lang;
-        const orderRes = nextOrderStep(session, clean, matched, agentProducts);
+        const orderRes = nextOrderStep(session, clean, matched, agentProducts, rawMessage);
         this.sessions.set(sessionId, orderRes.session);
         if (orderRes.handled) {
             return { raw: rawMessage, source: 'order_flow', cost: 'Rs 0.00', intent: 'ORDER_PROCESSING', product: matched?.id || null, reply: orderRes.reply };
