@@ -9,7 +9,7 @@ import DashboardLayout from '../layouts/DashboardLayout'
 import { useAuthStore } from '../hooks/useAuthStore'
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh'
 
-type AppTab = 'settings' | 'products' | 'faqs' | 'notifications' | 'shortcuts';
+type AppTab = 'settings' | 'products' | 'orders' | 'faqs' | 'notifications' | 'shortcuts';
 
 export default function ChatbotPage() {
     const { profile } = useAuthStore()
@@ -23,6 +23,10 @@ export default function ChatbotPage() {
     const [faqs, setFaqs] = useState<any[]>([])
     const [notifications, setNotifications] = useState<any[]>([])
     const [shortcuts, setShortcuts] = useState<any[]>([])
+    const [orders, setOrders] = useState<any[]>([])
+    const [tempLlmModel, setTempLlmModel] = useState('sensenova/sensenova-6.8-flash-lite')
+    const [tempLlmBaseUrl, setTempLlmBaseUrl] = useState('https://api.xkiro.com/v1')
+    const [tempLlmKey, setTempLlmKey] = useState('')
 
     // Settings State
     const [chatbotEnabled, setChatbotEnabled] = useState(true)
@@ -68,6 +72,39 @@ export default function ChatbotPage() {
             const { data: shortData } = await supabase.from('chatbot_shortcuts').select('*').order('created_at', { ascending: false })
             setShortcuts(shortData || [])
 
+            // 6. Fetch Orders (tolerant: table may not exist pre-migration)
+            try {
+                const { data: orderData, error: orderError } = await supabase.from('chatbot_orders').select('*').order('created_at', { ascending: false })
+                if (orderError) throw orderError
+                setOrders(orderData || [])
+            } catch {
+                setOrders([])
+            }
+
+            // 7. Fetch LLM settings (tolerant: keys may not exist pre-migration).
+            // Falls back to shared AI Store Doctor settings (ai_*) so the bot
+            // reuses the Store Doctor key/model/base URL with zero extra setup.
+            try {
+                const { data: llmModelData } = await supabase.from('settings').select('value').eq('key', 'llm_model').maybeSingle()
+                if (llmModelData?.value) setTempLlmModel(llmModelData.value)
+                else {
+                    const { data: aiModelData } = await supabase.from('settings').select('value').eq('key', 'ai_model').maybeSingle()
+                    if (aiModelData?.value) setTempLlmModel(aiModelData.value)
+                }
+            } catch { /* ignore pre-migration */ }
+            try {
+                const { data: llmBaseData } = await supabase.from('settings').select('value').eq('key', 'llm_base_url').maybeSingle()
+                if (llmBaseData?.value) setTempLlmBaseUrl(llmBaseData.value)
+                else {
+                    const { data: aiBaseData } = await supabase.from('settings').select('value').eq('key', 'ai_base_url').maybeSingle()
+                    if (aiBaseData?.value) setTempLlmBaseUrl(aiBaseData.value)
+                }
+            } catch { /* ignore pre-migration */ }
+            try {
+                const { data: llmKeyData } = await supabase.from('settings').select('value').eq('key', 'llm_api_key').maybeSingle()
+                if (llmKeyData?.value) setTempLlmKey(llmKeyData.value)
+            } catch { /* ignore pre-migration */ }
+
         } catch (err) {
             console.error('Fetch error:', err)
         } finally {
@@ -81,7 +118,7 @@ export default function ChatbotPage() {
 
     useRealtimeRefresh(() => fetchData(false), {
         channelName: 'chatbot-full-sync',
-        tables: ['settings', 'chatbot_products', 'chatbot_faqs', 'chatbot_notifications', 'chatbot_shortcuts'],
+        tables: ['settings', 'chatbot_products', 'chatbot_faqs', 'chatbot_notifications', 'chatbot_shortcuts', 'chatbot_orders'],
         enabled: true,
         pollMs: 10000
     })
@@ -135,6 +172,52 @@ export default function ChatbotPage() {
         }
     };
 
+    const updateOrderStatus = async (id: string, status: string) => {
+        try {
+            const { error } = await supabase.from('chatbot_orders').update({ status }).eq('id', id);
+            if (error) throw error;
+            fetchData(false);
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+        }
+    };
+
+    const handleSaveLlmSettings = async () => {
+        setLoading(true)
+        try {
+            // Stay linked to the shared AI Store Doctor settings: values identical
+            // to ai_* are stored as "no override" (row deleted) so future AIStore
+            // changes flow through automatically. Only genuinely different values
+            // are saved as llm_* overrides.
+            const { data: shared } = await supabase.from('settings').select('key, value').in('key', ['ai_model', 'ai_base_url'])
+            const sharedGet = (k: string) => shared?.find((r: any) => r.key === k)?.value || ''
+            const syncOverride = async (ownKey: string, sharedKey: string, value: string) => {
+                const v = value.trim()
+                if (!v || v === sharedGet(sharedKey).trim()) {
+                    const { error } = await supabase.from('settings').delete().eq('key', ownKey)
+                    if (error && (error as any).code !== 'PGRST116') throw error
+                } else {
+                    const { error } = await supabase.from('settings').upsert({ key: ownKey, value: v })
+                    if (error) throw error
+                }
+            }
+            await syncOverride('llm_model', 'ai_model', tempLlmModel)
+            await syncOverride('llm_base_url', 'ai_base_url', tempLlmBaseUrl)
+            // Only store the key when provided — empty means "keep reusing the shared AI Store Doctor key"
+            if (tempLlmKey.trim()) {
+                const { error: e3 } = await supabase.from('settings').upsert({ key: 'llm_api_key', value: tempLlmKey })
+                if (e3) throw e3
+            }
+            setStatus({ type: 'success', text: 'Smart Brain settings saved!' })
+            setTimeout(() => setStatus(null), 3000)
+        } catch (err: any) {
+            console.error('Save LLM error:', err)
+            setStatus({ type: 'error', text: `Error: ${err.message}` })
+        } finally {
+            setLoading(false)
+        }
+    };
+
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
             <div className="max-w-6xl mx-auto space-y-8 pb-20">
@@ -167,6 +250,7 @@ export default function ChatbotPage() {
                 <div className="flex items-center gap-2 p-1.5 bg-gray-100/50 dark:bg-gray-800/50 rounded-2xl w-fit overflow-x-auto scrollbar-hide max-w-full">
                     <TabButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Zap size={16} />} label="Overview" />
                     <TabButton active={activeTab === 'products'} onClick={() => setActiveTab('products')} icon={<Package size={16} />} label="Catalog" />
+                    <TabButton active={activeTab === 'orders'} onClick={() => setActiveTab('orders')} icon={<Package size={16} />} label="Orders" />
                     <TabButton active={activeTab === 'faqs'} onClick={() => setActiveTab('faqs')} icon={<HelpCircle size={16} />} label="Brain (FAQs)" />
                     <TabButton active={activeTab === 'shortcuts'} onClick={() => setActiveTab('shortcuts')} icon={<MoreVertical size={16} />} label="Quick Buttons" />
                     <TabButton active={activeTab === 'notifications'} onClick={() => setActiveTab('notifications')} icon={<Bell size={16} />} label="Human Handoff" />
@@ -230,6 +314,32 @@ export default function ChatbotPage() {
                                                     Last Config Sync: {lastSynced.toLocaleTimeString()}
                                                 </p>
                                             )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-10 border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/20 dark:shadow-none relative overflow-hidden">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <div>
+                                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100">Smart Brain (LLM)</h3>
+                                                <p className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-widest">Fallback AI configuration</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Model</label>
+                                                <input value={tempLlmModel} onChange={(e) => setTempLlmModel(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl transition-all text-sm font-medium" placeholder="sensenova/sensenova-6.8-flash-lite" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Base URL</label>
+                                                <input value={tempLlmBaseUrl} onChange={(e) => setTempLlmBaseUrl(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl transition-all text-sm font-medium" placeholder="https://api.xkiro.com/v1" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">API Key</label>
+                                                <input type="password" value={tempLlmKey} onChange={(e) => setTempLlmKey(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl transition-all text-sm font-medium" placeholder="gsk_..." />
+                                            </div>
+                                            <button onClick={handleSaveLlmSettings} disabled={loading} className="w-full py-4 bg-primary text-white rounded-xl font-black uppercase tracking-widest shadow-xl shadow-primary/20 text-xs disabled:opacity-50">
+                                                {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Save Smart Brain'}
+                                            </button>
                                         </div>
                                     </div>
 
@@ -298,6 +408,13 @@ export default function ChatbotPage() {
                             <NotificationCenter
                                 notifications={notifications}
                                 onResolve={resolveNotification}
+                            />
+                        )}
+
+                        {activeTab === 'orders' && (
+                            <OrderCenter
+                                orders={orders}
+                                onStatusChange={updateOrderStatus}
                             />
                         )}
 
@@ -389,9 +506,12 @@ function ProductManager({ products, onAdd, onEdit, onDelete }: any) {
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
-                                <div className="absolute bottom-4 left-4">
+                                <div className="absolute bottom-4 left-4 flex gap-2">
                                     <span className="px-4 py-2 bg-white/90 dark:bg-gray-900/90 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
                                         NPR {parseFloat(p.price).toLocaleString()}
+                                    </span>
+                                    <span className="px-4 py-2 bg-white/90 dark:bg-gray-900/90 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                        {p.stock_status || 'In Stock'}
                                     </span>
                                 </div>
                             </div>
@@ -406,6 +526,11 @@ function ProductManager({ products, onAdd, onEdit, onDelete }: any) {
                                             {s}
                                         </span>
                                     ))}
+                                    {(p.colors || []).length > 0 && (
+                                        <span className="px-2.5 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg text-[10px] font-bold text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-700">
+                                            {(p.colors || []).join(', ')}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -442,6 +567,8 @@ function FaqManager({ faqs, onAdd, onDelete }: any) {
                                 <h5 className="font-black text-lg text-gray-900 dark:text-gray-100 flex items-center gap-2">
                                     <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px]">Q</div>
                                     {f.question}
+                                    {f.is_ai_cached ? <span className="px-2 py-0.5 bg-purple-100 text-purple-600 text-[9px] font-black uppercase tracking-widest rounded-full">AI</span> : null}
+                                    {typeof f.hit_count === 'number' ? <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-400 text-[9px] font-black uppercase tracking-widest rounded-full">{`${f.hit_count} hits`}</span> : null}
                                 </h5>
                                 <div className="flex items-start gap-2">
                                     <div className="h-6 w-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-[10px] flex-shrink-0">A</div>
@@ -507,6 +634,51 @@ function NotificationCenter({ notifications, onResolve }: any) {
                                         </button>
                                     )}
                                 </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    )
+}
+
+function OrderCenter({ orders, onStatusChange }: any) {
+    return (
+        <div className="space-y-8">
+            <div>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100">COD Orders</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Orders captured by smart agent</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+                {orders.length === 0 ? (
+                    <EmptyState icon={<Package size={48} />} title="No Orders Yet" desc="New COD orders from Messenger will appear here." />
+                ) : (
+                    orders.map((o: any) => (
+                        <div key={o.id} className={`p-6 rounded-3xl border flex items-center justify-between gap-6 transition-all ${o.status === 'pending' ? 'bg-amber-50/50 border-amber-100 shadow-lg shadow-amber-200/10' : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'}`}>
+                            <div className="flex items-center gap-6">
+                                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-2xl font-black ${o.status === 'pending' ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-gray-200 text-gray-400'}`}>
+                                    {(o.customer_phone || 'U')?.charAt(0) || 'U'}
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-lg text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                        {o.customer_phone || 'Unknown'}
+                                        <span className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-500 text-[8px] font-black uppercase rounded-full">{o.status || 'pending'}</span>
+                                    </h4>
+                                    <p className="text-sm font-medium text-gray-600 mt-1">{o.product_name || '-'}{o.selected_color ? ` • ${o.selected_color}` : ''}{o.selected_size ? ` • ${o.selected_size}` : ''} • NPR {o.total_price ?? '-'}</p>
+                                    <p className="text-xs text-gray-400 font-medium mt-1">{o.delivery_address || '-'}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{o.created_at ? new Date(o.created_at).toLocaleString() : '-'}</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-3">
+                                <select value={o.status || 'pending'} onChange={(e) => onStatusChange(o.id, e.target.value)} className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                    <option value="pending">pending</option>
+                                    <option value="confirmed">confirmed</option>
+                                    <option value="shipped">shipped</option>
+                                    <option value="delivered">delivered</option>
+                                    <option value="cancelled">cancelled</option>
+                                </select>
                             </div>
                         </div>
                     ))
@@ -606,6 +778,10 @@ function EditProductModal({ product, onClose, onSave }: any) {
     const [desc, setDesc] = useState(product.description || '')
     const [sizes, setSizes] = useState(product.sizes?.join(', ') || '')
     const [imageUrl, setImageUrl] = useState(product.image_url || '')
+    const [aliases, setAliases] = useState((product.aliases || []).join(', ') || '')
+    const [colors, setColors] = useState((product.colors || []).join(', ') || '')
+    const [warranty, setWarranty] = useState(product.warranty || '')
+    const [stockStatus, setStockStatus] = useState(product.stock_status || 'In Stock')
     const [saving, setSaving] = useState(false)
     const [uploading, setUploading] = useState(false)
 
@@ -643,19 +819,40 @@ function EditProductModal({ product, onClose, onSave }: any) {
         setSaving(true)
         try {
             const sizeArr = sizes.split(',').map((s: string) => s.trim()).filter((s: string) => s)
-            const { error } = await supabase.from('chatbot_products').update({
+            const aliasArr = aliases.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+            const colorArr = colors.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+            const fullPayload: any = {
                 name,
                 description: desc,
                 price: parseFloat(price),
                 sizes: sizeArr,
                 image_url: imageUrl
-            }).eq('id', product.id)
+            }
+            if (aliasArr.length > 0) fullPayload.aliases = aliasArr
+            if (colorArr.length > 0) fullPayload.colors = colorArr
+            if (stockStatus) fullPayload.stock_status = stockStatus
+            if (warranty) fullPayload.warranty = warranty
+            const { error } = await supabase.from('chatbot_products').update(fullPayload).eq('id', product.id)
 
             if (error) throw error
             onSave(false)
             onClose()
         } catch (err: any) {
-            alert(err.message)
+            try {
+                const sizeArr = sizes.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+                const { error: retryError } = await supabase.from('chatbot_products').update({
+                    name,
+                    description: desc,
+                    price: parseFloat(price),
+                    sizes: sizeArr,
+                    image_url: imageUrl
+                }).eq('id', product.id)
+                if (retryError) throw retryError
+                onSave(false)
+                onClose()
+            } catch (retryErr: any) {
+                alert(retryErr.message || err.message)
+            }
         } finally {
             setSaving(false)
         }
@@ -669,6 +866,22 @@ function EditProductModal({ product, onClose, onSave }: any) {
                 <div className="grid grid-cols-2 gap-4">
                     <Input label="Price (NPR)" type="number" value={price} onChange={setPrice} />
                     <Input label="Sizes (Comma Separated)" value={sizes} onChange={setSizes} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <Input label="Aliases (Comma Separated)" value={aliases} onChange={setAliases} placeholder="watch, smartwatch" />
+                    <Input label="Colors (Comma Separated)" value={colors} onChange={setColors} placeholder="Black, Blue" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Stock Status</label>
+                        <select value={stockStatus} onChange={(e) => setStockStatus(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl transition-all text-sm font-medium">
+                            <option value="In Stock">In Stock</option>
+                            <option value="Out of Stock">Out of Stock</option>
+                        </select>
+                    </div>
+                    <Input label="Warranty" value={warranty} onChange={setWarranty} placeholder="e.g. 1 year" />
                 </div>
 
                 <div className="space-y-2">
@@ -714,6 +927,10 @@ function AddProductModal({ onClose, onSave }: any) {
     const [desc, setDesc] = useState('')
     const [sizes, setSizes] = useState('')
     const [imageUrl, setImageUrl] = useState('')
+    const [aliases, setAliases] = useState('')
+    const [colors, setColors] = useState('')
+    const [warranty, setWarranty] = useState('')
+    const [stockStatus, setStockStatus] = useState('In Stock')
     const [saving, setSaving] = useState(false)
     const [uploading, setUploading] = useState(false)
 
@@ -755,18 +972,39 @@ function AddProductModal({ onClose, onSave }: any) {
         setSaving(true)
         try {
             const sizeArr = sizes.split(',').map(s => s.trim()).filter(s => s)
-            const { error } = await supabase.from('chatbot_products').insert([{
+            const aliasArr = aliases.split(',').map(s => s.trim()).filter(s => s)
+            const colorArr = colors.split(',').map(s => s.trim()).filter(s => s)
+            const fullPayload: any = {
                 name,
                 description: desc,
                 price: parseFloat(price),
                 sizes: sizeArr,
                 image_url: imageUrl
-            }])
+            }
+            if (aliasArr.length > 0) fullPayload.aliases = aliasArr
+            if (colorArr.length > 0) fullPayload.colors = colorArr
+            if (stockStatus) fullPayload.stock_status = stockStatus
+            if (warranty) fullPayload.warranty = warranty
+            const { error } = await supabase.from('chatbot_products').insert([fullPayload])
             if (error) throw error
             onSave(false)
             onClose()
         } catch (err: any) {
-            alert(err.message)
+            try {
+                const sizeArr = sizes.split(',').map(s => s.trim()).filter(s => s)
+                const { error: retryError } = await supabase.from('chatbot_products').insert([{
+                    name,
+                    description: desc,
+                    price: parseFloat(price),
+                    sizes: sizeArr,
+                    image_url: imageUrl
+                }])
+                if (retryError) throw retryError
+                onSave(false)
+                onClose()
+            } catch (retryErr: any) {
+                alert(retryErr.message || err.message)
+            }
         } finally {
             setSaving(false)
         }
@@ -780,6 +1018,22 @@ function AddProductModal({ onClose, onSave }: any) {
                 <div className="grid grid-cols-2 gap-4">
                     <Input label="Price (NPR)" type="number" value={price} onChange={setPrice} placeholder="2500" />
                     <Input label="Sizes (Comma Separated)" value={sizes} onChange={setSizes} placeholder="S, M, L" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <Input label="Aliases (Comma Separated)" value={aliases} onChange={setAliases} placeholder="watch, smartwatch" />
+                    <Input label="Colors (Comma Separated)" value={colors} onChange={setColors} placeholder="Black, Blue" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Stock Status</label>
+                        <select value={stockStatus} onChange={(e) => setStockStatus(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-xl transition-all text-sm font-medium">
+                            <option value="In Stock">In Stock</option>
+                            <option value="Out of Stock">Out of Stock</option>
+                        </select>
+                    </div>
+                    <Input label="Warranty" value={warranty} onChange={setWarranty} placeholder="e.g. 1 year" />
                 </div>
 
                 <div className="space-y-2">
@@ -845,8 +1099,13 @@ function AddFaqModal({ onClose, onSave }: any) {
     const handleSave = async () => {
         setSaving(true)
         try {
-            const { error } = await supabase.from('chatbot_faqs').insert([{ question, answer }])
-            if (error) throw error
+            try {
+                const { error } = await supabase.from('chatbot_faqs').insert([{ question, answer, normalized_question: question.toLowerCase() }])
+                if (error) throw error
+            } catch {
+                const { error: legacyError } = await supabase.from('chatbot_faqs').insert([{ question, answer }])
+                if (legacyError) throw legacyError
+            }
             onSave(false)
             onClose()
         } catch (err: any) {

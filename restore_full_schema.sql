@@ -3,8 +3,9 @@
 -- =============================================================================
 
 -- 1. EXTENSIONS & SCHEMA GRANTS
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
 
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON SCHEMA public TO postgres, anon, authenticated, service_role;

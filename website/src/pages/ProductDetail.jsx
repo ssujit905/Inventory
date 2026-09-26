@@ -69,8 +69,15 @@ const ProductDetail = () => {
         return new Date(flashSaleEndTime.replace(' ', 'T')) > new Date();
     }, [flashSaleEndTime]);
 
+    const flashSaleConfig = useMemo(() => {
+        try {
+            return settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
+        } catch (e) {
+            console.error('Failed to parse flash_sale_config:', e);
+            return [];
+        }
+    }, [settings.flash_sale_config]);
     const isFlashSaleEnabled = settings.flash_sale_enabled === 'true' && isFlashSaleTimeValid;
-    const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
     const flashSaleItem = isFlashSaleEnabled ? flashSaleConfig.find(item => item.id.toString() === id?.toString()) : null;
     const isProductInFlashSale = !!flashSaleItem;
     const discountPercent = Number(flashSaleItem?.discount || 0);

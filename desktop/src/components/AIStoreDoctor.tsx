@@ -9,9 +9,11 @@ import {
     fetchStoreAnalytics,
     generateAIStoreDiagnosis,
     getLatestAIInsight,
-    getGroqApiKey,
-    updateGroqApiKey,
-    chatWithAI
+    getAiConfig,
+    updateAiSettings,
+    chatWithAI,
+    DEFAULT_AI_BASE_URL,
+    DEFAULT_AI_MODEL
 } from '../lib/aiDoctorService';
 import type { AggregatedStoreData, AIInsightRecord } from '../lib/aiDoctorService';
 
@@ -41,6 +43,9 @@ export default function AIStoreDoctor() {
 
     const [showKeyModal, setShowKeyModal] = useState(false);
     const [apiKey, setApiKey] = useState('');
+    const [keyInput, setKeyInput] = useState('');
+    const [baseUrl, setBaseUrl] = useState('');
+    const [model, setModel] = useState('');
     const [savingKey, setSavingKey] = useState(false);
 
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([{
@@ -61,14 +66,16 @@ export default function AIStoreDoctor() {
         setLoading(true);
         setAuditError(null);
         try {
-            const [rawMetrics, latestInsight, key] = await Promise.all([
+            const [rawMetrics, latestInsight, config] = await Promise.all([
                 fetchStoreAnalytics(periodDays),
                 getLatestAIInsight(),
-                getGroqApiKey()
+                getAiConfig()
             ]);
             setMetrics(rawMetrics);
             setInsight(latestInsight);
-            setApiKey(key || '');
+            setApiKey(config.apiKey || '');
+            setBaseUrl(config.baseUrl || '');
+            setModel(config.model || '');
         } catch (err: any) {
             setAuditError(err.message || 'Failed to load analytics');
         } finally {
@@ -93,17 +100,34 @@ export default function AIStoreDoctor() {
 
     const handleSaveKey = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!apiKey.trim()) return;
+        if (!keyInput.trim() && !baseUrl.trim() && !model.trim()) return;
         setSavingKey(true);
         try {
-            const ok = await updateGroqApiKey(apiKey.trim());
-            if (ok) setShowKeyModal(false);
-            else setAuditError('Failed to save API key.');
+            // Empty key field = keep the existing saved key.
+            const ok = await updateAiSettings({
+                apiKey: keyInput.trim() || undefined,
+                baseUrl: baseUrl.trim() || undefined,
+                model: model.trim() || undefined,
+            });
+            if (ok) {
+                const config = await getAiConfig();
+                setApiKey(config.apiKey || '');
+                setKeyInput('');
+                setBaseUrl(config.baseUrl || '');
+                setModel(config.model || '');
+                setShowKeyModal(false);
+            }
+            else setAuditError('Nothing to save. Fill at least one field.');
         } catch (err: any) {
-            setAuditError(err.message || 'Failed to save key');
+            setAuditError(err.message || 'Failed to save settings');
         } finally {
             setSavingKey(false);
         }
+    };
+
+    const openKeyModal = () => {
+        setKeyInput('');
+        setShowKeyModal(true);
     };
 
     const handleSendMessage = async (message?: string) => {
@@ -180,9 +204,9 @@ export default function AIStoreDoctor() {
                             </button>
                         ))}
                     </div>
-                    <button onClick={() => setShowKeyModal(true)} className="px-3.5 py-2 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 transition-colors flex items-center gap-2">
+                    <button onClick={openKeyModal} className="px-3.5 py-2 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 transition-colors flex items-center gap-2">
                         <Key size={14} className="text-amber-500" />
-                        <span>{apiKey ? 'Key Configured' : 'Set API Key'}</span>
+                        <span>{apiKey ? 'AI Configured' : 'Setup AI'}</span>
                     </button>
                     {activeTab === 'diagnosis' && (
                         <button onClick={handleRunAudit} disabled={runningAudit || loading}
@@ -423,15 +447,25 @@ export default function AIStoreDoctor() {
                 <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-gray-900 rounded-[2rem] p-8 max-w-md w-full border border-gray-100 dark:border-gray-800 shadow-2xl">
                         <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3"><Key size={20} className="text-amber-500" /><h3 className="text-lg font-black text-gray-900 dark:text-gray-100">AI API Key</h3></div>
+                            <div className="flex items-center gap-3"><Key size={20} className="text-amber-500" /><h3 className="text-lg font-black text-gray-900 dark:text-gray-100">AI Setup</h3></div>
                             <button onClick={() => setShowKeyModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">Your API key is stored securely in your Supabase database settings.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">Your AI settings are stored securely in your Supabase database and take effect immediately.</p>
                         <form onSubmit={handleSaveKey} className="space-y-4">
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">API Key</label>
-                                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..."
-                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                                <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder={apiKey ? '•••••••• (saved — leave blank to keep)' : 'sk-...'}
+                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Base URL</label>
+                                <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={DEFAULT_AI_BASE_URL}
+                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Model</label>
+                                <input type="text" value={model} onChange={(e) => setModel(e.target.value)} placeholder={DEFAULT_AI_MODEL}
+                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                             </div>
                             <div className="flex items-center justify-end gap-3 pt-2">
                                 <button type="button" onClick={() => setShowKeyModal(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-900">Cancel</button>

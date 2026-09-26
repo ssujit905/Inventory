@@ -48,5 +48,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: {
+      // Dev-only workaround for api.xkiro.com CORS (no ACAO header).
+      // Production must use the `ai-store-doctor` Edge Function.
+      '/xkiro-ai': {
+        target: 'https://api.xkiro.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/xkiro-ai/, ''),
+      },
+    },
   },
 })

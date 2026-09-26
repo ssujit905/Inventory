@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCart } from '../context/CartContext';
 import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft, CheckCircle, ShoppingBag, ArrowRight, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { useNotification } from '../context/NotificationContext';
 import { trackFunnelEvent } from '../lib/analyticsTracker';
 
 const Checkout = () => {
+    const isSubmittingRef = useRef(false);
     const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
     const { customer, register, refreshCustomer } = useCustomer();
     const { showNotification } = useNotification();
@@ -213,6 +214,9 @@ const Checkout = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        // Defense in depth: prevent duplicate rapid clicks from creating duplicate orders
+        if (isSubmittingRef.current || saving) return;
+
         if (formData.phone.length !== 10 || !/^\d+$/.test(formData.phone)) {
             showNotification('Primary phone must be exactly 10 digits.', 'error');
             return;
@@ -226,6 +230,7 @@ const Checkout = () => {
             return;
         }
 
+        isSubmittingRef.current = true;
         setSaving(true);
         try {
             // 1. Live stock audit
@@ -451,6 +456,7 @@ const Checkout = () => {
             showNotification('Order failed: ' + (err.message || 'Please try again'), 'error');
         } finally {
             setSaving(false);
+            isSubmittingRef.current = false;
         }
     };
 

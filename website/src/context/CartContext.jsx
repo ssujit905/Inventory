@@ -6,12 +6,24 @@ export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState(() => {
-    const savedCart = localStorage.getItem('shopy-nepal-cart');
-    return savedCart ? JSON.parse(savedCart) : [];
+    try {
+      const savedCart = localStorage.getItem('shopy-nepal-cart');
+      if (!savedCart) return [];
+      const parsed = JSON.parse(savedCart);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.error('Failed to parse cart from localStorage, resetting:', e);
+      try { localStorage.removeItem('shopy-nepal-cart'); } catch (_) {}
+      return [];
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('shopy-nepal-cart', JSON.stringify(cart));
+    try {
+      localStorage.setItem('shopy-nepal-cart', JSON.stringify(cart));
+    } catch (e) {
+      console.error('Failed to save cart to localStorage:', e);
+    }
   }, [cart]);
 
   const addToCart = (product) => {

@@ -33,6 +33,11 @@
 -- =============================================================================
 
 -- ── Intent store (RLS on, no policies: RPCs + service role only) ──────────
+-- pgcrypto provides gen_random_bytes()/digest() used for intent tokens.
+-- It lives in the extensions schema on Supabase.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role, postgres;
+
 CREATE TABLE IF NOT EXISTS public.website_payment_intents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   -- The browser holds the raw token once; only its SHA-256 is stored, so a
@@ -87,7 +92,7 @@ DECLARE
     v_quote      JSONB;
     v_coins_used NUMERIC;
     v_total      NUMERIC;
-    v_token      TEXT := encode(gen_random_bytes(32), 'hex');
+    v_token      TEXT := encode(extensions.gen_random_bytes(32), 'hex');
     v_gateway    TEXT;
     v_slim_items JSONB;
     v_intent_id  UUID;
@@ -143,7 +148,7 @@ BEGIN
         items, coins_used, ad_id, subtotal, shipping_fee, expected_total,
         expires_at
     ) VALUES (
-        encode(digest(v_token, 'sha256'), 'hex'), v_gateway,
+        encode(extensions.digest(v_token, 'sha256'), 'hex'), v_gateway,
         trim(p_customer_name), p_phone, COALESCE(p_phone2, ''),
         trim(p_address), p_city, v_slim_items, v_coins_used, p_ad_id,
         (v_quote->>'subtotal')::numeric, (v_quote->>'shipping_fee')::numeric,

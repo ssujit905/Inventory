@@ -160,36 +160,86 @@ export async function fetchStoreAnalytics(periodDays: number = 7): Promise<Aggre
     };
 }
 
+export const DEFAULT_AI_BASE_URL = 'https://api.xkiro.com/v1';
+export const DEFAULT_AI_MODEL = 'sensenova/sensenova-6.8-flash-lite';
+
+export interface AiConfig {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+}
+
+export function normalizeBaseUrl(url: string): string {
+    return (url || '').trim().replace(/\/+$/, '');
+}
+
 /**
- * Retrieve Groq API Key from database settings or environment.
+ * Read a single AI setting: database `settings` row first,
+ * then `VITE_`-prefixed env var, then the built-in default.
  */
-export async function getGroqApiKey(): Promise<string> {
+export async function getAiSetting(dbKey: string, envName: string, fallback: string): Promise<string> {
     try {
         const { data } = await supabase
             .from('settings')
             .select('value')
-            .eq('key', 'ai_api_key')
+            .eq('key', dbKey)
             .maybeSingle();
 
-        if (data?.value) return data.value.trim();
+        if (data?.value?.trim()) return data.value.trim();
     } catch {
         // ignore
     }
-    return (import.meta as any).env?.VITE_AI_API_KEY || '';
+    return (import.meta as any).env?.[envName]?.trim() || fallback;
 }
 
 /**
- * Save or update the Groq API key in database settings.
+ * Retrieve AI API Key from database settings or environment.
+ */
+export async function getGroqApiKey(): Promise<string> {
+    return getAiSetting('ai_api_key', 'VITE_AI_API_KEY', '');
+}
+
+/** Retrieve AI Base URL (no trailing slash) from database settings or environment. */
+export async function getAiBaseUrl(): Promise<string> {
+    return normalizeBaseUrl(await getAiSetting('ai_base_url', 'VITE_AI_BASE_URL', DEFAULT_AI_BASE_URL));
+}
+
+/** Retrieve AI model id from database settings or environment. */
+export async function getAiModel(): Promise<string> {
+    return getAiSetting('ai_model', 'VITE_AI_MODEL', DEFAULT_AI_MODEL);
+}
+
+/** Load the full AI configuration (key + base URL + model) at once. */
+export async function getAiConfig(): Promise<AiConfig> {
+    const [apiKey, baseUrl, model] = await Promise.all([
+        getGroqApiKey(),
+        getAiBaseUrl(),
+        getAiModel(),
+    ]);
+    return { apiKey, baseUrl, model };
+}
+
+/**
+ * Save one or more AI settings (apiKey / baseUrl / model) to the database.
+ * Only the provided fields are written; empty strings are ignored.
+ */
+export async function updateAiSettings(settings: { apiKey?: string; baseUrl?: string; model?: string }): Promise<boolean> {
+    const rows: { key: string; value: string; updated_at: string }[] = [];
+    const now = new Date().toISOString();
+    if (settings.apiKey?.trim()) rows.push({ key: 'ai_api_key', value: settings.apiKey.trim(), updated_at: now });
+    const baseUrl = settings.baseUrl ? normalizeBaseUrl(settings.baseUrl) : '';
+    if (baseUrl) rows.push({ key: 'ai_base_url', value: baseUrl, updated_at: now });
+    if (settings.model?.trim()) rows.push({ key: 'ai_model', value: settings.model.trim(), updated_at: now });
+    if (rows.length === 0) return false;
+    const { error } = await supabase.from('settings').upsert(rows);
+    return !error;
+}
+
+/**
+ * Save or update the AI API key in database settings.
  */
 export async function updateGroqApiKey(apiKey: string): Promise<boolean> {
-    const { error } = await supabase
-        .from('settings')
-        .upsert({
-            key: 'ai_api_key',
-            value: apiKey.trim(),
-            updated_at: new Date().toISOString()
-        });
-    return !error;
+    return updateAiSettings({ apiKey });
 }
 
 /**
@@ -208,14 +258,100 @@ export async function getLatestAIInsight(): Promise<AIInsightRecord | null> {
 }
 
 /**
- * Run the full AI Diagnostic audit using Groq Cloud AI and cache the report in Supabase.
+ * Call the AI via the `ai-store-doctor` Edge Function.
+ * Browsers block direct calls to api.xkiro.com (CORS, no ACAO header),
+ * so the request must go server-side. Falls back to direct fetch only
+ * when the function is unreachable (e.g. local dev without deploy),
+ * with a clear error if the browser blocks it.
+ */
+async function callStoreDoctorAI(
+    action: 'diagnose' | 'chat',
+    messages: { role: string; content: string }[],
+    temperature: number,
+    maxTokens: number,
+    config: AiConfig,
+): Promise<string> {
+    const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_AI_BASE_URL;
+    const model = config.model?.trim() || DEFAULT_AI_MODEL;
+    const clientApiKey = config.apiKey;
+    // 1. Preferred path in production: Edge Function (no CORS, key stays server-side safe).
+    // In `vite dev` the /xkiro-ai proxy is used directly so a missing/unreachable
+    // Edge Function doesn't spam the console with preflight errors.
+    // Set VITE_USE_EDGE_AI=true to force the Edge path in dev (function must be deployed).
+    const useEdge = !(import.meta as any).env?.DEV || (import.meta as any).env?.VITE_USE_EDGE_AI === 'true';
+    if (useEdge) {
+    try {
+        const { data, error } = await supabase.functions.invoke('ai-store-doctor', {
+            body: { action, messages, temperature, max_tokens: maxTokens, apiKey: clientApiKey || undefined, baseUrl, model },
+        });
+        if (!error && data?.content) return data.content as string;
+        if (data?.error && !error) throw new Error(data.error);
+        if (error) throw error;
+    } catch (edgeErr: any) {
+        const msg = edgeErr?.message || '';
+        const ctx = (edgeErr as any)?.context;
+        if (ctx && typeof ctx.json === 'function') {
+            try {
+                const body = await ctx.json();
+                if (body?.error) throw new Error(body.error);
+            } catch (e: any) {
+                if (e?.message && !/body|json|already/i.test(e.message)) throw e;
+            }
+        }
+        if (msg && !/Failed to fetch|Failed to send|Network|not found|404|Function/i.test(msg)) {
+            throw edgeErr instanceof Error ? edgeErr : new Error(msg);
+        }
+    }
+    }
+
+    // 2. Fallback: direct browser call (works only if the API allows CORS).
+    // In `vite dev` with the default provider, this goes through the /xkiro-ai
+    // proxy above to dodge CORS. A custom base URL is called directly.
+    const directUrl = (import.meta as any).env?.DEV && baseUrl === DEFAULT_AI_BASE_URL
+        ? '/xkiro-ai/v1/chat/completions'
+        : `${baseUrl}/chat/completions`;
+    try {
+        const response = await fetch(directUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${clientApiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model,
+                messages,
+                temperature,
+                max_tokens: maxTokens
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`AI request failed (${response.status}): ${errText}`);
+        }
+
+        const result = await response.json();
+        return result.choices?.[0]?.message?.content || 'No response generated.';
+    } catch (directErr: any) {
+        if (directErr?.message === 'Failed to fetch' || directErr?.name === 'TypeError') {
+            throw new Error(
+                'Browser blocked the direct AI request (CORS). Deploy the Edge Function: ' +
+                '`supabase functions deploy ai-store-doctor` — the app calls it automatically.'
+            );
+        }
+        throw directErr;
+    }
+}
+
+/**
+ * Run the full AI Diagnostic audit using AI and cache the report in Supabase.
  */
 export async function generateAIStoreDiagnosis(periodDays: number = 7): Promise<AIInsightRecord> {
     const metrics = await fetchStoreAnalytics(periodDays);
-    const apiKey = await getGroqApiKey();
+    const config = await getAiConfig();
 
-    if (!apiKey) {
-        throw new Error('AI API Key is not configured. Please set your API key.');
+    if (!config.apiKey) {
+        throw new Error('AI API Key is not configured. Please open AI Setup and save your key.');
     }
 
     const promptContent = `
@@ -263,38 +399,23 @@ Provide your diagnosis in clean, modern Markdown using this exact structure:
 Keep advice direct, realistic, and tailored for online retail in Nepal.
 `;
 
-    const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: 'sensenova/sensenova-6.8-flash-lite',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are an elite E-Commerce Conversion Optimization Consultant. You provide structured, data-driven, practical audits in crisp Markdown.'
-                },
-                {
-                    role: 'user',
-                    content: promptContent
-                }
-            ],
-            temperature: 0.3,
-            max_tokens: 900
-        })
-    });
+    const markdownSummary = await callStoreDoctorAI(
+        'diagnose',
+        [
+            {
+                role: 'system',
+                content: 'You are an elite E-Commerce Conversion Optimization Consultant. You provide structured, data-driven, practical audits in crisp Markdown.'
+            },
+            {
+                role: 'user',
+                content: promptContent
+            }
+        ],
+        0.3,
+        900,
+        config
+    );
 
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`AI request failed (${response.status}): ${errText}`);
-    }
-
-    const result = await response.json();
-    const markdownSummary = result.choices?.[0]?.message?.content || 'No diagnosis generated.';
-
-    // Calculate a realistic store health score (0 - 100) strictly based on real conversion and funnel
     let healthScore = 0;
     if (metrics.funnel.totalPageVisits > 0) {
         healthScore = 70;
@@ -315,7 +436,6 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
         raw_metrics: metrics
     };
 
-    // Save report to Supabase for persistence & instant mobile/desktop viewing
     const { data: inserted, error: insertErr } = await supabase
         .from('website_ai_insights')
         .insert({
@@ -325,7 +445,7 @@ Keep advice direct, realistic, and tailored for online retail in Nepal.
             top_bottlenecks: record.top_bottlenecks,
             action_items: record.action_items,
             raw_metrics: record.raw_metrics,
-            created_by: 'Sensenova AI (sensenova-6.8-flash-lite)'
+            created_by: `AI Store Doctor (${config.model})`
         })
         .select('*')
         .single();
@@ -345,8 +465,8 @@ export async function chatWithAI(
     metrics: AggregatedStoreData,
     history: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<string> {
-    const apiKey = await getGroqApiKey();
-    if (!apiKey) throw new Error('AI API Key is not configured. Please set your API key.');
+    const config = await getAiConfig();
+    if (!config.apiKey) throw new Error('AI API Key is not configured. Please open AI Setup and save your key.');
 
     const systemPrompt = `You are an expert E-Commerce Advisor for "Shopy Nepal", an online store in Nepal.
 You have access to live store analytics data for the past ${metrics.periodDays} days:
@@ -366,30 +486,15 @@ ZERO-RESULT SEARCHES: ${metrics.zeroResultSearches.slice(0, 5).map(s => `"${s.qu
 
 Answer questions concisely and practically. Use markdown formatting. Be direct and actionable.`;
 
-    const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: 'sensenova/sensenova-6.8-flash-lite',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...history,
-                { role: 'user', content: userMessage }
-            ],
-            temperature: 0.5,
-            max_tokens: 600
-        })
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`AI request failed (${response.status}): ${errText}`);
-    }
-
-    const result = await response.json();
-    return result.choices?.[0]?.message?.content || 'No response generated.';
+    return callStoreDoctorAI(
+        'chat',
+        [
+            { role: 'system', content: systemPrompt },
+            ...history,
+            { role: 'user', content: userMessage }
+        ],
+        0.5,
+        600,
+        config
+    );
 }
-

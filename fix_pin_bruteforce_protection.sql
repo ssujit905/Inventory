@@ -28,7 +28,8 @@
 -- Idempotent: safe to re-run. Verify with the checks at the bottom.
 -- =============================================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role, postgres;
 
 -- 1. Columns (already exist on fresh restores; IF NOT EXISTS for older DBs)
 ALTER TABLE public.website_customers

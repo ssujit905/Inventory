@@ -12,5 +12,16 @@ export default defineConfig({
     build: {
         outDir: 'dist',
         emptyOutDir: true,
-    }
+    },
+    server: {
+        proxy: {
+            // Dev-only workaround for api.xkiro.com CORS (no ACAO header).
+            // Production must use the `ai-store-doctor` Edge Function.
+            '/xkiro-ai': {
+                target: 'https://api.xkiro.com',
+                changeOrigin: true,
+                rewrite: function (path) { return path.replace(/^\/xkiro-ai/, ''); },
+            },
+        },
+    },
 });

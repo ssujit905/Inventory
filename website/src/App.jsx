@@ -20,11 +20,30 @@ const Contact = lazy(() => import('./pages/Contact'));
 const MyOrders = lazy(() => import('./pages/MyOrders'));
 const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 const PaymentFailure = lazy(() => import('./pages/PaymentFailure'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
-// Minimal skeleton shown while a route chunk loads
+// Branded loading skeleton shown while a route chunk loads
 const RouteFallback = () => (
-  <div style={{ padding: '4rem 1rem', textAlign: 'center', color: '#94a3b8' }}>
-    Loading…
+  <div style={{
+    minHeight: '50vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '1rem',
+    color: '#64748b'
+  }}>
+    <div style={{
+      width: '36px',
+      height: '36px',
+      borderRadius: '50%',
+      border: '3px solid #e2e8f0',
+      borderTopColor: '#0f172a',
+      animation: 'spin 0.8s linear infinite'
+    }} />
+    <span style={{ fontSize: '0.875rem', fontWeight: 500, letterSpacing: '0.02em' }}>
+      Loading Shopy Nepal…
+    </span>
   </div>
 );
 
@@ -62,6 +81,7 @@ function App() {
           <Route path="/my-orders" element={<MyOrders />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/payment-failure" element={<PaymentFailure />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
       </main>

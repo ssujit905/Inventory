@@ -364,10 +364,31 @@ data: {
 
             if (profileError) throw profileError;
 
-            setMessage({
-                type: 'success',
-                text: `Profile updated for ${editName}.`
-            });
+            // Optional password reset via the admin edge function
+            // (service-role Admin API lives server-side; the anon key alone
+            // can never change another user's password).
+            if (editNewPassword) {
+                const { data: pwData, error: pwError } = await supabaseWithTimeout(
+                    supabase.functions.invoke('admin-set-password', {
+                        body: { target_user_id: editingProfile.id, new_password: editNewPassword },
+                    })
+                );
+
+                if (pwError) throw pwError;
+                if (!(pwData as any)?.success) {
+                    throw new Error((pwData as any)?.error || 'Password reset failed. Profile was still updated.');
+                }
+                setEditNewPassword('');
+                setMessage({
+                    type: 'success',
+                    text: `Profile updated and password reset for ${editName}.`
+                });
+            } else {
+                setMessage({
+                    type: 'success',
+                    text: `Profile updated for ${editName}.`
+                });
+            }
 
             await supabaseWithTimeout(fetchProfiles());
             setEditingProfile(null);
@@ -810,7 +831,7 @@ data: {
                                             {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
-                                    <p className="text-[10px] text-amber-600 ml-1">Password reset requires Supabase Admin access.</p>
+                                    <p className="text-[10px] text-gray-500 ml-1">Saving with a new password resets this person's login immediately (min 6 characters).</p>
                                 </div>
 
                                 <button type="submit" disabled={actionLoading}

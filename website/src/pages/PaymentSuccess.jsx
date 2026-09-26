@@ -40,9 +40,17 @@ const PaymentSuccess = () => {
                     // match), creates the order from the server snapshot and
                     // marks it paid — all server-side. The browser never creates
                     // orders or flips payment status anymore.
-                    const decodedString = atob(dataParam);
-                    const paymentDetails = JSON.parse(decodedString);
-                    const { transaction_uuid, transaction_code, status } = paymentDetails;
+                    let paymentDetails;
+                    try {
+                        const decodedString = atob(dataParam);
+                        paymentDetails = JSON.parse(decodedString);
+                    } catch (e) {
+                        console.error('Failed to decode eSewa response:', e);
+                        setErrorMsg('Invalid payment response payload received from payment gateway.');
+                        setLoading(false);
+                        return;
+                    }
+                    const { transaction_uuid, transaction_code, status } = paymentDetails || {};
 
                     if (status !== 'COMPLETE') {
                         setErrorMsg(`Payment was not completed. Status: ${status}`);
@@ -55,14 +63,24 @@ const PaymentSuccess = () => {
                     // Refresh-safe: a cached summary means this callback already
                     // completed server-side (intents are single-use).
                     if (cachedSummary) {
-                        orderSummary = JSON.parse(cachedSummary);
-                        showNotification('eSewa Payment verified successfully!', 'success');
-                        setOrderInfo(orderSummary);
-                        setLoading(false);
-                        return;
+                        try {
+                            orderSummary = JSON.parse(cachedSummary);
+                            showNotification('eSewa Payment verified successfully!', 'success');
+                            setOrderInfo(orderSummary);
+                            setLoading(false);
+                            return;
+                        } catch (e) {
+                            console.warn('Corrupted cached eSewa summary:', e);
+                        }
                     }
 
-                    const stored = JSON.parse(sessionStorage.getItem('pending_esewa_intent') || 'null');
+                    let stored = null;
+                    try {
+                        const rawIntent = sessionStorage.getItem('pending_esewa_intent');
+                        if (rawIntent) stored = JSON.parse(rawIntent);
+                    } catch (e) {
+                        console.warn('Failed to parse pending_esewa_intent:', e);
+                    }
                     if (!stored?.intent_token) {
                         setErrorMsg('We could not match this payment to a checkout session. If money was deducted, please contact support.');
                         setLoading(false);
@@ -117,11 +135,15 @@ const PaymentSuccess = () => {
                     const fonepayCached = sessionStorage.getItem(fonepayCacheKey) || sessionStorage.getItem('last_fonepay_success');
                     // Refresh-safe: cached means the callback already completed.
                     if (fonepayCached) {
-                        orderSummary = JSON.parse(fonepayCached);
-                        showNotification('Bank Transfer Payment verified successfully!', 'success');
-                        setOrderInfo(orderSummary);
-                        setLoading(false);
-                        return;
+                        try {
+                            orderSummary = JSON.parse(fonepayCached);
+                            showNotification('Bank Transfer Payment verified successfully!', 'success');
+                            setOrderInfo(orderSummary);
+                            setLoading(false);
+                            return;
+                        } catch (e) {
+                            console.warn('Corrupted cached Fonepay summary:', e);
+                        }
                     }
 
                     // The PRN is the server-assigned intent ref; completion binds

@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /checkout
+Disallow: /payment-success
+Disallow: /payment-failure
+Disallow: /my-orders
+
+Sitemap: https://shopinepal.com/sitemap.xml

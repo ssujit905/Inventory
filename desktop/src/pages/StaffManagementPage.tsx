@@ -365,14 +365,24 @@ export default function StaffManagementPage() {
 
             if (profileError) throw profileError;
 
-            // If a new password was provided, update it via a password reset flow
-            // Note: Supabase Admin API requires service role key to reset another user's password.
-            // Since we're using the anon key, we can only update the profile fields.
-            // Password update would require a Supabase Edge Function with service role key.
+            // If a new password was provided, reset it via the admin edge
+            // function (service-role Admin API lives server-side; the anon
+            // key alone can never change another user's password).
             if (editNewPassword) {
+                const { data: pwData, error: pwError } = await supabaseWithTimeout(
+                    supabase.functions.invoke('admin-set-password', {
+                        body: { target_user_id: editingProfile.id, new_password: editNewPassword },
+                    })
+                );
+
+                if (pwError) throw pwError;
+                if (!(pwData as any)?.success) {
+                    throw new Error((pwData as any)?.error || 'Password reset failed. Profile was still updated.');
+                }
+                setEditNewPassword('');
                 setMessage({
                     type: 'success',
-                    text: `Profile updated for ${editName}. Note: Password changes require the vendor to use the "Forgot Password" flow, or contact your Supabase admin.`
+                    text: `Profile updated and password reset for ${editName}.`
                 });
             } else {
                 setMessage({
@@ -969,8 +979,8 @@ export default function StaffManagementPage() {
                                             {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
-                                    <p className="text-xs text-amber-600 dark:text-amber-400 ml-1 font-medium">
-                                        ⚠️ Password changes require Supabase Admin access. Contact your system administrator to reset passwords.
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 ml-1 font-medium">
+                                        Saving with a new password resets this person's login immediately (min 6 characters).
                                     </p>
                                 </div>
 

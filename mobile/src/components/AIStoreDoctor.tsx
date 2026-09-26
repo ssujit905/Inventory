@@ -8,9 +8,11 @@ import {
     fetchStoreAnalytics,
     generateAIStoreDiagnosis,
     getLatestAIInsight,
-    getGroqApiKey,
-    updateGroqApiKey,
-    chatWithAI
+    getAiConfig,
+    updateAiSettings,
+    chatWithAI,
+    DEFAULT_AI_BASE_URL,
+    DEFAULT_AI_MODEL
 } from '../lib/aiDoctorService';
 import type { AggregatedStoreData, AIInsightRecord } from '../lib/aiDoctorService';
 
@@ -40,6 +42,9 @@ export default function AIStoreDoctor() {
     // API Key management
     const [showKeyModal, setShowKeyModal] = useState(false);
     const [apiKey, setApiKey] = useState('');
+    const [keyInput, setKeyInput] = useState('');
+    const [baseUrl, setBaseUrl] = useState('');
+    const [model, setModel] = useState('');
     const [savingKey, setSavingKey] = useState(false);
 
     // Chat state
@@ -68,14 +73,16 @@ export default function AIStoreDoctor() {
         setLoading(true);
         setAuditError(null);
         try {
-            const [rawMetrics, latestInsight, key] = await Promise.all([
+            const [rawMetrics, latestInsight, config] = await Promise.all([
                 fetchStoreAnalytics(periodDays),
                 getLatestAIInsight(),
-                getGroqApiKey()
+                getAiConfig()
             ]);
             setMetrics(rawMetrics);
             setInsight(latestInsight);
-            setApiKey(key || '');
+            setApiKey(config.apiKey || '');
+            setBaseUrl(config.baseUrl || '');
+            setModel(config.model || '');
         } catch (err: any) {
             console.error('Failed to load store analytics:', err);
             setAuditError(err.message || 'Failed to load analytics');
@@ -102,20 +109,35 @@ export default function AIStoreDoctor() {
 
     const handleSaveKey = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!apiKey.trim()) return;
+        if (!keyInput.trim() && !baseUrl.trim() && !model.trim()) return;
         setSavingKey(true);
         try {
-            const ok = await updateGroqApiKey(apiKey.trim());
+            // Empty key field = keep the existing saved key.
+            const ok = await updateAiSettings({
+                apiKey: keyInput.trim() || undefined,
+                baseUrl: baseUrl.trim() || undefined,
+                model: model.trim() || undefined,
+            });
             if (ok) {
+                const config = await getAiConfig();
+                setApiKey(config.apiKey || '');
+                setKeyInput('');
+                setBaseUrl(config.baseUrl || '');
+                setModel(config.model || '');
                 setShowKeyModal(false);
             } else {
-                setAuditError('Failed to save API key.');
+                setAuditError('Nothing to save. Fill at least one field.');
             }
         } catch (err: any) {
-            setAuditError(err.message || 'Failed to save key');
+            setAuditError(err.message || 'Failed to save settings');
         } finally {
             setSavingKey(false);
         }
+    };
+
+    const openKeyModal = () => {
+        setKeyInput('');
+        setShowKeyModal(true);
     };
 
     const handleSendMessage = async (message?: string) => {
@@ -242,11 +264,11 @@ export default function AIStoreDoctor() {
                 {/* Action Buttons */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
-                        onClick={() => setShowKeyModal(true)}
+                        onClick={openKeyModal}
                         className="py-2.5 px-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold flex items-center justify-center gap-1.5"
                     >
                         <Key size={14} className="text-amber-500" />
-                        <span>{apiKey ? 'Key Ready' : 'Set Key'}</span>
+                        <span>{apiKey ? 'AI Ready' : 'Setup AI'}</span>
                     </button>
 
                     {activeTab === 'diagnosis' ? (
@@ -550,7 +572,7 @@ export default function AIStoreDoctor() {
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <Key size={18} className="text-amber-500" />
-                                <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">AI API Key</h3>
+                                <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">AI Setup</h3>
                             </div>
                             <button onClick={() => setShowKeyModal(false)} className="text-gray-400">
                                 <X size={18} />
@@ -558,18 +580,40 @@ export default function AIStoreDoctor() {
                         </div>
 
                         <p className="text-[11px] text-gray-500 mb-3">
-                            Stored securely in database settings.
+                            Stored securely in database settings. Takes effect immediately.
                         </p>
 
                         <form onSubmit={handleSaveKey} className="space-y-3">
-                            <input
-                                type="password"
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                placeholder="sk-..."
-                                className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-mono focus:outline-none"
-                                required
-                            />
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">API Key</label>
+                                <input
+                                    type="password"
+                                    value={keyInput}
+                                    onChange={(e) => setKeyInput(e.target.value)}
+                                    placeholder={apiKey ? '•••••••• (saved — leave blank to keep)' : 'sk-...'}
+                                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-mono focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Base URL</label>
+                                <input
+                                    type="text"
+                                    value={baseUrl}
+                                    onChange={(e) => setBaseUrl(e.target.value)}
+                                    placeholder={DEFAULT_AI_BASE_URL}
+                                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-mono focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Model</label>
+                                <input
+                                    type="text"
+                                    value={model}
+                                    onChange={(e) => setModel(e.target.value)}
+                                    placeholder={DEFAULT_AI_MODEL}
+                                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-mono focus:outline-none"
+                                />
+                            </div>
                             <div className="flex items-center justify-end gap-2 pt-1">
                                 <button
                                     type="button"

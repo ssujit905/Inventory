@@ -17,8 +17,14 @@ const friendlyAuthError = (serverError, fallback) =>
 
 export const CustomerProvider = ({ children }) => {
     const [customer, setCustomer] = useState(() => {
-        const saved = sessionStorage.getItem('shopy_customer');
-        return saved ? JSON.parse(saved) : null;
+        try {
+            const saved = sessionStorage.getItem('shopy_customer');
+            return saved ? JSON.parse(saved) : null;
+        } catch (e) {
+            console.error('Failed to parse customer from sessionStorage, resetting:', e);
+            try { sessionStorage.removeItem('shopy_customer'); } catch (_) {}
+            return null;
+        }
     });
     const [loading, setLoading] = useState(false);
 
@@ -92,14 +98,18 @@ export const CustomerProvider = ({ children }) => {
     };
 
     const refreshCustomer = async () => {
-        if (!customer?.phone) return;
+        const token = sessionStorage.getItem('shopy_customer_session');
+        if (!token) return;
         try {
-            // Use the same secure gateway or a similar one. 
-            // Since we already HAVE the info in localStorage, we can use a simpler check or just re-login silently
-            const { data, error } = await supabase.rpc('customer_session_profile', { p_token: sessionStorage.getItem('shopy_customer_session') });
-            if (!error && data?.success) {
+            const { data, error } = await supabase.rpc('customer_session_profile', { p_token: token });
+            if (!error && data?.success && data.customer) {
                 setCustomer(data.customer);
-                sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));
+                try {
+                    sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));
+                } catch (_) {}
+            } else if (data && !data.success) {
+                console.warn('Customer session expired or invalid:', data.error);
+                logout();
             } else if (error) {
                 console.error('Refresh customer error:', error);
             }
@@ -110,9 +120,11 @@ export const CustomerProvider = ({ children }) => {
 
     const logout = () => {
         setCustomer(null);
-        sessionStorage.removeItem('shopy_customer');
-        sessionStorage.removeItem('shopy_customer_session');
-        localStorage.removeItem('shopy_customer');
+        try {
+            sessionStorage.removeItem('shopy_customer');
+            sessionStorage.removeItem('shopy_customer_session');
+            localStorage.removeItem('shopy_customer');
+        } catch (_) {}
     };
 
     /**

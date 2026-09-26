@@ -118,12 +118,21 @@ DO $$
 DECLARE
   fn TEXT;
   internal_fns TEXT[] := ARRAY[
-    'private_create_customer_session(text)',
-    'private_customer_from_session(text)',
     'confirm_website_payment(text,text,text)',
     'confirm_website_payment(text,text)'
   ];
+  internal_crypto_fns TEXT[] := ARRAY[
+    'private_create_customer_session(text)',
+    'private_customer_from_session(text)'
+  ];
 BEGIN
+  FOREACH fn IN ARRAY internal_crypto_fns LOOP
+    IF to_regprocedure('public.' || fn) IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated;', fn);
+      EXECUTE format('ALTER FUNCTION public.%s SET search_path = public, extensions;', fn);
+    END IF;
+  END LOOP;
+
   FOREACH fn IN ARRAY internal_fns LOOP
     IF to_regprocedure('public.' || fn) IS NOT NULL THEN
       EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated;', fn);
@@ -138,7 +147,6 @@ DO $$
 DECLARE
   fn TEXT;
   staff_fns TEXT[] := ARRAY[
-    'admin_reset_customer_pin(text,text)',
     'create_vendor_staff_profile(uuid,text,text,text,uuid)',
     'current_vendor_id()',
     'is_vendor_member(uuid)',
@@ -162,12 +170,16 @@ $$;
 DO $$
 DECLARE
   fn TEXT;
-  storefront_fns TEXT[] := ARRAY[
+  -- Functions requiring pgcrypto (crypt, gen_salt) must include extensions in search_path
+  auth_crypto_fns TEXT[] := ARRAY[
     'customer_login(text,text)',
     'customer_register(text,text,text,text,text)',
     'customer_setup_pin(text,text,text,text,text)',
-    'customer_session_profile(text)',
     'customer_change_pin(text,text,text)',
+    'admin_reset_customer_pin(text,text)'
+  ];
+  storefront_fns TEXT[] := ARRAY[
+    'customer_session_profile(text)',
     'customer_orders(text)',
     'customer_returns(text)',
     'customer_request_return(text,bigint,text,text,jsonb)',
@@ -177,19 +189,25 @@ DECLARE
     'submit_contact_message(text,text,text,text)'
   ];
 BEGIN
+  FOREACH fn IN ARRAY auth_crypto_fns LOOP
+    IF to_regprocedure('public.' || fn) IS NOT NULL THEN
+      EXECUTE format('ALTER FUNCTION public.%s SET search_path = public, extensions;', fn);
+    END IF;
+  END LOOP;
+
   FOREACH fn IN ARRAY storefront_fns LOOP
     IF to_regprocedure('public.' || fn) IS NOT NULL THEN
       EXECUTE format('ALTER FUNCTION public.%s SET search_path = public;', fn);
     END IF;
   END LOOP;
 
-  -- Ensure create_payment_intent overloads also have search_path = public
+  -- Ensure create_payment_intent overloads also have search_path = public, extensions
   FOR fn IN
     SELECT oid::regprocedure::text
     FROM pg_proc
     WHERE proname = 'create_payment_intent'
   LOOP
-    EXECUTE format('ALTER FUNCTION %s SET search_path = public;', fn);
+    EXECUTE format('ALTER FUNCTION %s SET search_path = public, extensions;', fn);
   END LOOP;
 END;
 $$;

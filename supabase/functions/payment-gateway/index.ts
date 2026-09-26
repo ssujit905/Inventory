@@ -1,17 +1,34 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const encoder = new TextEncoder()
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
+function getCorsHeaders(origin?: string | null) {
+  const allowed = Deno.env.get('ALLOWED_ORIGINS')
+  let allowOrigin = '*'
+  if (allowed) {
+    const list = allowed.split(',').map((s: string) => s.trim().toLowerCase())
+    const reqOrigin = (origin || '').toLowerCase()
+    if (list.includes(reqOrigin) || reqOrigin.startsWith('http://localhost:') || reqOrigin.startsWith('http://127.0.0.1:')) {
+      allowOrigin = origin || '*'
+    } else {
+      allowOrigin = list[0] || '*'
+    }
+  } else if (origin) {
+    allowOrigin = origin
+  }
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+  }
 }
 
-function response(body: unknown, status = 200) {
+const corsHeaders = getCorsHeaders()
+
+function response(body: unknown, status = 200, headers = corsHeaders) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders,
+    headers,
   })
 }
 
@@ -213,8 +230,9 @@ Deno.serve(async (req) => {
         })
       }
 
-      // Legacy fallback (pre-intent website builds still in the wild).
-      // Signs caller amounts; the completion step still enforces a match.
+      // [SECURITY DEPRECATION WARNING] Pre-intent website builds in the wild.
+      // Deprecated: callers should create a server intent first.
+      console.warn('[SECURITY DEPRECATION] Pre-intent legacy eSewa payment requested with transactionUuid:', payload.transactionUuid)
       const totalAmount = Number(payload.totalAmount).toFixed(2)
       const amount = Number(payload.amount).toFixed(2)
       const deliveryCharge = Number(payload.deliveryCharge).toFixed(2)
@@ -319,7 +337,9 @@ Deno.serve(async (req) => {
         })
       }
 
-      // Legacy fallback (pre-intent website builds).
+      // [SECURITY DEPRECATION WARNING] Pre-intent website builds in the wild.
+      // Deprecated: callers should create a server intent first.
+      console.warn('[SECURITY DEPRECATION] Pre-intent legacy Fonepay payment requested with PRN:', payload.prn)
       const amount = Number(payload.amount).toFixed(2)
       const prn = String(payload.prn)
       const date = String(payload.date)

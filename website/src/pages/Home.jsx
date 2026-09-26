@@ -12,16 +12,23 @@ const Home = () => {
     const [isTransitioning, setIsTransitioning] = useState(true);
 
     const slides = [
-        { id: 'clone-last', image: settings.hero_slider_3_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_discount_1776096397147.png' },
-        { id: 1, image: settings.hero_slider_1_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_info_1776096290574.png' },
-        { id: 2, image: settings.hero_slider_2_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_sale_1776096347242.png' },
-        { id: 3, image: settings.hero_slider_3_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_discount_1776096397147.png' },
-        { id: 'clone-first', image: settings.hero_slider_1_image || '/Users/sujitsingh/.gemini/antigravity/brain/4595983a-798b-47e0-874b-3e3e1097cc5f/hero_banner_info_1776096290574.png' }
+        { id: 'clone-last', image: settings.hero_slider_3_image || '/banners/hero_banner_discount.png' },
+        { id: 1, image: settings.hero_slider_1_image || '/banners/hero_banner_info.png' },
+        { id: 2, image: settings.hero_slider_2_image || '/banners/hero_banner_sale.png' },
+        { id: 3, image: settings.hero_slider_3_image || '/banners/hero_banner_discount.png' },
+        { id: 'clone-first', image: settings.hero_slider_1_image || '/banners/hero_banner_info.png' }
     ];
 
     // Flash Sale Timer & Product Logic
     const [timeLeft, setTimeLeft] = useState({ hours: '00', minutes: '00', seconds: '00' });
-    const flashSaleConfig = settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
+    const flashSaleConfig = (() => {
+        try {
+            return settings.flash_sale_config ? JSON.parse(settings.flash_sale_config) : [];
+        } catch (e) {
+            console.error('Failed to parse flash_sale_config:', e);
+            return [];
+        }
+    })();
     const flashSaleEndTime = settings.flash_sale_end; // Should be YYYY-MM-DD HH:MM:SS
 
     useEffect(() => {
@@ -62,6 +69,11 @@ const Home = () => {
         };
     }).filter(p => p !== null) : [];
 
+    const handleNext = () => {
+        setIsTransitioning(true);
+        setCurrentIndex(prev => prev + 1);
+    };
+
     // Auto-rotate slider
     useEffect(() => {
         const timer = setInterval(() => {
@@ -69,11 +81,6 @@ const Home = () => {
         }, 5000);
         return () => clearInterval(timer);
     }, [currentIndex]);
-
-    const handleNext = () => {
-        setIsTransitioning(true);
-        setCurrentIndex(prev => prev + 1);
-    };
 
     const handleTransitionEnd = () => {
         if (currentIndex >= slides.length - 1) {

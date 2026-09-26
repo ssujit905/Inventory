@@ -8,20 +8,23 @@ export const useNotification = () => useContext(NotificationContext);
 export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
 
+    const removeNotification = useCallback((id) => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    }, []);
+
     const showNotification = useCallback((message, type = 'info', duration = 4000) => {
-        const id = Date.now();
-        setNotifications(prev => [...prev, { id, message, type }]);
+        const id = `${Date.now()}-${Math.random()}`;
+        setNotifications(prev => {
+            const next = [...prev, { id, message, type }];
+            return next.length > 4 ? next.slice(-4) : next;
+        });
 
         if (duration) {
             setTimeout(() => {
                 removeNotification(id);
             }, duration);
         }
-    }, []);
-
-    const removeNotification = useCallback((id) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-    }, []);
+    }, [removeNotification]);
 
     return (
         <NotificationContext.Provider value={{ showNotification }}>

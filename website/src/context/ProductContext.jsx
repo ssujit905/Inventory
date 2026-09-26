@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 
 const ProductContext = createContext();
 
@@ -8,25 +9,27 @@ export const useProducts = () => useContext(ProductContext);
 export const ProductProvider = ({ children }) => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
-
-    const fetchProducts = async () => {
+    const fetchProducts = useCallback(async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('website_products')
-                .select(`
-                    *,
-                    website_product_images(*)
-                `)
-                .eq('is_active', true)
-                .order('created_at', { ascending: false });
+            setError(null);
 
-            if (error) {
-                console.error('Supabase error fetching products:', error);
+            const { data, error: prodErr } = await safeFetch(() =>
+                supabase
+                    .from('website_products')
+                    .select(`
+                        *,
+                        website_product_images(*)
+                    `)
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false })
+            );
+
+            if (prodErr) {
+                console.error('Supabase error fetching products:', prodErr);
+                setError(prodErr.message || 'Failed to load products');
                 return;
             }
 
@@ -89,13 +92,18 @@ export const ProductProvider = ({ children }) => {
             }
         } catch (err) {
             console.error('Unexpected error in fetchProducts:', err);
+            setError(err?.message || 'Failed to load products');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fetchProducts]);
 
     return (
-        <ProductContext.Provider value={{ products, loading, refetch: fetchProducts }}>
+        <ProductContext.Provider value={{ products, loading, error, refetch: fetchProducts }}>
             {children}
         </ProductContext.Provider>
     );

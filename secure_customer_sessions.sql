@@ -1,6 +1,7 @@
 -- Customer PIN hardening and token-based sessions.
 -- Run once in Supabase SQL Editor before deploying the updated website.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role, postgres;
 
 CREATE TABLE IF NOT EXISTS customer_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,7 +24,7 @@ DECLARE v_customer website_customers;
 BEGIN
   SELECT c.* INTO v_customer
   FROM customer_sessions s JOIN website_customers c ON c.phone = s.customer_phone
-  WHERE s.token_hash = encode(digest(p_token, 'sha256'), 'hex') AND s.expires_at > now();
+  WHERE s.token_hash = encode(extensions.digest(p_token, 'sha256'), 'hex') AND s.expires_at > now();
   RETURN v_customer;
 END;
 $$;
@@ -31,11 +32,11 @@ $$;
 CREATE OR REPLACE FUNCTION private_create_customer_session(p_phone TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
-DECLARE v_token TEXT := encode(gen_random_bytes(32), 'hex');
+DECLARE v_token TEXT := encode(extensions.gen_random_bytes(32), 'hex');
 BEGIN
   DELETE FROM customer_sessions WHERE customer_phone = p_phone OR expires_at <= now();
   INSERT INTO customer_sessions(customer_phone, token_hash, expires_at)
-  VALUES (p_phone, encode(digest(v_token, 'sha256'), 'hex'), now() + interval '7 days');
+  VALUES (p_phone, encode(extensions.digest(v_token, 'sha256'), 'hex'), now() + interval '7 days');
   RETURN v_token;
 END;
 $$;
