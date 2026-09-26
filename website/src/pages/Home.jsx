@@ -7,17 +7,25 @@ import ProductCard from '../components/ProductCard';
 
 const Home = () => {
     const { products, loading } = useProducts();
-    const { settings } = useSettings();
+    const { settings, settingsLoading } = useSettings();
     const [currentIndex, setCurrentIndex] = useState(1);
     const [isTransitioning, setIsTransitioning] = useState(true);
 
-    const slides = [
-        { id: 'clone-last', image: settings.hero_slider_3_image || '/banners/hero_banner_discount.png' },
-        { id: 1, image: settings.hero_slider_1_image || '/banners/hero_banner_info.png' },
-        { id: 2, image: settings.hero_slider_2_image || '/banners/hero_banner_sale.png' },
-        { id: 3, image: settings.hero_slider_3_image || '/banners/hero_banner_discount.png' },
-        { id: 'clone-first', image: settings.hero_slider_1_image || '/banners/hero_banner_info.png' }
-    ];
+    // Only uploaded Supabase images — no local /banners fallbacks.
+    // Hides the slider entirely when none are set.
+    const realSlides = [settings.hero_slider_1_image, settings.hero_slider_2_image, settings.hero_slider_3_image]
+        .map(v => (v || '').trim())
+        .filter(Boolean)
+        .map((image, i) => ({ id: i + 1, image }));
+
+    const slides = realSlides.length > 1 ? [
+        { ...realSlides[realSlides.length - 1], id: 'clone-last' },
+        ...realSlides,
+        { ...realSlides[0], id: 'clone-first' }
+    ] : realSlides;
+
+    // Clamp index when the uploaded set shrinks (e.g. settings load 3 -> 1)
+    const safeIndex = slides.length ? Math.min(Math.max(currentIndex, 0), slides.length - 1) : 0;
 
     // Flash Sale Timer & Product Logic
     const [timeLeft, setTimeLeft] = useState({ hours: '00', minutes: '00', seconds: '00' });
@@ -69,20 +77,18 @@ const Home = () => {
         };
     }).filter(p => p !== null) : [];
 
-    const handleNext = () => {
-        setIsTransitioning(true);
-        setCurrentIndex(prev => prev + 1);
-    };
-
-    // Auto-rotate slider
+    // Auto-rotate slider (only when 2+ uploaded images)
     useEffect(() => {
+        if (realSlides.length <= 1) return;
         const timer = setInterval(() => {
-            handleNext();
+            setIsTransitioning(true);
+            setCurrentIndex(prev => prev + 1);
         }, 5000);
         return () => clearInterval(timer);
-    }, [currentIndex]);
+    }, [currentIndex, realSlides.length]);
 
     const handleTransitionEnd = () => {
+        if (realSlides.length <= 1) return;
         if (currentIndex >= slides.length - 1) {
             setIsTransitioning(false);
             setCurrentIndex(1);
@@ -103,8 +109,8 @@ const Home = () => {
 
     return (
         <div style={{ backgroundColor: 'transparent' }}>
-            {/* ─── Premium Hero Section ─── */}
-            {/* ─── Premium Hero Slider Section ─── */}
+            {/* ─── Premium Hero Slider Section (uploaded images only, hidden when none) ─── */}
+            {!settingsLoading && realSlides.length === 0 ? null : (
             <section className="hero-slider" style={{
                 position: 'relative',
                 overflow: 'hidden',
@@ -120,14 +126,27 @@ const Home = () => {
                             position: 'relative',
                             aspectRatio: window.innerWidth > 768 ? '2.8/1' : '16/9',
                             maxHeight: '550px',
-                            boxShadow: '0 20px 40px rgba(0,0,0,0.1)'
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+                            background: '#e2e8f0'
                         }}>
+                            {settingsLoading ? (
+                                <div style={{ width: '100%', height: '100%', animation: 'pulse 1.5s ease-in-out infinite', background: '#e2e8f0' }} />
+                            ) : realSlides.length === 1 ? (
+                                <img
+                                    src={realSlides[0].image}
+                                    alt="Hero Banner"
+                                    loading="eager"
+                                    fetchPriority="high"
+                                    decoding="async"
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                            ) : (
                             <div 
                                 onTransitionEnd={handleTransitionEnd}
                                 style={{
                                     display: 'flex',
                                     transition: isTransitioning ? 'transform 0.8s cubic-bezier(0.65, 0, 0.35, 1)' : 'none',
-                                    transform: `translateX(-${currentIndex * 100}%)`,
+                                    transform: `translateX(-${safeIndex * 100}%)`,
                                     height: '100%',
                                     width: '100%'
                                 }}
@@ -154,17 +173,20 @@ const Home = () => {
                                     </div>
                                 ))}
                             </div>
+                            )}
                         </div>
 
                         {/* Navigation Dots - 7px Precision */}
+                        {!settingsLoading && realSlides.length > 1 && (
                         <div style={{
                             display: 'flex', 
                             justifyContent: 'center', 
                             gap: '10px',
                             marginTop: '1rem'
                         }}>
-                            {[0, 1, 2].map(i => {
-                                const activeDot = (currentIndex === 0 ? 2 : (currentIndex === 4 ? 0 : currentIndex - 1));
+                            {realSlides.map((_, i) => {
+                                const n = realSlides.length;
+                                const activeDot = ((safeIndex - 1) % n + n) % n;
                                 return (
                                     <button
                                         key={i}
@@ -188,9 +210,11 @@ const Home = () => {
                                 );
                             })}
                         </div>
+                        )}
                     </div>
                 </div>
             </section>
+            )}
 
             {/* ─── Trust Indicators ─── */}
 

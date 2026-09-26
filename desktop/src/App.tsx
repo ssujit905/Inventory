@@ -17,6 +17,7 @@ import WebsiteOrdersPage from './pages/WebsiteOrdersPage';
 import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
 import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
+import WebsiteNotifyPage from './pages/WebsiteNotifyPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
 import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
 import AIStoreDoctorPage from './pages/AIStoreDoctorPage';
@@ -143,6 +144,9 @@ function App() {
         } />
         <Route path="/admin/website/returns" element={
           user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />
+        } />
+        <Route path="/admin/website/notify" element={
+          user ? <WebsiteNotifyPage /> : <Navigate to="/" replace />
         } />
         <Route path="/admin/website/reports" element={
           user && (profile?.role === 'admin' || profile?.role === 'staff' || profile?.role === 'vendor') ? <WebsiteReportsPage /> : <Navigate to="/" replace />

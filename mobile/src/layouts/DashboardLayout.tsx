@@ -21,6 +21,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const [pendingCostCount, setPendingCostCount] = useState(0);
     const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
     const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
+    const [pendingNotifyCount, setPendingNotifyCount] = useState(0);
     const [pullDistance, setPullDistance] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [startY, setStartY] = useState<number | null>(null);
@@ -72,6 +73,21 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         else returnsQuery = returnsQuery.is('vendor_id', null);
         const { count: returns } = await returnsQuery;
         setPendingReturnsCount(returns || 0);
+
+        let notifyQuery = supabase
+            .from('product_notify_requests')
+            .select('id, website_products!inner(vendor_id)', { count: 'exact', head: true })
+            .eq('status', 'pending');
+        if (vendorId) notifyQuery = notifyQuery.eq('website_products.vendor_id', vendorId);
+        else notifyQuery = notifyQuery.is('website_products.vendor_id', null);
+        try {
+            const lastSeen = localStorage.getItem(`notify_last_seen_${profile?.id || 'anon'}`);
+            if (lastSeen) notifyQuery = notifyQuery.gt('created_at', lastSeen);
+        } catch {
+            // Storage unavailable — count all pending
+        }
+        const { count: notify } = await notifyQuery;
+        setPendingNotifyCount(notify || 0);
     };
 
     useEffect(() => {
@@ -82,7 +98,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         () => fetchCounts(),
         {
             channelName: 'mobile-count-updates',
-            tables: ['product_lots', 'website_orders', 'website_order_returns'],
+            tables: ['product_lots', 'website_orders', 'website_order_returns', 'product_notify_requests'],
             pollMs: 8000
         }
     );
@@ -232,7 +248,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                     >
                         <div className="relative">
                             <Menu size={24} strokeWidth={2.5} />
-                            {(pendingCostCount > 0 || pendingOrdersCount > 0 || pendingReturnsCount > 0) && (
+                            {(pendingCostCount > 0 || pendingOrdersCount > 0 || pendingReturnsCount > 0 || pendingNotifyCount > 0) && (
                                 <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
                             )}
                         </div>
@@ -384,6 +400,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                                 )}
                                 <MenuLink icon={<ShoppingBag className="text-blue-500" />} label="Orders" path="/admin/website/orders" onSelect={() => setIsMenuOpen(false)} badge={pendingOrdersCount} />
                                 <MenuLink icon={<RotateCcw className="text-orange-500" />} label="Returns" path="/admin/website/returns" onSelect={() => setIsMenuOpen(false)} badge={pendingReturnsCount} />
+                                <MenuLink icon={<Bell className="text-rose-500" />} label="Notify" path="/admin/website/notify" onSelect={() => setIsMenuOpen(false)} badge={pendingNotifyCount} />
                                 {role === 'admin' && (
                                     <MenuLink icon={<Users className="text-purple-500" />} label="Customers" path="/admin/website/customers" onSelect={() => setIsMenuOpen(false)} />
                                 )}

@@ -19,6 +19,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     const [pendingCostCount, setPendingCostCount] = useState(0);
     const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
     const [pendingReturnsCount, setPendingReturnsCount] = useState(0);
+    const [pendingNotifyCount, setPendingNotifyCount] = useState(0);
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -126,6 +127,25 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         else returnsQuery = returnsQuery.is('vendor_id', null);
         const { count: returnsCount } = await returnsQuery;
         setPendingReturnsCount(returnsCount || 0);
+
+        // Pending Notify (back-in-stock) Requests — vendors scoped to their
+        // products, main-store admin/staff to own-store (non-vendor) ones,
+        // so vendor alerts never badge in admin. Only requests newer than
+        // the last Notify tab visit count (opening the tab clears it).
+        let notifyQuery = supabase
+            .from('product_notify_requests')
+            .select('id, website_products!inner(vendor_id)', { count: 'exact', head: true })
+            .eq('status', 'pending');
+        if (vendorId) notifyQuery = notifyQuery.eq('website_products.vendor_id', vendorId);
+        else notifyQuery = notifyQuery.is('website_products.vendor_id', null);
+        try {
+            const lastSeen = localStorage.getItem(`notify_last_seen_${profile?.id || 'anon'}`);
+            if (lastSeen) notifyQuery = notifyQuery.gt('created_at', lastSeen);
+        } catch {
+            // Storage unavailable — count all pending
+        }
+        const { count: notifyCount } = await notifyQuery;
+        setPendingNotifyCount(notifyCount || 0);
     };
 
     useEffect(() => {
@@ -140,7 +160,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         },
         {
             channelName: 'sidebar-badges-v3',
-            tables: ['product_lots', 'website_orders', 'website_order_returns'],
+            tables: ['product_lots', 'website_orders', 'website_order_returns', 'product_notify_requests'],
             pollMs: 10000,
             enabled: true
         }
@@ -324,6 +344,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
                         path="/admin/website/returns" 
                         active={location.pathname === '/admin/website/returns'} 
                         badge={pendingReturnsCount > 0 ? pendingReturnsCount : undefined}
+                    />
+                    <NavItem 
+                        icon={<Bell size={18} strokeWidth={1.5} />} 
+                        label="Notify" 
+                        path="/admin/website/notify" 
+                        active={location.pathname === '/admin/website/notify'} 
+                        badge={pendingNotifyCount > 0 ? pendingNotifyCount : undefined}
                     />
                     <NavItem icon={<MapPin size={18} strokeWidth={1.5} />} label="Delivery" path="/admin/website/delivery" active={location.pathname === '/admin/website/delivery'} />
                     {role === 'admin' && (

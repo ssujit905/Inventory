@@ -20,6 +20,7 @@ import {
     Play,
     X,
     Star,
+    Sparkles,
     User,
     Loader2,
     Store
@@ -44,6 +45,12 @@ const ProductDetail = () => {
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerAction, setPickerAction] = useState('buy');
     const [quantity, setQuantity] = useState(1);
+    // Notify-me form (shown when the selected variation is out of stock)
+    const [notifyName, setNotifyName] = useState('');
+    const [notifyAddress, setNotifyAddress] = useState('');
+    const [notifyPhone, setNotifyPhone] = useState('');
+    const [notifyLoading, setNotifyLoading] = useState(false);
+    const [notifySent, setNotifySent] = useState(false);
     const [touchStart, setTouchStart] = useState(0);
     const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -83,6 +90,7 @@ const ProductDetail = () => {
     const discountPercent = Number(flashSaleItem?.discount || 0);
 
     const currentVariant = variants.find(v => v.color === selectedColor && v.size === selectedSize);
+    const isCurrentVariantOOS = !!(selectedColor && selectedSize && currentVariant && currentVariant.current_stock <= 0);
     const rawPrice = currentVariant?.price ? Number(currentVariant.price) : (product?.price || 0);
     
     // Apply Flash Sale discount if active
@@ -144,14 +152,26 @@ const ProductDetail = () => {
                 const { data: v } = await supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id);
                 setVariants(v || []);
 
-                // Auto-select if single/standard variant
+                // Auto-select if single/standard variant.
+                // But never auto-complete an OUT-OF-STOCK selection when the
+                // customer still has a real choice — otherwise the notify
+                // form would show before they pick a variation.
                 if (v && v.length > 0) {
+                    const choosable = v.filter(vi =>
+                        (vi.color !== 'Standard' && vi.color !== 'Combo') ||
+                        (vi.size !== 'Universal' && vi.size !== 'Package')
+                    );
                     const firstColor = v[0].color;
                     setSelectedColor(firstColor);
                     // If there's only one size for this color (or it's Universal), auto-select it
                     const sizesForColor = v.filter(vi => vi.color === firstColor);
                     if (sizesForColor.length === 1) {
-                        setSelectedSize(sizesForColor[0].size);
+                        const only = sizesForColor[0];
+                        if (choosable.length <= 1 || only.current_stock > 0) {
+                            setSelectedSize(only.size);
+                        }
+                        // else: leave size unselected so the customer picks
+                        // a variation first instead of landing on the form
                     }
                 }
             } catch (err) {
@@ -302,6 +322,44 @@ const ProductDetail = () => {
     const handleAddToCartTrigger = () => {
         setPickerAction('cart');
         setIsPickerOpen(true);
+    };
+
+    const handleNotifySubmit = async () => {
+        const name = notifyName.trim();
+        const address = notifyAddress.trim();
+        const phone = notifyPhone.replace(/\D/g, '');
+        if (!name) {
+            showNotification('Please enter your name', 'warning');
+            return;
+        }
+        if (phone.length !== 10) {
+            showNotification('Phone number must be exactly 10 digits', 'warning');
+            return;
+        }
+        if (!address) {
+            showNotification('Please enter your address', 'warning');
+            return;
+        }
+        setNotifyLoading(true);
+        try {
+            const { error } = await supabase.from('product_notify_requests').insert([{
+                product_id: product.id,
+                variant_id: currentVariant?.variant_id || null,
+                color: selectedColor || '',
+                size: selectedSize || '',
+                customer_name: name,
+                phone,
+                address
+            }]);
+            if (error) throw error;
+            setNotifySent(true);
+            showNotification('We will notify you when it is back in stock!', 'success');
+        } catch (err) {
+            console.error('Notify request failed:', err);
+            showNotification(err.message || 'Failed to submit. Please try again.', 'error');
+        } finally {
+            setNotifyLoading(false);
+        }
     };
 
     const handleFinalPurchase = (e) => {
@@ -1064,7 +1122,7 @@ const ProductDetail = () => {
                     </button>
                 </div>
                 <button
-                    onClick={product.is_sold_out ? null : handleBuyNowTrigger}
+                    onClick={handleBuyNowTrigger}
                     className="btn btn-primary"
                     style={{
                         flex: 1,
@@ -1078,15 +1136,15 @@ const ProductDetail = () => {
                         borderRadius: '12px',
                         background: product.is_sold_out ? 'linear-gradient(135deg, #d9363e 0%, var(--primary-red) 100%)' : 'var(--primary-red)',
                         border: 'none',
-                        cursor: product.is_sold_out ? 'not-allowed' : 'pointer',
+                        cursor: 'pointer',
                         lineHeight: '1.2',
                         padding: '4px 0'
                     }}
                 >
                     {product.is_sold_out ? (
                         <>
-                            <span style={{ fontSize: '0.95rem' }}>Sold Out</span>
-                            <span style={{ fontSize: '0.72rem', opacity: 0.7, fontWeight: '700', letterSpacing: '0.04em' }}>RESTOCKING SOON</span>
+                            <span style={{ fontSize: '0.95rem' }}>Notify Me</span>
+                            <span style={{ fontSize: '0.72rem', opacity: 0.7, fontWeight: '700', letterSpacing: '0.04em' }}>OUT OF STOCK — TAP TO REQUEST</span>
                         </>
                     ) : (
                         <>
@@ -1135,7 +1193,7 @@ const ProductDetail = () => {
                                             return (
                                                 <div 
                                                     key={color} 
-                                                    onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
+                                                    onClick={() => { setSelectedColor(color); setSelectedSize(null); setNotifySent(false); }}
                                                     style={{
                                                         padding: '8px 20px',
                                                         borderRadius: '12px',
@@ -1168,9 +1226,8 @@ const ProductDetail = () => {
                                                 <div 
                                                     key={v.variant_id} 
                                                     onClick={() => {
-                                                        if (!isOOS) {
-                                                            setSelectedSize(v.size);
-                                                        }
+                                                        setSelectedSize(v.size);
+                                                        setNotifySent(false);
                                                     }}
                                                     style={{
                                                         minWidth: '60px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1205,6 +1262,47 @@ const ProductDetail = () => {
                                 </div>
                             )}
 
+                            {/* OOS Notify panel replaces quantity + buy when this variation is out of stock */}
+                            {isCurrentVariantOOS ? (
+                                <div style={{ marginTop: '20px', padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '15px' }}>
+                                    {notifySent ? (
+                                        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                                            <p style={{ fontSize: '1rem', fontWeight: '900', color: '#059669', margin: '0 0 6px 0' }}>You're on the list!</p>
+                                            <p style={{ fontSize: '0.85rem', color: '#475569', margin: 0 }}>We will notify you when {selectedColor}{selectedSize ? ` / ${selectedSize}` : ''} is back in stock.</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p style={{ fontSize: '0.9rem', fontWeight: '800', color: '#b91c1c', margin: '0 0 4px 0' }}>Sorry, this specific variation is out of stock!</p>
+                                            <p style={{ fontSize: '0.85rem', color: '#475569', margin: '0 0 12px 0' }}>But you can notify us if you want this product — leave your details and we'll contact you when it's back.</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={notifyName}
+                                                    onChange={e => setNotifyName(e.target.value)}
+                                                    placeholder="Your name"
+                                                    style={{ height: '44px', padding: '0 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none', background: 'white' }}
+                                                />
+                                                <input
+                                                    type="tel"
+                                                    value={notifyPhone}
+                                                    onChange={e => setNotifyPhone(e.target.value)}
+                                                    placeholder="Phone number (10 digits)"
+                                                    inputMode="numeric"
+                                                    style={{ height: '44px', padding: '0 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none', background: 'white' }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={notifyAddress}
+                                                    onChange={e => setNotifyAddress(e.target.value)}
+                                                    placeholder="Delivery address"
+                                                    style={{ height: '44px', padding: '0 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none', background: 'white' }}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                            <>
                             {/* Quantity Control */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '15px', background: '#f8fafc', borderRadius: '15px' }}>
                                 <p style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>Quantity</p>
@@ -1234,10 +1332,25 @@ const ProductDetail = () => {
                                     </button>
                                 </div>
                             </div>
+                            </>
+                            )}
                         </div>
 
-                        {/* Final Buy Button */}
+                        {/* Final Buy / Notify Button */}
                         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '15px', backgroundColor: 'white', borderTop: '0.5px solid #eee' }}>
+                            {isCurrentVariantOOS ? (
+                            <button 
+                                onClick={handleNotifySubmit}
+                                disabled={notifyLoading || notifySent || !isSelectionComplete()}
+                                style={{
+                                    width: '100%', height: '48px', borderRadius: '10px', border: 'none',
+                                    backgroundColor: (notifySent || !isSelectionComplete()) ? '#ccc' : 'var(--primary-red)',
+                                    color: 'white', fontWeight: 'bold', fontSize: '1rem', cursor: (notifyLoading || notifySent || !isSelectionComplete()) ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {notifySent ? 'Notified ✓' : (notifyLoading ? 'Submitting...' : 'Notify Me')}
+                            </button>
+                            ) : (
                             <button 
                                 onClick={(e) => handleFinalPurchase(e)}
                                 disabled={!isSelectionComplete()}
@@ -1256,6 +1369,7 @@ const ProductDetail = () => {
                                     ) : 'Add to Cart') 
                                     : 'Please Select All Options'}
                             </button>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -15,6 +15,7 @@ import ChatbotPage from './pages/ChatbotPage';
 import WebsiteOrdersPage from './pages/WebsiteOrdersPage';
 import WebsiteProductsPage from './pages/WebsiteProductsPage';
 import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
+import WebsiteNotifyPage from './pages/WebsiteNotifyPage';
 import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
 import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
 import WebsiteReportsPage from './pages/WebsiteReportsPage';
@@ -118,6 +119,10 @@ function App() {
 
         <Route path="/admin/website/returns" element={
           user ? <WebsiteReturnsPage /> : <Navigate to="/" replace />
+        } />
+
+        <Route path="/admin/website/notify" element={
+          user ? <WebsiteNotifyPage /> : <Navigate to="/" replace />
         } />
 
         <Route path="/admin/website/delivery" element={
