@@ -19,6 +19,9 @@ const Header = () => {
     const hideSearch = isMyOrdersPage || location.pathname.startsWith('/contact');
 
     useEffect(() => {
+        // Close the drawer on navigation (incl. back/forward buttons),
+        // which no click handler can observe.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsMenuOpen(false);
     }, [location.pathname]);
 

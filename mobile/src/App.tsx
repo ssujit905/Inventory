@@ -1,30 +1,42 @@
+import { lazy, Suspense, useEffect } from 'react';
 import { MemoryRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import AdminDashboard from './pages/AdminDashboard';
-import StockInPage from './pages/StockInPage';
-import InventoryPage from './pages/InventoryPage';
-import ExpensesPage from './pages/ExpensesPage';
-import SalesPage from './pages/SalesPage';
-import ReportsPage from './pages/ReportsPage';
-import StaffManagementPage from './pages/StaffManagementPage';
-import VendorStaffManagementPage from './pages/VendorStaffManagementPage';
-import IncomePage from './pages/IncomePage';
-import ProfitPage from './pages/ProfitPage';
-import PrintCenter from './pages/PrintCenter';
-import ChatbotPage from './pages/ChatbotPage';
-import WebsiteOrdersPage from './pages/WebsiteOrdersPage';
-import WebsiteProductsPage from './pages/WebsiteProductsPage';
-import WebsiteReturnsPage from './pages/WebsiteReturnsPage';
-import WebsiteNotifyPage from './pages/WebsiteNotifyPage';
-import WebsiteDeliveryPage from './pages/WebsiteDeliveryPage';
-import WebsiteSettingsPage from './pages/WebsiteSettingsPage';
-import WebsiteReportsPage from './pages/WebsiteReportsPage';
-import WebsiteCustomersPage from './pages/WebsiteCustomersPage';
-import AIStoreDoctorPage from './pages/AIStoreDoctorPage';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuthStore } from './hooks/useAuthStore';
 import { getVendorId } from './lib/vendorHelpers';
-import { useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
+
+// Eager: always needed on first paint
+import LoginPage from './pages/LoginPage';
+import AdminDashboard from './pages/AdminDashboard';
+
+// Lazy: loaded on demand when the route is first visited
+const StockInPage             = lazy(() => import('./pages/StockInPage'));
+const InventoryPage           = lazy(() => import('./pages/InventoryPage'));
+const ExpensesPage            = lazy(() => import('./pages/ExpensesPage'));
+const SalesPage               = lazy(() => import('./pages/SalesPage'));
+const ReportsPage             = lazy(() => import('./pages/ReportsPage'));
+const StaffManagementPage     = lazy(() => import('./pages/StaffManagementPage'));
+const VendorStaffManagementPage = lazy(() => import('./pages/VendorStaffManagementPage'));
+const IncomePage              = lazy(() => import('./pages/IncomePage'));
+const ProfitPage              = lazy(() => import('./pages/ProfitPage'));
+const PrintCenter             = lazy(() => import('./pages/PrintCenter'));
+const ChatbotPage             = lazy(() => import('./pages/ChatbotPage'));
+const WebsiteOrdersPage       = lazy(() => import('./pages/WebsiteOrdersPage'));
+const WebsiteProductsPage     = lazy(() => import('./pages/WebsiteProductsPage'));
+const WebsiteReturnsPage      = lazy(() => import('./pages/WebsiteReturnsPage'));
+const WebsiteNotifyPage       = lazy(() => import('./pages/WebsiteNotifyPage'));
+const WebsiteDeliveryPage     = lazy(() => import('./pages/WebsiteDeliveryPage'));
+const WebsiteSettingsPage     = lazy(() => import('./pages/WebsiteSettingsPage'));
+const WebsiteReportsPage      = lazy(() => import('./pages/WebsiteReportsPage'));
+const WebsiteCustomersPage    = lazy(() => import('./pages/WebsiteCustomersPage'));
+const AIStoreDoctorPage       = lazy(() => import('./pages/AIStoreDoctorPage'));
+
+// Minimal spinner shown while a lazy page chunk loads
+const PageFallback = () => (
+  <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
 
 function App() {
   const { user, profile, initialize, loading } = useAuthStore();
@@ -72,6 +84,7 @@ function App() {
 
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={[persistedPath]}>
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/" element={
           !user ? <LoginPage /> : <Navigate to="/admin/dashboard" replace />
@@ -164,6 +177,7 @@ function App() {
         <Route path="/staff/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="*" element={<Navigate to={user ? "/admin/dashboard" : "/"} replace />} />
       </Routes>
+      </Suspense>
     </Router>
   )
 }

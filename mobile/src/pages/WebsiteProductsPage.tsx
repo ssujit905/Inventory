@@ -302,19 +302,68 @@ export default function WebsiteProductsPage() {
         });
     };
 
+    // Staff often upload straight-from-camera phone photos (5–10 MB).
+    // Downscale + re-encode to JPEG before upload so shoppers download
+    // ~150–300 KB instead of megabytes. Falls back to the original file.
+    const compressProductImage = (file: File, maxDim = 1600, quality = 0.82): Promise<Blob> =>
+        new Promise((resolve, reject) => {
+            const img = new window.Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { URL.revokeObjectURL(url); reject(new Error('Failed to process image')); return; }
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                canvas.toBlob(b => b ? resolve(b) : reject(new Error('Failed to process image')), 'image/jpeg', quality);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Unsupported image format')); };
+            img.src = url;
+        });
+
     const uploadImage = async (file: File, onProgress?: (pct: number) => void): Promise<string> => {
-        const ext = file.name.split('.').pop();
+        let body: File | Blob = file;
+        let ext = file.name.split('.').pop() || 'jpg';
+        let contentType: string | undefined;
+        if (file.type.startsWith('image/')) {
+            try {
+                body = await compressProductImage(file);
+                ext = 'jpg';
+                contentType = 'image/jpeg';
+            } catch {
+                // Unsupported format — upload the original so save never breaks.
+            }
+        }
         const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        
+
         // supabase-js storage does not expose byte-level upload progress.
         // Keep the UI responsive with start/finish progress states instead.
         onProgress?.(10);
         const { error } = await supabaseWithTimeout(
-            supabase.storage.from('website-images').upload(path, file),
+            supabase.storage.from('website-images').upload(path, body, { contentType }),
             120000 // Give large images up to 2 mins
         );
         
         if (error) throw error;
+        onProgress?.(90);
+        // Card-size rendition for shop lists (website thumbUrl() convention:
+        // products/<name>.jpg -> products/thumb_<name>.jpg). Best-effort:
+        // a missing thumb must never fail the product save.
+        try {
+            const thumbBody = await compressProductImage(file, 640, 0.7);
+            const base = path.split('/').pop()!.replace(/\.[^.]+$/, '');
+            await supabaseWithTimeout(
+                supabase.storage.from('website-images').upload(`products/thumb_${base}.jpg`, thumbBody, {
+                    contentType: 'image/jpeg'
+                }),
+                60000
+            );
+        } catch (thumbErr) {
+            console.warn('Thumbnail upload skipped:', (thumbErr as Error)?.message || thumbErr);
+        }
         onProgress?.(100);
         const { data } = supabase.storage.from('website-images').getPublicUrl(path);
         return data.publicUrl;

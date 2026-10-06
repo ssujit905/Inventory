@@ -1,8 +1,13 @@
+/* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { safeFetch } from '../lib/safeFetch';
+import { getCache, setCache } from '../lib/cache';
 
 const ProductContext = createContext();
+
+const PRODUCTS_CACHE_KEY = 'shopy_products_v1';
+const PRODUCTS_TTL_MS = 5 * 60 * 1000; // 5 min: prices/stock revalidate often
 
 export const useProducts = () => useContext(ProductContext);
 
@@ -11,9 +16,9 @@ export const ProductProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchProducts = useCallback(async () => {
+    const fetchProducts = useCallback(async (isBackground = false) => {
         try {
-            setLoading(true);
+            if (!isBackground) setLoading(true);
             setError(null);
 
             const { data, error: prodErr } = await safeFetch(() =>
@@ -89,6 +94,7 @@ export const ProductProvider = ({ children }) => {
                     };
                 });
                 setProducts(normalized);
+                setCache(PRODUCTS_CACHE_KEY, normalized);
             }
         } catch (err) {
             console.error('Unexpected error in fetchProducts:', err);
@@ -99,7 +105,15 @@ export const ProductProvider = ({ children }) => {
     }, []);
 
     useEffect(() => {
-        fetchProducts();
+        // SWR: paint cached products instantly, then revalidate.
+        const { data: cached } = getCache(PRODUCTS_CACHE_KEY, PRODUCTS_TTL_MS);
+        if (cached?.length) {
+            setProducts(cached);
+            setLoading(false);
+            fetchProducts(true);
+        } else {
+            fetchProducts(false);
+        }
     }, [fetchProducts]);
 
     return (

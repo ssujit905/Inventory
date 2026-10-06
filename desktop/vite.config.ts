@@ -46,6 +46,29 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    minify: 'esbuild',
+    sourcemap: false,
+    cssMinify: true,
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Framework chunk: cached across app updates
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // Supabase client: large, versioned separately
+          'vendor-supabase': ['@supabase/supabase-js'],
+          // Icons: large, rarely changes
+          'vendor-icons': ['lucide-react'],
+          // Charts: recharts is heavy — isolate so pages without charts don't pay
+          'vendor-charts': ['recharts'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -10,7 +10,7 @@ import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar
 } from 'recharts';
-import { format, startOfMonth, endOfMonth, subDays, startOfYear, eachMonthOfInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subDays, eachMonthOfInterval, startOfDay } from 'date-fns';
 
 export default function AdminDashboard() {
     const navigate = useNavigate();
@@ -75,11 +75,10 @@ export default function AdminDashboard() {
             const monthStartStr = format(startOfMonth(now), 'yyyy-MM-dd');
             const monthEndStr = format(endOfMonth(now), 'yyyy-MM-dd');
             const todayStr = format(now, 'yyyy-MM-dd');
-            const yearStart = startOfYear(now);
 
             const vendorId = getVendorId(profile);
 
-            let salesQ = supabase.from('sales').select('parcel_status, order_date, sale_items!inner(product:products!inner(vendor_id))').gte('order_date', format(yearStart, 'yyyy-MM-dd')).limit(10000);
+            let salesQ = supabase.from('sales').select('parcel_status, order_date, sale_items!inner(product:products!inner(vendor_id))').order('order_date', { ascending: true }).limit(10000);
             if (vendorId) salesQ = salesQ.eq('sale_items.product.vendor_id', vendorId);
             else salesQ = salesQ.is('sale_items.product.vendor_id', null);
 
@@ -219,40 +218,51 @@ export default function AdminDashboard() {
                 .sort((a, b) => b.qty - a.qty)
                 .slice(0, 5);
 
-            const last6Days = Array.from({ length: 6 }).map((_, i) => {
-                const d = subDays(now, 5 - i);
-                return format(d, 'yyyy-MM-dd');
+            // Full-history aggregation: daily order volume plus monthly
+            // delivered/returns, from the earliest sale through today.
+            // Charts scroll horizontally when the history grows long.
+            const activeSaleStatuses = ['processing', 'sent', 'delivered'];
+            const dailySalesCount = new Map<string, number>();
+            const monthlyDeliveredCount = new Map<string, number>();
+            const monthlyReturnsCount = new Map<string, number>();
+            let earliestSaleDate: Date | null = null;
+            (globalSales || []).forEach((s: any) => {
+                if (!s.order_date) return;
+                const saleDate = new Date(s.order_date);
+                if (isNaN(saleDate.getTime())) return;
+                if (!earliestSaleDate || saleDate < earliestSaleDate) earliestSaleDate = saleDate;
+                if (activeSaleStatuses.includes(s.parcel_status)) {
+                    const dayKey = format(saleDate, 'yyyy-MM-dd');
+                    dailySalesCount.set(dayKey, (dailySalesCount.get(dayKey) || 0) + 1);
+                }
+                const monthKey = format(saleDate, 'yyyy-MM');
+                if (s.parcel_status === 'delivered') {
+                    monthlyDeliveredCount.set(monthKey, (monthlyDeliveredCount.get(monthKey) || 0) + 1);
+                } else if (s.parcel_status === 'returned') {
+                    monthlyReturnsCount.set(monthKey, (monthlyReturnsCount.get(monthKey) || 0) + 1);
+                }
             });
 
-            const trendData = last6Days.map(date => {
-                const daySales = globalSales?.filter(s => 
-                    s.order_date === date && 
-                    ['processing', 'sent', 'delivered'].includes(s.parcel_status)
-                ) || [];
+            const historyStart = earliestSaleDate ? startOfDay(earliestSaleDate) : startOfDay(subDays(now, 6));
+
+            // Sales Trend shows the last 7 days only; full history lives in
+            // Annual Performance below, so daily points never grow unbounded.
+            const trendData = Array.from({ length: 7 }).map((_, i) => {
+                const d = subDays(now, 6 - i);
                 return {
-                    date: format(new Date(date), 'MMM dd'),
-                    sales: daySales.length
+                    date: format(d, 'MMM dd'),
+                    sales: dailySalesCount.get(format(d, 'yyyy-MM-dd')) || 0
                 };
             });
 
-            const monthInterval = eachMonthOfInterval({
-                start: yearStart,
-                end: now
-            });
+            const monthInterval = eachMonthOfInterval({ start: startOfMonth(historyStart), end: now });
 
             const yearlyData = monthInterval.map(m => {
-                const mStr = format(m, 'MMM');
-                const mStartStr = format(startOfMonth(m), 'yyyy-MM-dd');
-                const mEndStr = format(endOfMonth(m), 'yyyy-MM-dd');
-
-                const monthSells = globalSales?.filter(s =>
-                    s.order_date >= mStartStr && s.order_date <= mEndStr
-                ) || [];
-
+                const key = format(m, 'yyyy-MM');
                 return {
-                    month: mStr,
-                    delivered: monthSells.filter(s => s.parcel_status === 'delivered').length,
-                    returns: monthSells.filter(s => s.parcel_status === 'returned').length
+                    month: format(m, 'MMM yy'),
+                    delivered: monthlyDeliveredCount.get(key) || 0,
+                    returns: monthlyReturnsCount.get(key) || 0
                 };
             });
 
@@ -404,14 +414,16 @@ export default function AdminDashboard() {
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
                                         <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Sales Trend</h3>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Order volume over 6 days</p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Daily order volume · last 7 days</p>
                                     </div>
                                     <div className="px-2 py-1 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 rounded-md text-[9px] font-black uppercase tracking-widest">
                                         Live
                                     </div>
                                 </div>
                                 <div className="h-[240px] w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    {/* initialDimension seeds a positive size on first render so recharts
+                                        doesn't warn with width(-1)/height(-1); ResizeObserver corrects it on mount. */}
+                                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 340, height: 240 }}>
                                         <AreaChart data={chartData}>
                                             <defs>
                                                 <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
@@ -420,7 +432,7 @@ export default function AdminDashboard() {
                                                 </linearGradient>
                                             </defs>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
+                                            <XAxis dataKey="date" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                                             <YAxis hide axisLine={false} tickLine={false} />
                                             <Tooltip
                                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 800, fontSize: '10px' }}
@@ -444,7 +456,7 @@ export default function AdminDashboard() {
                                         </div>
                                     ) : (
                                         <>
-                                            <ResponsiveContainer width="100%" height="100%">
+                                            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 300, height: 200 }}>
                                                 <PieChart>
                                                     <Pie
                                                         data={statusData}
@@ -492,14 +504,17 @@ export default function AdminDashboard() {
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Annual Performance</h3>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Monthly sales vs returns</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Monthly sales vs returns · full history</p>
                                 </div>
                             </div>
-                            <div className="h-[240px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="overflow-x-auto pb-2">
+                                <div style={{ width: '100%', minWidth: `${Math.max(monthlySalesCount.length * 56, 320)}px`, height: 240 }}>
+                                {/* initialDimension seeds a positive size on first render so recharts
+                                    doesn't warn with width(-1)/height(-1); ResizeObserver corrects it on mount. */}
+                                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 340, height: 240 }}>
                                     <BarChart data={monthlySalesCount}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
+                                        <XAxis dataKey="month" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }} dy={10} />
                                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94a3b8' }} />
                                         <Tooltip
                                             cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
@@ -509,6 +524,7 @@ export default function AdminDashboard() {
                                         <Bar dataKey="returns" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={12} name="Returns" />
                                     </BarChart>
                                 </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
 

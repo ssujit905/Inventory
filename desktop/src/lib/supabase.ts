@@ -29,8 +29,8 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     }
 })
 
-// For debugging in Electron console
-if (typeof window !== 'undefined') {
+// For debugging in Electron console (development only)
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
     (window as any).supabase = supabase;
 }
 

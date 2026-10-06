@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
 import { createContext, useContext, useState, useCallback } from 'react';
 import Notification from '../components/Notification';
 

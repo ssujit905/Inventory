@@ -38,3 +38,14 @@ mobile/build/
 .vscode/
 *.swp
 *.swo
+
+# Temporary scripts & scratch files
+scratch/
+**/scratch/
+test_db*.js
+test_db*.cjs
+**/test_db*.js
+**/test_db*.cjs
+*.tsbuildinfo
+**/*.tsbuildinfo
+

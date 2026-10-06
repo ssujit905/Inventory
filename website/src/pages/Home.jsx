@@ -3,6 +3,7 @@ import { ArrowRight, ShoppingBag, Zap, ShieldCheck, Truck, Star, ChevronRight } 
 import { Link } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
 import { useSettings } from '../context/SettingsContext';
+import { thumbUrl } from '../lib/imageUrl';
 import ProductCard from '../components/ProductCard';
 
 const Home = () => {
@@ -286,8 +287,7 @@ const Home = () => {
                         }}>
                             <style>{`div::-webkit-scrollbar { display: none; }`}</style>
                             {flashSaleProducts.map(product => {
-                               const discount = Number(settings.flash_sale_discount || 0);
-                               return (
+                                return (
                                 <Link key={product.id} to={`/product/${product.id}`} style={{ 
                                     textDecoration: 'none', 
                                     color: 'inherit', 
@@ -320,7 +320,7 @@ const Home = () => {
                                             {product.discount}% OFF
                                         </div>
 
-                                        <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />
+                                        <img src={thumbUrl(product.image)} alt={product.title} loading="lazy" decoding="async" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover' }} />
                                         
                                         <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                             <div>

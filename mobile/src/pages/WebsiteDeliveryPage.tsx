@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
-import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
+import { getVendorId } from '../lib/vendorHelpers';
 import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import {
     MapPin, Plus, Trash2, Loader2,
-    AlertTriangle, CheckCircle, Truck, Info, Pencil, X, Clock
+    AlertTriangle, CheckCircle, Truck, Pencil, X, Clock
 } from 'lucide-react';
 
 interface DeliveryBranch {
@@ -16,26 +16,32 @@ interface DeliveryBranch {
     delivery_time: string;
 }
 
+const COMMON_DELIVERY_TIMES = ['Same Day', '1-2 Days', '2-4 Days', '3-5 Days', '5-7 Days'];
+const COMMON_SHIPPING_FEES = [0, 50, 100, 150, 200];
+
 export default function WebsiteDeliveryPage() {
     const { profile } = useAuthStore();
     const [branches, setBranches] = useState<DeliveryBranch[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [deleting, setDeleting] = useState<number | null>(null);
-    const [editingBranch, setEditingBranch] = useState<{ id: number; field: string; value: string } | null>(null);
-    const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
-    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
-    const [newBranch, setNewBranch] = useState({
+    // Add / Edit Modal state
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingBranch, setEditingBranch] = useState<DeliveryBranch | null>(null);
+    const [formBranch, setFormBranch] = useState({
         city: '',
         coverage_area: '',
         shipping_fee: '' as string | number,
         delivery_time: '2-4 Days'
     });
 
-    // When the WebView is backgrounded, in-flight requests can hang forever.
-    // Abort any pending submit as soon as the user returns so the button never spins indefinitely.
+    // Delete Confirmation state
+    const [branchToDelete, setBranchToDelete] = useState<DeliveryBranch | null>(null);
+
+    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+    // Abort controller failsafe on backgrounding WebView
     const activeSubmitRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
@@ -54,108 +60,166 @@ export default function WebsiteDeliveryPage() {
         };
     }, []);
 
-    // Final failsafe: regardless of what the underlying promises do, the button
-    // can never stay in its "Processing..." state longer than this.
+    // Failsafe timeout for pending network operations
     useEffect(() => {
-        if (!saving && deleting === null) return;
+        if (!saving && deletingId === null) return;
         const t = setTimeout(() => {
             setSaving(false);
-            setDeleting(null);
+            setDeletingId(null);
             showToast('Request timed out. Please check your connection and try again.', 'error');
         }, 40000);
         return () => clearTimeout(t);
-    }, [saving, deleting]);
-
-    // --- DRAFT PERSISTENCE ---
-    useEffect(() => {
-        const savedDraft = localStorage.getItem('mobile_delivery_branch_draft');
-        const savedFormOpen = localStorage.getItem('mobile_delivery_form_open');
-        if (savedFormOpen === 'true') setIsFormOpen(true);
-        if (savedDraft) {
-            try {
-                setNewBranch(JSON.parse(savedDraft));
-            } catch (e) { console.error('Delivery draft restore failed'); }
-        }
-    }, []);
-
-    useEffect(() => {
-        if (isFormOpen) {
-            localStorage.setItem('mobile_delivery_branch_draft', JSON.stringify(newBranch));
-            localStorage.setItem('mobile_delivery_form_open', 'true');
-        } else {
-            localStorage.removeItem('mobile_delivery_form_open');
-        }
-    }, [newBranch, isFormOpen]);
+    }, [saving, deletingId]);
 
     const clearDraft = () => {
         localStorage.removeItem('mobile_delivery_branch_draft');
         localStorage.removeItem('mobile_delivery_form_open');
     };
 
-    useEffect(() => { fetchBranches(); }, []);
+    // Draft persistence for new branch
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('mobile_delivery_branch_draft');
+        const savedFormOpen = localStorage.getItem('mobile_delivery_form_open');
+        if (savedFormOpen === 'true') {
+            setIsFormOpen(true);
+        }
+        if (savedDraft) {
+            try {
+                setFormBranch(JSON.parse(savedDraft));
+            } catch {
+                // Ignore draft restore errors
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isFormOpen && !editingBranch) {
+            localStorage.setItem('mobile_delivery_branch_draft', JSON.stringify(formBranch));
+            localStorage.setItem('mobile_delivery_form_open', 'true');
+        } else if (!isFormOpen) {
+            localStorage.removeItem('mobile_delivery_form_open');
+        }
+    }, [formBranch, isFormOpen, editingBranch]);
 
     const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
         setToast({ msg, type });
-        setTimeout(() => setToast(null), 3000);
+        setTimeout(() => setToast(null), 3500);
     };
 
-    const fetchBranches = async () => {
+    const fetchBranches = useCallback(async () => {
         setLoading(true);
-        const vendorId = getVendorId(profile);
-        let query = supabase.from('website_delivery_branches').select('*');
-        if (vendorId) {
-            query = query.eq('vendor_id', vendorId);
-        } else {
-            query = query.is('vendor_id', null);
+        try {
+            const vendorId = getVendorId(profile);
+            let query = supabase.from('website_delivery_branches').select('*');
+            if (vendorId) {
+                query = query.eq('vendor_id', vendorId);
+            } else {
+                query = query.is('vendor_id', null);
+            }
+            const { data, error } = await supabaseWithTimeout(query.order('city', { ascending: true }));
+            if (error) throw error;
+            setBranches(data || []);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to load delivery branches';
+            showToast(message, 'error');
+        } finally {
+            setLoading(false);
         }
-        const { data, error } = await query.order('city', { ascending: true });
-        if (error) showToast(error.message, 'error');
-        else setBranches(data || []);
-        setLoading(false);
+    }, [profile]);
+
+    useEffect(() => {
+        fetchBranches();
+    }, [fetchBranches]);
+
+    const handleOpenAdd = () => {
+        setEditingBranch(null);
+        setFormBranch({
+            city: '',
+            coverage_area: '',
+            shipping_fee: '',
+            delivery_time: '2-4 Days'
+        });
+        setIsFormOpen(true);
     };
 
-    const handleAddBranch = async (e: React.FormEvent) => {
+    const handleOpenEdit = (branch: DeliveryBranch) => {
+        setEditingBranch(branch);
+        setFormBranch({
+            city: branch.city,
+            coverage_area: branch.coverage_area || '',
+            shipping_fee: branch.shipping_fee,
+            delivery_time: branch.delivery_time || '2-4 Days'
+        });
+        setIsFormOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsFormOpen(false);
+        setEditingBranch(null);
+        if (!editingBranch) {
+            clearDraft();
+        }
+    };
+
+    const handleSaveBranch = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newBranch.city.trim()) return;
+        if (!formBranch.city.trim()) {
+            showToast('Please enter a city name', 'error');
+            return;
+        }
+
         setSaving(true);
-        const branchPayload: any = {
-            city: newBranch.city.trim(),
-            coverage_area: newBranch.coverage_area.trim(),
-            shipping_fee: Number(newBranch.shipping_fee) || 0,
-            delivery_time: newBranch.delivery_time.trim(),
+        const branchPayload = {
+            city: formBranch.city.trim(),
+            coverage_area: formBranch.coverage_area.trim(),
+            shipping_fee: Number(formBranch.shipping_fee) || 0,
+            delivery_time: formBranch.delivery_time.trim() || '2-4 Days',
             vendor_id: getVendorId(profile)
         };
 
-        // Ensure the session/connection is healthy before writing, so we don't
-        // hang on a stale connection left over from backgrounding.
         await warmUpSupabase(6000);
-
         const controller = new AbortController();
         activeSubmitRef.current = controller;
 
         try {
-            const { data, error } = await supabaseWithTimeout(
-                supabase
-                    .from('website_delivery_branches')
-                    .insert(branchPayload)
-                    .select()
-                    .abortSignal(controller.signal)
-                    .single()
-            );
-
-            if (error) throw error;
-            setBranches(prev => [...prev, data].sort((a, b) => a.city.localeCompare(b.city)));
-            setNewBranch({ city: '', coverage_area: '', shipping_fee: '', delivery_time: '2-4 Days' });
-            clearDraft();
-            setIsFormOpen(false);
-            showToast('Branch added!');
-        } catch (err: any) {
-            if (err?.name === 'AbortError') {
-                showToast('Save interrupted when you left the app. Please try again.', 'error');
-            } else if (err?.message === 'NETWORK_TIMEOUT') {
-                showToast('Network timeout. Check your connection and try again.', 'error');
+            if (editingBranch) {
+                // Update existing branch
+                const { data, error } = await supabaseWithTimeout(
+                    supabase
+                        .from('website_delivery_branches')
+                        .update(branchPayload)
+                        .eq('id', editingBranch.id)
+                        .select()
+                        .abortSignal(controller.signal)
+                        .single()
+                );
+                if (error) throw error;
+                setBranches(prev => prev.map(b => b.id === editingBranch.id ? data : b));
+                showToast(`Updated ${data.city} hub!`);
             } else {
-                showToast(err.message || 'Save failed', 'error');
+                // Insert new branch
+                const { data, error } = await supabaseWithTimeout(
+                    supabase
+                        .from('website_delivery_branches')
+                        .insert(branchPayload)
+                        .select()
+                        .abortSignal(controller.signal)
+                        .single()
+                );
+                if (error) throw error;
+                setBranches(prev => [...prev, data]);
+                clearDraft();
+                showToast(`Added ${data.city} hub!`);
+            }
+            handleCloseModal();
+        } catch (err: unknown) {
+            const errObj = err as { name?: string; message?: string };
+            if (errObj?.name === 'AbortError') {
+                showToast('Save interrupted. Please try again.', 'error');
+            } else if (errObj?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Check your connection.', 'error');
+            } else {
+                showToast(errObj?.message || 'Operation failed', 'error');
             }
         } finally {
             if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
@@ -163,23 +227,13 @@ export default function WebsiteDeliveryPage() {
         }
     };
 
-    const handleDelete = async (e: React.MouseEvent, id: number) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (confirmingDelete !== id) {
-            setConfirmingDelete(id);
-            setTimeout(() => {
-                setConfirmingDelete(prev => prev === id ? null : prev);
-            }, 3000);
-            return;
-        }
-
-        setDeleting(id);
-        setConfirmingDelete(null);
+    const confirmDeleteBranch = async () => {
+        if (!branchToDelete) return;
+        const id = branchToDelete.id;
+        const cityName = branchToDelete.city;
+        setDeletingId(id);
 
         await warmUpSupabase(6000);
-
         const controller = new AbortController();
         activeSubmitRef.current = controller;
 
@@ -191,243 +245,323 @@ export default function WebsiteDeliveryPage() {
                     .eq('id', id)
                     .abortSignal(controller.signal)
             );
-
             if (error) throw error;
             setBranches(prev => prev.filter(b => b.id !== id));
-            showToast('Deleted');
-        } catch (err: any) {
-            if (err?.name === 'AbortError') {
-                showToast('Delete interrupted when you left the app. Please try again.', 'error');
-            } else if (err?.message === 'NETWORK_TIMEOUT') {
-                showToast('Network timeout. Check your connection and try again.', 'error');
+            showToast(`Removed ${cityName} hub`);
+            setBranchToDelete(null);
+        } catch (err: unknown) {
+            const errObj = err as { name?: string; message?: string };
+            if (errObj?.name === 'AbortError') {
+                showToast('Interrupted when you left the app.', 'error');
+            } else if (errObj?.message === 'NETWORK_TIMEOUT') {
+                showToast('Network timeout. Please retry.', 'error');
             } else {
-                showToast(err.message || 'Delete failed', 'error');
+                showToast(errObj?.message || 'Delete failed', 'error');
             }
         } finally {
             if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
-            setDeleting(null);
+            setDeletingId(null);
         }
     };
 
-    const handleUpdateField = async (id: number, field: string, value: any) => {
-        await warmUpSupabase(6000);
-
-        const controller = new AbortController();
-        activeSubmitRef.current = controller;
-
-        try {
-            const { error } = await supabaseWithTimeout(
-                supabase
-                    .from('website_delivery_branches')
-                    .update({ [field]: value })
-                    .eq('id', id)
-                    .abortSignal(controller.signal)
-            );
-            if (error) throw error;
-            setBranches(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
-        } catch (err: any) {
-            if (err?.name === 'AbortError') {
-                showToast('Update interrupted when you left the app. Please try again.', 'error');
-            } else if (err?.message === 'NETWORK_TIMEOUT') {
-                showToast('Network timeout. Check your connection and try again.', 'error');
-            } else {
-                showToast(err.message || 'Update failed', 'error');
-            }
-        } finally {
-            if (activeSubmitRef.current === controller) activeSubmitRef.current = null;
-            setEditingBranch(null);
-        }
-    };
+    // Branches sorted alphabetically
+    const sortedBranches = useMemo(() => {
+        return [...branches].sort((a, b) => a.city.localeCompare(b.city));
+    }, [branches]);
 
     return (
         <DashboardLayout role={profile?.role === 'admin' ? 'admin' : 'staff'}>
+            {/* Toast Notification */}
             {toast && (
-                <div className={`fixed top-8 right-8 z-[200] flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl text-white text-[11px] font-black uppercase tracking-widest animate-in slide-in-from-right-full duration-500 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center">
-                        {toast.type === 'success' ? <CheckCircle size={14} strokeWidth={3} /> : <AlertTriangle size={14} strokeWidth={3} />}
+                <div className={`fixed top-4 left-4 right-4 z-[200] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl text-white text-xs font-bold tracking-wide animate-in fade-in slide-in-from-top duration-300 ${
+                    toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+                }`}>
+                    <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                        {toast.type === 'success' ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}
                     </div>
-                    {toast.msg}
+                    <span className="flex-1">{toast.msg}</span>
+                    <button onClick={() => setToast(null)} className="p-1 hover:bg-white/10 rounded-lg">
+                        <X size={14} />
+                    </button>
                 </div>
             )}
-            <div className="px-5 space-y-6 pb-12">
-                {/* Header */}
-                <div className="flex flex-col gap-4">
-                    <div className="space-y-1">
-                        <h1 className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight">Delivery Network</h1>
-                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Manage hubs & shipping fees.</p>
+
+            <div className="px-4 py-4 space-y-4 max-w-lg mx-auto pb-24">
+                {/* Header with Title and Add Button */}
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">Delivery Hubs</h1>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                                {branches.length}
+                            </span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Shipping zones & delivery fees</p>
                     </div>
-                    <button 
-                        onClick={() => setIsFormOpen(true)}
-                        className="w-full bg-primary text-white h-14 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-3 active:scale-95 transition-all"
+
+                    <button
+                        onClick={handleOpenAdd}
+                        className="h-10 px-4 bg-primary text-white rounded-xl font-bold text-xs text-center shadow-md shadow-primary/25 flex items-center justify-center gap-2 active:scale-95 transition-all shrink-0"
                     >
-                        <Plus size={20} strokeWidth={3} /> Add Location
+                        <Plus size={16} strokeWidth={2.5} />
+                        <span>Add Hub</span>
                     </button>
                 </div>
 
-                {/* Hub List */}
-                <div className="space-y-3">
-                    <div className="flex items-center gap-2 px-1">
-                        <MapPin size={14} className="text-gray-400" />
-                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Active Destinations ({branches.length})</h3>
+                {/* Main Content Area */}
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Loading delivery network...</p>
                     </div>
-
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800">
-                            <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Syncing...</p>
+                ) : sortedBranches.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 px-4 bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 text-center">
+                        <div className="h-12 w-12 rounded-2xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400 mb-3">
+                            <Truck size={24} />
                         </div>
-                    ) : branches.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-900 rounded-[2rem] border-2 border-dashed border-gray-100 dark:border-gray-800">
-                            <Truck size={48} className="text-gray-200 mb-4" />
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No hubs active</p>
-                        </div>
-                    ) : (
-                        branches.map((branch) => (
-                            <div key={branch.id} className="bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 p-5 shadow-sm space-y-4">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                                            <MapPin size={24} />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="font-black text-gray-900 dark:text-gray-100 text-lg">{branch.city}</p>
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tight break-all">{branch.coverage_area || 'Standard coverage'}</p>
-                                        </div>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-1">No delivery hubs configured</h3>
+                        <p className="text-xs text-gray-400 max-w-xs mb-4">Add destination cities and delivery charges for your store.</p>
+                        <button
+                            onClick={handleOpenAdd}
+                            className="px-4 py-2.5 bg-primary text-white rounded-xl text-xs font-bold shadow-md shadow-primary/25 inline-flex items-center justify-center gap-2 text-center"
+                        >
+                            <Plus size={16} />
+                            <span>Add First Hub</span>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
+                        {sortedBranches.map((branch) => {
+                            const isFree = Number(branch.shipping_fee) === 0;
+                            return (
+                                <div
+                                    key={branch.id}
+                                    className="flex items-center gap-3 px-4 py-3"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">
+                                            {branch.city}
+                                        </p>
+                                        <p className="text-[11px] text-gray-400 truncate">
+                                            {isFree ? 'Free' : `Rs. ${branch.shipping_fee}`} · {branch.delivery_time || '2-4 Days'}
+                                        </p>
                                     </div>
                                     <button
-                                        onClick={(e) => handleDelete(e, branch.id)}
-                                        className={`h-10 w-10 flex items-center justify-center rounded-xl transition-all ${
-                                            confirmingDelete === branch.id 
-                                            ? 'bg-rose-500 text-white' 
-                                            : 'text-gray-200 hover:text-rose-500'
-                                        }`}
+                                        onClick={() => handleOpenEdit(branch)}
+                                        aria-label="Edit Hub"
+                                        className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center active:scale-95 shrink-0"
                                     >
-                                        {deleting === branch.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={20} />}
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 pt-2">
-                                    <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
-                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Fee</p>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[10px] font-black text-primary">Rs.</span>
-                                            <input 
-                                                type="number"
-                                                className="bg-transparent text-sm font-black text-gray-900 dark:text-white w-full focus:outline-none"
-                                                value={editingBranch?.id === branch.id && editingBranch.field === 'shipping_fee' ? editingBranch.value : branch.shipping_fee}
-                                                onChange={(e) => setEditingBranch({ id: branch.id, field: 'shipping_fee', value: e.target.value })}
-                                                onBlur={() => handleUpdateField(branch.id, 'shipping_fee', Number(editingBranch?.value))}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
-                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Time</p>
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock size={12} className="text-gray-400" />
-                                            <input 
-                                                type="text"
-                                                className="bg-transparent text-[11px] font-black text-gray-900 dark:text-white w-full focus:outline-none"
-                                                value={editingBranch?.id === branch.id && editingBranch.field === 'delivery_time' ? editingBranch.value : branch.delivery_time}
-                                                onChange={(e) => setEditingBranch({ id: branch.id, field: 'delivery_time', value: e.target.value })}
-                                                onBlur={() => handleUpdateField(branch.id, 'delivery_time', editingBranch?.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                {confirmingDelete === branch.id && (
-                                    <button 
-                                        onClick={(e) => handleDelete(e, branch.id)}
-                                        className="w-full py-3 bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] animate-pulse"
-                                    >
-                                        Tap Again to Delete
-                                    </button>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
-
-                {/* Mobile Form Modal */}
-                {isFormOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm">
-                        <div className="bg-white dark:bg-gray-900 w-full rounded-t-[3rem] shadow-2xl overflow-hidden border-t border-gray-100 dark:border-gray-800 animate-in slide-in-from-bottom duration-300">
-                            <div className="px-8 pt-8 pb-4 flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight uppercase">New Location</h2>
-                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Expanding your reach</p>
-                                </div>
-                                <button onClick={() => setIsFormOpen(false)} className="h-10 w-10 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400">
-                                    <X size={20} strokeWidth={3} />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleAddBranch} className="p-8 space-y-6">
-                                <div className="space-y-5">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">City Name</label>
-                                        <input
-                                            required
-                                            type="text"
-                                            placeholder="e.g. Kathmandu"
-                                            className="w-full h-14 px-6 rounded-2xl bg-gray-50 dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 text-base font-bold"
-                                            value={newBranch.city}
-                                            onChange={(e) => setNewBranch({ ...newBranch, city: e.target.value })}
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Coverage Details</label>
-                                        <input
-                                            type="text"
-                                            placeholder="Main City Area"
-                                            className="w-full h-14 px-6 rounded-2xl bg-gray-50 dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 text-sm font-bold"
-                                            value={newBranch.coverage_area}
-                                            onChange={(e) => setNewBranch({ ...newBranch, coverage_area: e.target.value })}
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Time</label>
-                                            <input
-                                                type="text"
-                                                className="w-full h-14 px-6 rounded-2xl bg-gray-50 dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 text-sm font-bold"
-                                                value={newBranch.delivery_time}
-                                                onChange={(e) => setNewBranch({ ...newBranch, delivery_time: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Fee (Rs.)</label>
-                                            <input
-                                                required
-                                                type="number"
-                                                className="w-full h-14 px-6 rounded-2xl bg-gray-50 dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 text-base font-black text-primary"
-                                                value={newBranch.shipping_fee}
-                                                onChange={(e) => setNewBranch({ ...newBranch, shipping_fee: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4 pt-4 pb-8">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsFormOpen(false)}
-                                        className="flex-1 h-14 bg-gray-50 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest"
-                                    >
-                                        Back
+                                        <Pencil size={14} />
                                     </button>
                                     <button
-                                        type="submit"
-                                        disabled={saving}
-                                        className="flex-[2] h-14 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
+                                        onClick={() => setBranchToDelete(branch)}
+                                        aria-label="Delete Hub"
+                                        className="h-8 w-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center active:scale-95 shrink-0"
                                     >
-                                        {saving ? <Loader2 size={20} className="animate-spin mx-auto" /> : "Deploy Hub"}
+                                        <Trash2 size={14} />
                                     </button>
                                 </div>
-                            </form>
-                        </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
+
+            {/* Add / Edit Hub Bottom Sheet Modal */}
+            {isFormOpen && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-t-3xl shadow-2xl border-t border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom duration-300">
+                        {/* Drag Handle */}
+                        <div className="pt-3 pb-1 flex justify-center">
+                            <div className="w-12 h-1.5 rounded-full bg-gray-300 dark:bg-gray-700" />
+                        </div>
+
+                        {/* Modal Header */}
+                        <div className="px-5 py-3 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+                            <div>
+                                <h2 className="text-base font-extrabold text-gray-900 dark:text-gray-100">
+                                    {editingBranch ? `Edit ${editingBranch.city}` : 'New Delivery Hub'}
+                                </h2>
+                                <p className="text-[11px] text-gray-400">
+                                    {editingBranch ? 'Update destination rates & time' : 'Configure a new delivery zone'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleCloseModal}
+                                className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Modal Form */}
+                        <form onSubmit={handleSaveBranch} className="p-5 overflow-y-auto space-y-4">
+                            {/* City Name */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">City / Destination</label>
+                                <div className="relative">
+                                    <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        required
+                                        type="text"
+                                        placeholder="e.g. Kathmandu, Pokhara, Biratnagar"
+                                        value={formBranch.city}
+                                        onChange={(e) => setFormBranch({ ...formBranch, city: e.target.value })}
+                                        className="w-full h-11 pl-10 pr-4 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Coverage Details */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Coverage Details</label>
+                                <div className="relative">
+                                    <MapPin size={16} className="absolute left-3.5 top-3 text-gray-400" />
+                                    <textarea
+                                        rows={2}
+                                        placeholder="e.g. Inside Ring Road, Lalitpur, Bhaktapur"
+                                        value={formBranch.coverage_area}
+                                        onChange={(e) => setFormBranch({ ...formBranch, coverage_area: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Shipping Fee */}
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Shipping Fee (Rs.)</label>
+                                    <span className="text-[10px] text-gray-400">Set 0 for Free Delivery</span>
+                                </div>
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-primary">Rs.</span>
+                                    <input
+                                        required
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="0"
+                                        placeholder="100"
+                                        value={formBranch.shipping_fee}
+                                        onChange={(e) => setFormBranch({ ...formBranch, shipping_fee: e.target.value })}
+                                        className="w-full h-11 pl-10 pr-4 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-sm font-black text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    />
+                                </div>
+                                {/* Preset Fee Pills */}
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                    {COMMON_SHIPPING_FEES.map((fee) => (
+                                        <button
+                                            type="button"
+                                            key={fee}
+                                            onClick={() => setFormBranch({ ...formBranch, shipping_fee: fee })}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold text-center border transition-colors ${
+                                                Number(formBranch.shipping_fee) === fee
+                                                    ? 'bg-primary text-white border-primary'
+                                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            {fee === 0 ? 'Free' : `Rs. ${fee}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Delivery Time */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-700 dark:text-gray-300">Estimated Delivery Time</label>
+                                <div className="relative">
+                                    <Clock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="2-4 Days"
+                                        value={formBranch.delivery_time}
+                                        onChange={(e) => setFormBranch({ ...formBranch, delivery_time: e.target.value })}
+                                        className="w-full h-11 pl-10 pr-4 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    />
+                                </div>
+                                {/* Preset Time Pills */}
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                    {COMMON_DELIVERY_TIMES.map((time) => (
+                                        <button
+                                            type="button"
+                                            key={time}
+                                            onClick={() => setFormBranch({ ...formBranch, delivery_time: time })}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold text-center border transition-colors ${
+                                                formBranch.delivery_time === time
+                                                    ? 'bg-primary text-white border-primary'
+                                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            {time}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Submit and Cancel Buttons */}
+                            <div className="flex items-center gap-3 pt-3 pb-6">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseModal}
+                                    className="flex-1 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs text-center flex items-center justify-center active:scale-95 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="flex-[2] h-12 rounded-xl bg-primary text-white font-bold text-xs text-center shadow-lg shadow-primary/25 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 transition-all"
+                                >
+                                    {saving ? (
+                                        <Loader2 size={16} className="animate-spin" />
+                                    ) : (
+                                        <span>{editingBranch ? 'Update Hub' : 'Deploy Hub'}</span>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Sheet */}
+            {branchToDelete && (
+                <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-100 dark:border-gray-800 space-y-4 animate-in zoom-in-95 duration-200">
+                        <div className="h-12 w-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center mx-auto">
+                            <Trash2 size={24} />
+                        </div>
+                        <div className="text-center space-y-1">
+                            <h3 className="text-base font-extrabold text-gray-900 dark:text-gray-100">
+                                Delete {branchToDelete.city} Hub?
+                            </h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Customers will no longer be able to select this destination during website checkout.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setBranchToDelete(null)}
+                                className="flex-1 h-11 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs text-center flex items-center justify-center active:scale-95 transition-all"
+                            >
+                                Keep Hub
+                            </button>
+                            <button
+                                type="button"
+                                disabled={deletingId !== null}
+                                onClick={confirmDeleteBranch}
+                                className="flex-1 h-11 rounded-xl bg-rose-600 text-white font-bold text-xs text-center shadow-md shadow-rose-600/25 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                                {deletingId !== null ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                    <span>Delete</span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </DashboardLayout>
     );
 }

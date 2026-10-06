@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import ProductCard from '../components/ProductCard';
 import { storeSlug, isUuid } from '../lib/storeSlug';
-import { Store, Star, Package, MessageCircle, ArrowLeft, Search, Calendar, Phone, Share2, Check } from 'lucide-react';
+import { thumbUrl } from '../lib/imageUrl';
+import { Store, Star, Package, MessageCircle, ArrowLeft, Search, Calendar, Phone, Share2, Check, User } from 'lucide-react';
 
 const StorePage = () => {
     const { vendorId: param } = useParams();
@@ -13,6 +14,8 @@ const StorePage = () => {
     const [vendorProfile, setVendorProfile] = useState(null);
     const [products, setProducts] = useState([]);
     const [vendorRating, setVendorRating] = useState(null);
+    const [storeReviews, setStoreReviews] = useState([]);
+    const [activeTab, setActiveTab] = useState('products');
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -40,7 +43,7 @@ const StorePage = () => {
                 return;
             }
             setVendorId(match.id);
-        } catch (err) {
+        } catch {
             setNotFound(true);
             setLoading(false);
         }
@@ -53,6 +56,8 @@ const StorePage = () => {
     const fetchStore = async (id) => {
         setLoading(true);
         setNotFound(false);
+        setVendorRating(null);
+        setStoreReviews([]);
         try {
             // 1. Vendor store profile
             const { data: vProfile } = await supabase
@@ -76,18 +81,22 @@ const StorePage = () => {
 
             const rawProducts = wpData || [];
 
-            // 3. Store rating = average of all ratings on the store's products
+            // 3. Store rating + reviews = all ratings on the store's products only
             const productIds = rawProducts.map(p => p.id);
             if (productIds.length > 0) {
                 const { data: storeRatings } = await supabase
                     .from('website_product_ratings')
-                    .select('rating')
-                    .in('product_id', productIds);
+                    .select('id, product_id, rating, comment, customer_name, created_at')
+                    .in('product_id', productIds)
+                    .order('created_at', { ascending: false });
                 const all = storeRatings || [];
+                setStoreReviews(all);
                 if (all.length > 0) {
                     const avg = all.reduce((s, r) => s + Number(r.rating), 0) / all.length;
                     setVendorRating({ avg, count: all.length });
                 }
+            } else {
+                setStoreReviews([]);
             }
 
             // 4. Stock info for sold-out badges
@@ -157,6 +166,35 @@ const StorePage = () => {
             console.error('Copy failed:', err);
         }
     };
+
+    // Map product id -> product for review rows (thumbnail + title)
+    const productById = useMemo(() => {
+        const map = {};
+        products.forEach(p => { map[p.id] = p; });
+        return map;
+    }, [products]);
+
+    const reviewDistribution = useMemo(() => {
+        const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+        storeReviews.forEach(r => {
+            const star = Math.round(Number(r.rating));
+            if (dist[star] !== undefined) dist[star] += 1;
+        });
+        return dist;
+    }, [storeReviews]);
+
+    const renderStars = (value, size = 12) => (
+        <div style={{ display: 'flex', gap: '2px' }}>
+            {[1, 2, 3, 4, 5].map(s => (
+                <Star
+                    key={s}
+                    size={size}
+                    fill={s <= Math.round(Number(value)) ? '#f59e0b' : 'none'}
+                    color={s <= Math.round(Number(value)) ? '#f59e0b' : '#cbd5e1'}
+                />
+            ))}
+        </div>
+    );
 
     return (
         <div className="shop-page" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '5rem' }}>
@@ -251,7 +289,7 @@ const StorePage = () => {
                                 display: 'flex', alignItems: 'stretch',
                                 padding: '10px 0', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9'
                             }}>
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <div onClick={() => setActiveTab('reviews')} title="View store reviews" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                         <Star size={12} fill="#f59e0b" color="#f59e0b" /> Rating
                                     </div>
@@ -260,7 +298,7 @@ const StorePage = () => {
                                     </span>
                                 </div>
                                 <div style={{ width: '1px', background: '#e2e8f0' }} />
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <div onClick={() => setActiveTab('products')} title="View store products" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                         <Package size={12} color="var(--primary-red, #f43f5e)" /> Products
                                     </div>
@@ -285,42 +323,41 @@ const StorePage = () => {
                                 </p>
                             )}
 
-                            {/* Store Contact Details */}
+                            {/* Store Contact Details - horizontal row */}
                             {(joinedDate || phoneNumber || whatsappNumber) && (
-                                <div style={{ margin: '14px 0 0 0' }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    flexWrap: 'wrap', margin: '14px 0 0 0'
+                                }}>
                                     {joinedDate && (
                                         <span style={{
                                             display: 'inline-flex', alignItems: 'center', gap: '6px',
                                             background: '#f1f5f9', color: '#475569', borderRadius: '999px',
-                                            padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
+                                            padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700',
+                                            whiteSpace: 'nowrap'
                                         }}>
                                             <Calendar size={13} color="#64748b" /> Joined {joinedDate}
                                         </span>
                                     )}
-                                    {(phoneNumber || whatsappNumber) && (
-                                        <div style={{
-                                            display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-                                            marginTop: '10px'
+                                    {phoneNumber && (
+                                        <span style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                            background: '#eff6ff', color: '#2563eb', borderRadius: '999px',
+                                            padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700',
+                                            whiteSpace: 'nowrap'
                                         }}>
-                                            {phoneNumber && (
-                                                <span style={{
-                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                                    background: '#eff6ff', color: '#2563eb', borderRadius: '999px',
-                                                    padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
-                                                }}>
-                                                    <Phone size={13} /> {phoneNumber}
-                                                </span>
-                                            )}
-                                            {whatsappNumber && (
-                                                <span style={{
-                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                                    background: '#ecfdf5', color: '#059669', borderRadius: '999px',
-                                                    padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700'
-                                                }}>
-                                                    <MessageCircle size={13} /> {whatsappNumber}
-                                                </span>
-                                            )}
-                                        </div>
+                                            <Phone size={13} /> {phoneNumber}
+                                        </span>
+                                    )}
+                                    {whatsappNumber && (
+                                        <span style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                            background: '#ecfdf5', color: '#059669', borderRadius: '999px',
+                                            padding: '6px 14px', fontSize: '0.78rem', fontWeight: '700',
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            <MessageCircle size={13} /> {whatsappNumber}
+                                        </span>
                                     )}
                                     <button
                                         onClick={copyStoreLink}
@@ -331,7 +368,7 @@ const StorePage = () => {
                                             border: `1px solid ${copied ? '#a7f3d0' : '#e2e8f0'}`,
                                             borderRadius: '999px', padding: '6px 14px',
                                             fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer',
-                                            marginTop: '10px', transition: 'all 0.2s ease'
+                                            transition: 'all 0.2s ease', whiteSpace: 'nowrap'
                                         }}
                                     >
                                         {copied ? <Check size={14} /> : <Share2 size={14} />}
@@ -342,28 +379,171 @@ const StorePage = () => {
                             </div>
                         </div>
 
-                        {/* Store Products */}
-                        <h2 style={{ fontSize: '1rem', fontWeight: '900', color: '#0f172a', margin: '0 0 1rem 0' }}>
-                            Products from this store
-                        </h2>
+                        {/* Products / Reviews tabs */}
+                        <div style={{
+                            display: 'flex', gap: '6px', background: 'white',
+                            padding: '6px', borderRadius: '14px',
+                            border: '1px solid #e2e8f0', margin: '0 0 1rem 0'
+                        }}>
+                            {[
+                                { key: 'products', label: 'Products', count: products.length, icon: <Package size={15} /> },
+                                { key: 'reviews', label: 'Reviews', count: storeReviews.length, icon: <MessageCircle size={15} /> },
+                            ].map(tab => {
+                                const isActive = activeTab === tab.key;
+                                return (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setActiveTab(tab.key)}
+                                        style={{
+                                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            gap: '7px', padding: '10px 12px', borderRadius: '10px',
+                                            border: 'none', cursor: 'pointer',
+                                            background: isActive ? '#0f172a' : '#f8fafc',
+                                            color: isActive ? 'white' : '#475569',
+                                            fontSize: '0.85rem', fontWeight: '800',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        {tab.icon}
+                                        {tab.label}
+                                        <span style={{
+                                            background: isActive ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
+                                            color: isActive ? 'white' : '#475569',
+                                            borderRadius: '999px', padding: '1px 9px',
+                                            fontSize: '0.75rem', fontWeight: '800'
+                                        }}>
+                                            {tab.count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                        {products.length > 0 ? (
-                            <div className="shop-grid">
-                                <div className="grid-column" style={{ paddingTop: '10px' }}>
-                                    {products.filter((_, idx) => idx % 2 === 0).map(p => <ProductCard key={p.id} product={p} />)}
-                                </div>
-                                <div className="grid-column">
-                                    {products.filter((_, idx) => idx % 2 !== 0).map(p => <ProductCard key={p.id} product={p} />)}
-                                </div>
-                            </div>
+                        {activeTab === 'products' ? (
+                            <>
+                                <h2 style={{ fontSize: '1rem', fontWeight: '900', color: '#0f172a', margin: '0 0 1rem 0' }}>
+                                    Products from this store
+                                </h2>
+
+                                {products.length > 0 ? (
+                                    <div className="shop-grid">
+                                        <div className="grid-column" style={{ paddingTop: '10px' }}>
+                                            {products.filter((_, idx) => idx % 2 === 0).map(p => <ProductCard key={p.id} product={p} />)}
+                                        </div>
+                                        <div className="grid-column">
+                                            {products.filter((_, idx) => idx % 2 !== 0).map(p => <ProductCard key={p.id} product={p} />)}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ textAlign: 'center', padding: '4rem 1rem', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                        <div style={{ width: '70px', height: '70px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+                                            <Package size={28} color="var(--border-color)" />
+                                        </div>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a' }}>No products yet</h3>
+                                        <p style={{ color: 'var(--text-gray)', marginTop: '0.4rem' }}>This store hasn't listed any products yet.</p>
+                                    </div>
+                                )}
+                            </>
                         ) : (
-                            <div style={{ textAlign: 'center', padding: '4rem 1rem', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                                <div style={{ width: '70px', height: '70px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
-                                    <Package size={28} color="var(--border-color)" />
-                                </div>
-                                <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a' }}>No products yet</h3>
-                                <p style={{ color: 'var(--text-gray)', marginTop: '0.4rem' }}>This store hasn't listed any products yet.</p>
-                            </div>
+                            <>
+                                <h2 style={{ fontSize: '1rem', fontWeight: '900', color: '#0f172a', margin: '0 0 1rem 0' }}>
+                                    Reviews for products from this store
+                                </h2>
+
+                                {storeReviews.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '4rem 1rem', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                        <div style={{ width: '70px', height: '70px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
+                                            <MessageCircle size={28} color="var(--border-color)" />
+                                        </div>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a' }}>No reviews yet</h3>
+                                        <p style={{ color: 'var(--text-gray)', marginTop: '0.4rem' }}>Reviews for products from this store will appear here.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Rating summary across the store's products */}
+                                        <div style={{ display: 'flex', gap: '20px', padding: '20px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', flexWrap: 'wrap', marginBottom: '12px' }}>
+                                            <div style={{ textAlign: 'center', borderRight: '1px solid #e2e8f0', paddingRight: '20px' }}>
+                                                <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#0f172a' }}>
+                                                    {vendorRating ? vendorRating.avg.toFixed(1) : '0.0'}
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '2px', justifyContent: 'center', margin: '4px 0' }}>
+                                                    {renderStars(vendorRating ? vendorRating.avg : 0, 14)}
+                                                </div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700' }}>{storeReviews.length} Reviews</div>
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                                {[5, 4, 3, 2, 1].map(star => {
+                                                    const count = reviewDistribution[star] || 0;
+                                                    const percentage = storeReviews.length > 0 ? (count / storeReviews.length) * 100 : 0;
+                                                    return (
+                                                        <div key={star} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                                                            <span style={{ fontSize: '0.8rem', color: '#64748b', width: '15px' }}>{star}</span>
+                                                            <Star size={10} fill="#f59e0b" color="#f59e0b" />
+                                                            <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                                                <div style={{ width: `${percentage}%`, height: '100%', background: '#f59e0b' }} />
+                                                            </div>
+                                                            <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '20px' }}>{count}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Store-only review list */}
+                                        <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                                {storeReviews.map((rev) => {
+                                                    const reviewedProduct = productById[rev.product_id];
+                                                    return (
+                                                        <div key={rev.id} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '15px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <User size={14} color="#64748b" />
+                                                                    </div>
+                                                                    <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>{rev.customer_name || 'Verified Buyer'}</span>
+                                                                </div>
+                                                                {renderStars(rev.rating, 10)}
+                                                            </div>
+                                                            <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: '1.5', margin: '0' }}>{rev.comment || 'Perfect!'}</p>
+                                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px', display: 'block' }}>
+                                                                {rev.created_at ? new Date(rev.created_at).toLocaleDateString() : ''}
+                                                            </span>
+                                                            {reviewedProduct && (
+                                                                <Link
+                                                                    to={`/product/${reviewedProduct.id}`}
+                                                                    style={{
+                                                                        display: 'flex', alignItems: 'center', gap: '10px',
+                                                                        marginTop: '10px', padding: '8px',
+                                                                        background: '#f8fafc', borderRadius: '10px',
+                                                                        border: '1px solid #f1f5f9', textDecoration: 'none'
+                                                                    }}
+                                                                >
+                                                                    {reviewedProduct.image && (
+                                                                        <img
+                                                                            src={thumbUrl(reviewedProduct.image)}
+                                                                            alt={reviewedProduct.title}
+                                                                            loading="lazy"
+                                                                            decoding="async"
+                                                                            style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                                                                        />
+                                                                    )}
+                                                                    <span style={{
+                                                                        fontSize: '0.8rem', fontWeight: '700', color: '#334155',
+                                                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                                                                    }}>
+                                                                        {reviewedProduct.title}
+                                                                    </span>
+                                                                </Link>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </>
                         )}
                     </>
                 )}

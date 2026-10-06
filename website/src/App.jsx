@@ -20,6 +20,10 @@ const Contact = lazy(() => import('./pages/Contact'));
 const MyOrders = lazy(() => import('./pages/MyOrders'));
 const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 const PaymentFailure = lazy(() => import('./pages/PaymentFailure'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Terms = lazy(() => import('./pages/Terms'));
+const Returns = lazy(() => import('./pages/Returns'));
+const Shipping = lazy(() => import('./pages/Shipping'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Branded loading skeleton shown while a route chunk loads
@@ -81,6 +85,10 @@ function App() {
           <Route path="/my-orders" element={<MyOrders />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/payment-failure" element={<PaymentFailure />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/returns" element={<Returns />} />
+          <Route path="/shipping" element={<Shipping />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>

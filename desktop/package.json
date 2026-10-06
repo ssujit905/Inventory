@@ -13,6 +13,8 @@
   "build": {
     "appId": "com.inventory.app",
     "productName": "Inventory App",
+    "asar": true,
+    "compression": "maximum",
     "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"
@@ -20,7 +22,8 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "electron/entry.js"
+      "electron/entry.js",
+      "!**/*.map"
     ],
     "mac": {
       "target": [
@@ -33,16 +36,19 @@
           "arch": "universal"
         }
       ],
+      "compression": "maximum",
       "icon": "build/icon.png",
       "category": "public.app-category.business",
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "cscLink": "${env.WIN_CSC_LINK}",
+      "cscKeyPassword": "${env.WIN_CSC_KEY_PASSWORD}"
     }
   },
   "dependencies": {

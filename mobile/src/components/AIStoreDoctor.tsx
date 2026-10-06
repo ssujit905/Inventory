@@ -175,8 +175,15 @@ export default function AIStoreDoctor() {
         }
     };
 
+    const escapeHtml = (str: string) =>
+        str.replace(/&/g, '&amp;')
+           .replace(/</g, '&lt;')
+           .replace(/>/g, '&gt;')
+           .replace(/"/g, '&quot;')
+           .replace(/'/g, '&#039;');
+
     const formatBold = (text: string) => {
-        return text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-gray-100">$1</strong>');
+        return escapeHtml(text).replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-gray-100">$1</strong>');
     };
 
     const renderMarkdownContent = (md: string, compact = false) => {

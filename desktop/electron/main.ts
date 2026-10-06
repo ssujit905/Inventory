@@ -88,6 +88,7 @@ app.whenReady().then(createWindow).catch((err: any) => {
 
 ipcMain.handle('save-xlsx-download', async (_event, payload: { fileName: string; base64: string }) => {
     try {
+        // eslint-disable-next-line no-control-regex
         const safeName = (payload.fileName || 'export.xlsx').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
         const downloadsDir = app.getPath('downloads')
         const filePath = path.join(downloadsDir, safeName)

@@ -40,10 +40,9 @@ const Contact = () => {
         e.preventDefault();
         setLoading(true);
         setError('');
-        // Honeypot bot protection
+        // Honeypot bot protection: silently succeed without logging
         if (formData._honeypot) {
-            console.log("Bot detected!");
-            setSuccess(true); // Pretend it worked
+            setSuccess(true);
             setLoading(false);
             return;
         }

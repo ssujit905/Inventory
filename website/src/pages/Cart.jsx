@@ -1,9 +1,10 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { thumbUrl } from '../lib/imageUrl';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, ArrowLeft, CheckCircle2, ChevronRight } from 'lucide-react';
 
 const Cart = () => {
-    const { cart, removeFromCart, updateQuantity, toggleSelectItem, cartTotal, selectedCount, clearCart } = useCart();
+    const { cart, removeFromCart, toggleSelectItem, cartTotal, selectedCount } = useCart();
     const navigate = useNavigate();
 
     if (cart.length === 0) {
@@ -93,7 +94,7 @@ const Cart = () => {
                                         style={{ width: '18px', height: '18px', accentColor: 'var(--primary-red)' }}
                                     />
                                 </div>
-                                <img src={item.image} alt={item.title} loading="lazy" decoding="async" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '0.25rem', border: '1px solid #f1f5f9' }} />
+                                <img src={thumbUrl(item.image)} alt={item.title} loading="lazy" decoding="async" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '0.25rem', border: '1px solid #f1f5f9' }} />
 
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

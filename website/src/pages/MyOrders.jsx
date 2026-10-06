@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useLocation, useNavigate, NavLink, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useCustomer } from '../context/CustomerContext';
 import { useSettings } from '../context/SettingsContext';
 import { supabase } from '../lib/supabase';
@@ -8,20 +8,19 @@ import {
     Truck, CheckCircle, Clock, AlertCircle, ShoppingBag, Coins,
     Calendar, MapPin, Info, XCircle, X,
     Star, RotateCcw, Camera, Trash2, CheckCircle2, Loader2,
-    ArrowLeft, Share2
+    ArrowLeft
 } from 'lucide-react';
 import { useNotification } from '../context/NotificationContext';
+import { thumbUrl } from '../lib/imageUrl';
 
 const MyOrders = () => {
-    const { customer, login, logout, register, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
+    const { customer, login, register, loading: authLoading, refreshCustomer, setupPin } = useCustomer();
     const { settings } = useSettings();
     const { showNotification } = useNotification();
     const location = useLocation();
     const navigate = useNavigate();
     
-    const queryTab = new URLSearchParams(location.search).get('tab');
     const querySetupPin = new URLSearchParams(location.search).get('setup-pin');
-    const [activeTab, setActiveTab] = useState(queryTab || 'orders');
     const [activeStatus, setActiveStatus] = useState('Processing');
     const [isRegistering, setIsRegistering] = useState(false);
     const [orders, setOrders] = useState([]);
@@ -29,7 +28,6 @@ const MyOrders = () => {
     const [branches, setBranches] = useState([]);
     const [ratedOrderIds, setRatedOrderIds] = useState(new Set());
     const [requestedReturnStatuses, setRequestedReturnStatuses] = useState({});
-    const [selectedOrder, setSelectedOrder] = useState(null);
     
     // Auth form state
     const [phone, setPhone] = useState('');
@@ -66,15 +64,6 @@ const MyOrders = () => {
     const [confirmPin, setConfirmPin] = useState('');
     const [pinLoading, setPinLoading] = useState(false);
     const [pinMsg, setPinMsg] = useState({ text: '', type: '' });
-
-    // Reset PIN State
-    const [showResetModal, setShowResetModal] = useState(false);
-    const [resetPhone, setResetPhone] = useState('');
-    const [resetOrderNo, setResetOrderNo] = useState('');
-    const [resetTotal, setResetTotal] = useState('');
-    const [resetNewPin, setResetNewPin] = useState('');
-    const [resetLoading, setResetLoading] = useState(false);
-    const [resetError, setResetError] = useState('');
 
     // First-time buyer PIN setup (triggered by ?setup-pin=PHONE URL param)
     const [showSetupPinModal, setShowSetupPinModal] = useState(false);
@@ -159,58 +148,6 @@ const MyOrders = () => {
         }
     };
 
-    // Share Order Function
-    const handleShare = async (order) => {
-        const text = `Check out my order #${order.order_number} from Shopy Nepal! Status: ${order.status}`;
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'Shopy Nepal Order',
-                    text: text,
-                    url: window.location.href
-                });
-            } catch (err) { console.error('Share failed:', err); }
-        } else {
-            navigator.clipboard.writeText(text);
-            showNotification('Order info copied to clipboard!', 'success');
-        }
-    };
-
-    const handleResetPin = async (e) => {
-        e.preventDefault();
-        setResetError('');
-        if (resetNewPin.length !== 4) {
-            setResetError('New PIN must be 4 digits');
-            return;
-        }
-
-        setResetLoading(true);
-        try {
-            const { data: success, error: resetErr } = await supabase.rpc('reset_customer_pin', {
-                p_phone: resetPhone,
-                p_order_number: resetOrderNo,
-                p_total_amount: parseFloat(resetTotal),
-                p_new_pin: resetNewPin
-            });
-
-            if (resetErr || !success) {
-                const raw = String(resetErr?.message || '');
-                throw new Error(/ACCOUNT_LOCKED|too many failed attempts/i.test(raw)
-                    ? 'Too many failed attempts. Please try again in 15 minutes.'
-                    : 'Verification failed. Please check your order details.');
-            }
-
-            showNotification('PIN reset successfully! You can now login.', 'success');
-            setShowResetModal(false);
-            setPhone(resetPhone);
-            setPin(resetNewPin);
-        } catch (err) {
-            setResetError(err.message);
-        } finally {
-            setResetLoading(false);
-        }
-    };
-
     useEffect(() => {
         fetchBranches();
     }, []);
@@ -220,13 +157,7 @@ const MyOrders = () => {
         if (data) setBranches(data);
     };
 
-    useEffect(() => {
-        if (customer) {
-            fetchOrders();
-        }
-    }, [customer]);
-
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
         setLoadingOrders(true);
         try {
             const { data: res, error: ordersError } = await supabase.rpc('customer_orders', {
@@ -285,7 +216,13 @@ const MyOrders = () => {
         } finally {
             setLoadingOrders(false);
         }
-    };
+    }, [customer?.phone]);
+
+    useEffect(() => {
+        if (customer) {
+            fetchOrders();
+        }
+    }, [customer, fetchOrders]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -308,7 +245,7 @@ const MyOrders = () => {
             // Tokenless calls are rejected (NOT_AUTHORIZED).
             const { error: cancelError } = await supabase.rpc('handle_website_order_cancellation', {
                 p_order_id: cancellingOrderId,
-                p_reason: `CUSTOMER: ${cancelReason}`,
+                p_reason: `CUSTOMER: ${String(cancelReason || '').trim().slice(0, 500)}`,
                 p_token: sessionStorage.getItem('shopy_customer_session')
             });
             if (cancelError) throw cancelError;
@@ -860,10 +797,10 @@ const MyOrders = () => {
                                             <div key={item.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                                 {item.product_image && item.product_id ? (
                                                     <Link to={`/product/${item.product_id}`}>
-                                                        <img src={item.product_image} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                        <img src={thumbUrl(item.product_image)} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
                                                     </Link>
                                                 ) : (
-                                                    item.product_image && <img src={item.product_image} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
+                                                    item.product_image && <img src={thumbUrl(item.product_image)} alt="" loading="lazy" decoding="async" style={{ width: '45px', height: '45px', borderRadius: '8px', objectFit: 'cover' }} />
                                                 )}
                                                 <div style={{ flex: 1 }}>
                                                     {item.product_id ? (
@@ -963,7 +900,7 @@ const MyOrders = () => {
                         <textarea placeholder="Reason for cancellation..." value={cancelReason} onChange={e => setCancelReason(e.target.value)} style={{ width: '100%', height: '100px', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', outline: 'none' }} />
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button onClick={() => setShowCancelModal(false)} className="btn" style={{ flex: 1, background: '#f1f5f9' }}>Back</button>
-                            <button onClick={confirmCancelOrder} className="btn btn-primary" style={{ flex: 1, background: '#ef4444' }}>Confirm</button>
+                            <button onClick={confirmCancelOrder} disabled={isCancelling} className="btn btn-primary" style={{ flex: 1, background: isCancelling ? '#fca5a5' : '#ef4444' }}>{isCancelling ? 'Cancelling…' : 'Confirm'}</button>
                         </div>
                     </div>
                 </div>
@@ -1013,7 +950,19 @@ const MyOrders = () => {
                                 </div>
                                 <textarea placeholder="Reason..." value={returnMessage} onChange={e => setReturnMessage(e.target.value)} style={{ width: '100%', height: '100px', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', outline: 'none' }} />
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-                                    {returnFiles.map(f => <img key={f.id} src={f.preview} style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover' }} />)}
+                                    {returnFiles.map(f => (
+                                        <div key={f.id} style={{ position: 'relative', width: '60px', height: '60px' }}>
+                                            <img src={f.preview} alt="Return evidence" style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover' }} />
+                                            <button
+                                                type="button"
+                                                onClick={() => removeFile(f.id)}
+                                                aria-label="Remove photo"
+                                                style={{ position: 'absolute', top: '-8px', right: '-8px', width: '22px', height: '22px', borderRadius: '50%', background: '#ef4444', color: 'white', border: '2px solid white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                                            >
+                                                <X size={12} strokeWidth={3} />
+                                            </button>
+                                        </div>
+                                    ))}
                                     {returnFiles.length < 5 && (
                                         <label style={{ width: '60px', height: '60px', borderRadius: '8px', border: '2px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                                             <input type="file" multiple accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />

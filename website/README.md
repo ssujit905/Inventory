@@ -1,16 +1,34 @@
-# React + Vite
+# Shopy Nepal — Website
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Public storefront (React + Vite). Staff/admin tooling lives in `../desktop` and `../mobile` behind Supabase Auth + RLS — there is intentionally no `/admin` route here.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```bash
+npm install
+cp .env.example .env   # fill VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+npm run dev            # http://localhost:5174/
+```
 
-## React Compiler
+## Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `npm run dev` — local dev server (port 5174)
+- `npm run build` — production build to `dist/`
+- `npm run preview` — preview the production build
+- `npm run lint` — eslint
 
-## Expanding the ESLint configuration
+## Env
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+| Var | Required | Purpose |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | yes | Supabase project URL (`src/lib/supabase.js`) |
+| `VITE_SUPABASE_ANON_KEY` | yes | Supabase anon key (public reads + throttled RPCs only) |
+
+## Deploy (Vercel)
+
+- SPA fallback + security headers + asset caching are in `vercel.json`.
+- `public/robots.txt` + `public/sitemap.xml` target `https://shopinepal.com`.
+
+## Routes
+
+`/`, `/shop`, `/product/:id`, `/store/:vendorId`, `/cart`, `/checkout`, `/contact`, `/my-orders`, `/payment-success`, `/payment-failure`, `/privacy`, `/terms`, `/returns`, `/shipping`.

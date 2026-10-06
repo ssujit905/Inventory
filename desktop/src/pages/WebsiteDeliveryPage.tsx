@@ -263,26 +263,26 @@ export default function WebsiteDeliveryPage() {
                         <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Shipping Network History</h3>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                    <div className="overflow-x-auto max-w-full">
+                        <table className="w-full min-w-0 text-left">
                             <thead className="bg-gray-50/30 dark:bg-gray-800/30 text-[10px] uppercase tracking-widest font-black text-gray-400 border-b border-gray-100 dark:border-gray-800">
                                 <tr>
-                                    <th className="px-8 py-4">City / Area</th>
-                                    <th className="px-8 py-4">Estimated Time</th>
-                                    <th className="px-8 py-4 text-right">Shipping Fee</th>
-                                    <th className="px-8 py-4 text-right">Actions</th>
+                                    <th className="px-4 md:px-8 py-4">City / Area</th>
+                                    <th className="px-4 md:px-8 py-4">Estimated Time</th>
+                                    <th className="px-4 md:px-8 py-4 text-right">Shipping Fee</th>
+                                    <th className="px-4 md:px-8 py-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={4} className="px-8 py-20 text-center">
+                                        <td colSpan={4} className="px-4 md:px-8 py-20 text-center">
                                             <Loader2 className="animate-spin text-primary mx-auto" size={32} />
                                         </td>
                                     </tr>
                                 ) : branches.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-8 py-20 text-center">
+                                        <td colSpan={4} className="px-4 md:px-8 py-20 text-center">
                                             <div className="opacity-20 flex flex-col items-center gap-2">
                                                 <Truck size={48} />
                                                 <p className="font-black text-xs uppercase tracking-[0.2em]">No Branches Defined</p>
@@ -292,7 +292,7 @@ export default function WebsiteDeliveryPage() {
                                 ) : (
                                     branches.map(branch => (
                                         <tr key={branch.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-all">
-                                            <td className="px-8 py-5">
+                                            <td className="px-4 md:px-8 py-5">
                                                 <div className="flex items-center gap-4">
                                                     <div className="h-10 w-10 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                                                         <MapPin size={18} />
@@ -303,7 +303,7 @@ export default function WebsiteDeliveryPage() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-5">
+                                            <td className="px-4 md:px-8 py-5">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
                                                     <Clock size={12} className="text-gray-400" />
                                                     <input 
@@ -315,7 +315,7 @@ export default function WebsiteDeliveryPage() {
                                                     />
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-5 text-right">
+                                            <td className="px-4 md:px-8 py-5 text-right">
                                                 <div className="inline-flex items-center gap-1.5 bg-primary/5 dark:bg-primary/10 rounded-xl px-4 py-2 border border-primary/10">
                                                     <span className="text-[10px] font-black text-primary/60">Rs.</span>
                                                     <input
@@ -328,11 +328,11 @@ export default function WebsiteDeliveryPage() {
                                                     <Pencil size={10} className="text-primary/30" />
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-5 text-right">
+                                            <td className="px-4 md:px-8 py-5 text-right">
                                                 <button
                                                     onClick={(e) => handleDelete(e, branch.id)}
                                                     disabled={deleting === branch.id}
-                                                    className={`px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${
+                                                    className={`inline-flex items-center justify-center text-center px-4 py-2 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${
                                                         confirmingDelete === branch.id 
                                                         ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
                                                         : 'text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20'
@@ -432,14 +432,14 @@ export default function WebsiteDeliveryPage() {
                                     <button
                                         type="button"
                                         onClick={() => setIsFormOpen(false)}
-                                        className="flex-1 h-14 px-8 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                                        className="flex-1 h-14 px-8 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest text-center flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={saving}
-                                        className="flex-[1.5] h-14 px-8 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
+                                        className="flex-[1.5] h-14 px-8 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest text-center shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center"
                                     >
                                         {saving ? <Loader2 className="animate-spin mx-auto" /> : "Deploy Destination"}
                                     </button>

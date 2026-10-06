@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
 import { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
@@ -13,7 +14,7 @@ export const CartProvider = ({ children }) => {
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
       console.error('Failed to parse cart from localStorage, resetting:', e);
-      try { localStorage.removeItem('shopy-nepal-cart'); } catch (_) {}
+      try { localStorage.removeItem('shopy-nepal-cart'); } catch { /* storage unavailable — cart simply won't persist */ }
       return [];
     }
   });

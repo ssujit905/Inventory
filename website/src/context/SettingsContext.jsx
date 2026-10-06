@@ -1,8 +1,13 @@
+/* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { safeFetch } from '../lib/safeFetch';
+import { getCache, setCache } from '../lib/cache';
 
 const SettingsContext = createContext();
+
+const SETTINGS_CACHE_KEY = 'shopy_settings_v1';
+const SETTINGS_TTL_MS = 10 * 60 * 1000; // 10 min: banners/toggles change rarely
 
 export const useSettings = () => useContext(SettingsContext);
 
@@ -11,8 +16,8 @@ export const SettingsProvider = ({ children }) => {
     const [settingsLoading, setSettingsLoading] = useState(true);
     const [settingsError, setSettingsError] = useState(null);
 
-    const fetchSettings = useCallback(async () => {
-        setSettingsLoading(true);
+    const fetchSettings = useCallback(async (isBackground = false) => {
+        if (!isBackground) setSettingsLoading(true);
         setSettingsError(null);
         try {
             const { data, error } = await safeFetch(() =>
@@ -28,6 +33,7 @@ export const SettingsProvider = ({ children }) => {
                     if (!['esewa_secret_key', 'fonepay_secret_key'].includes(s.key)) map[s.key] = s.value;
                 });
                 setSettings(map);
+                setCache(SETTINGS_CACHE_KEY, map);
             }
         } catch (err) {
             console.error('Unexpected error loading settings:', err);
@@ -38,7 +44,15 @@ export const SettingsProvider = ({ children }) => {
     }, []);
 
     useEffect(() => {
-        fetchSettings();
+        // SWR: paint cached settings instantly, then revalidate.
+        const { data: cached } = getCache(SETTINGS_CACHE_KEY, SETTINGS_TTL_MS);
+        if (cached && Object.keys(cached).length) {
+            setSettings(cached);
+            setSettingsLoading(false);
+            fetchSettings(true);
+        } else {
+            fetchSettings(false);
+        }
     }, [fetchSettings]);
 
     // SECURITY: read-only on the public website. Settings (flash sale toggles,

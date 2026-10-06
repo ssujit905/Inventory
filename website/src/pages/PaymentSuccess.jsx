@@ -183,7 +183,7 @@ const PaymentSuccess = () => {
         };
 
         verifyPayment();
-    }, [searchParams]);
+    }, [searchParams, showNotification]);
 
     if (loading) {
         return (

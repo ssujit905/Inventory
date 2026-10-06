@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
 const CustomerContext = createContext();
@@ -22,7 +23,7 @@ export const CustomerProvider = ({ children }) => {
             return saved ? JSON.parse(saved) : null;
         } catch (e) {
             console.error('Failed to parse customer from sessionStorage, resetting:', e);
-            try { sessionStorage.removeItem('shopy_customer'); } catch (_) {}
+            try { sessionStorage.removeItem('shopy_customer'); } catch { /* storage unavailable — session simply won't persist */ }
             return null;
         }
     });
@@ -97,7 +98,16 @@ export const CustomerProvider = ({ children }) => {
         }
     };
 
-    const refreshCustomer = async () => {
+    const logout = useCallback(() => {
+        setCustomer(null);
+        try {
+            sessionStorage.removeItem('shopy_customer');
+            sessionStorage.removeItem('shopy_customer_session');
+            localStorage.removeItem('shopy_customer');
+        } catch { /* storage unavailable — session simply won't clear */ }
+    }, []);
+
+    const refreshCustomer = useCallback(async () => {
         const token = sessionStorage.getItem('shopy_customer_session');
         if (!token) return;
         try {
@@ -106,7 +116,7 @@ export const CustomerProvider = ({ children }) => {
                 setCustomer(data.customer);
                 try {
                     sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));
-                } catch (_) {}
+                } catch { /* storage unavailable — profile simply won't cache */ }
             } else if (data && !data.success) {
                 console.warn('Customer session expired or invalid:', data.error);
                 logout();
@@ -116,16 +126,7 @@ export const CustomerProvider = ({ children }) => {
         } catch (err) {
             console.error('Failed to refresh customer:', err);
         }
-    };
-
-    const logout = () => {
-        setCustomer(null);
-        try {
-            sessionStorage.removeItem('shopy_customer');
-            sessionStorage.removeItem('shopy_customer_session');
-            localStorage.removeItem('shopy_customer');
-        } catch (_) {}
-    };
+    }, [logout]);
 
     /**
      * First-time buyer PIN setup.
@@ -176,7 +177,6 @@ export const CustomerProvider = ({ children }) => {
                     filter: `phone=eq.${customer.phone}`
                 },
                 (payload) => {
-                    console.log('Real-time customer update:', payload);
                     // Update state directly for instant feedback (coins, name, etc)
                     if (payload.new) {
                         setCustomer(previous => {
@@ -192,7 +192,7 @@ export const CustomerProvider = ({ children }) => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [customer?.phone]);
+    }, [customer?.phone, refreshCustomer]);
 
     return (
         <CustomerContext.Provider value={{ customer, login, logout, register, updateProfile, loading, refreshCustomer, setupPin }}>

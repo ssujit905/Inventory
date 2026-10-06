@@ -81,8 +81,10 @@ const Footer = () => {
                     &copy; {new Date().getFullYear()} {storeName}. Built for the modern shopper.
                 </p>
                 <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.75rem', fontWeight: '700', color: '#475569' }}>
-                    <span style={{ cursor: 'pointer' }}>Privacy Policy</span>
-                    <span style={{ cursor: 'pointer' }}>Terms of Service</span>
+                    <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy Policy</Link>
+                    <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms of Service</Link>
+                    <Link to="/returns" style={{ color: 'inherit', textDecoration: 'none' }}>Returns</Link>
+                    <Link to="/shipping" style={{ color: 'inherit', textDecoration: 'none' }}>Shipping</Link>
                 </div>
             </div>
 

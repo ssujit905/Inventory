@@ -230,33 +230,8 @@ Deno.serve(async (req) => {
         })
       }
 
-      // [SECURITY DEPRECATION WARNING] Pre-intent website builds in the wild.
-      // Deprecated: callers should create a server intent first.
-      console.warn('[SECURITY DEPRECATION] Pre-intent legacy eSewa payment requested with transactionUuid:', payload.transactionUuid)
-      const totalAmount = Number(payload.totalAmount).toFixed(2)
-      const amount = Number(payload.amount).toFixed(2)
-      const deliveryCharge = Number(payload.deliveryCharge).toFixed(2)
-      const transactionUuid = String(payload.transactionUuid)
-
-      if (!transactionUuid || !Number.isFinite(Number(totalAmount))) return response({ error: 'Invalid payment request' }, 400)
-
-      const signature = await hmac(`total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${productCode}`, secret, 'SHA-256', 'base64')
-      return response({
-        gatewayUrl: environment === 'live' ? 'https://epay.esewa.com.np/api/epay/main/v2/form' : 'https://rc-epay.esewa.com.np/api/epay/main/v2/form',
-        fields: {
-          amount,
-          tax_amount: '0',
-          total_amount: totalAmount,
-          transaction_uuid: transactionUuid,
-          product_code: productCode,
-          product_service_charge: '0',
-          product_delivery_charge: deliveryCharge,
-          success_url: String(payload.successUrl),
-          failure_url: String(payload.failureUrl),
-          signed_field_names: 'total_amount,transaction_uuid,product_code',
-          signature,
-        },
-      })
+      // Pre-intent payment creation without a server-verified quote is rejected
+      return response({ error: 'Missing payment intent token. Please initiate checkout again.' }, 400)
     }
 
     if (action === 'verify-esewa-response') {
@@ -337,20 +312,8 @@ Deno.serve(async (req) => {
         })
       }
 
-      // [SECURITY DEPRECATION WARNING] Pre-intent website builds in the wild.
-      // Deprecated: callers should create a server intent first.
-      console.warn('[SECURITY DEPRECATION] Pre-intent legacy Fonepay payment requested with PRN:', payload.prn)
-      const amount = Number(payload.amount).toFixed(2)
-      const prn = String(payload.prn)
-      const date = String(payload.date)
-      const r1 = String(payload.r1)
-      const r2 = String(payload.r2)
-      const returnUrl = String(payload.returnUrl)
-      const signature = await hmac(`${merchantId},P,${prn},${amount},NPR,${date},${r1},${r2},${returnUrl}`, secret, 'SHA-512', 'hex')
-      return response({
-        gatewayUrl: environment === 'live' ? 'https://clientapi.fonepay.com/api/merchantRequest' : 'https://dev-clientapi.fonepay.com/api/merchantRequest',
-        fields: { PID: merchantId, MD: 'P', PRN: prn, AMT: amount, CRN: 'NPR', DT: date, R1: r1, R2: r2, RU: returnUrl, DV: signature },
-      })
+      // Pre-intent payment creation without a server-verified quote is rejected
+      return response({ error: 'Missing payment intent token. Please initiate checkout again.' }, 400)
     }
 
     if (action === 'verify-fonepay-response') {

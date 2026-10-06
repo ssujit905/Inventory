@@ -1,5 +1,4 @@
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
-import { useProducts } from '../context/ProductContext';
 import { useSettings } from '../context/SettingsContext';
 import { useCart } from '../context/CartContext';
 import {
@@ -25,7 +24,7 @@ import {
     Loader2,
     Store
 } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { storeSlug } from '../lib/storeSlug';
 import { useNotification } from '../context/NotificationContext';
@@ -97,8 +96,6 @@ const ProductDetail = () => {
     const activePrice = isProductInFlashSale 
         ? Math.floor(rawPrice - (rawPrice * (discountPercent / 100)))
         : rawPrice;
-    
-    const originalPrice = isProductInFlashSale ? rawPrice : (product?.original_price || null);
 
     useEffect(() => {
         const fetchProductData = async () => {
@@ -203,10 +200,10 @@ const ProductDetail = () => {
 
     useEffect(() => {
         if (id) fetchRatings();
-    }, [id]);
+    }, [id, fetchRatings]);
 
 
-    const fetchRatings = async () => {
+    const fetchRatings = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('website_product_ratings')
@@ -221,7 +218,7 @@ const ProductDetail = () => {
         } finally {
             setLoadingRatings(false);
         }
-    };
+    }, [id]);
 
     const averageRating = useMemo(() => {
         if (ratings.length === 0) return 0;
@@ -246,15 +243,6 @@ const ProductDetail = () => {
 
     const images = product?.website_product_images || [];
     const activeMedia = combinedMedia[activeImageIndex];
-
-    // Group images to identify unique variations (based on labels, normalized)
-    const normalizeLabel = (label) => (label || '').trim().toLowerCase();
-    const variationImages = images.filter((img, index, self) => 
-        img.label && self.findIndex(t => t.label && normalizeLabel(t.label) === normalizeLabel(img.label)) === index
-    );
-    
-    // If no labeled images exist, use the first image as the default variation
-    const displayVariations = variationImages.length > 0 ? variationImages : (images.length > 0 ? [images[0]] : []);
 
     // While product is still loading, show a spinner
     if (loading) {
@@ -474,7 +462,7 @@ const ProductDetail = () => {
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-            } catch (err) {
+            } catch {
                 // User cancelled or error
             }
         } else {
@@ -482,7 +470,7 @@ const ProductDetail = () => {
             try {
                 await navigator.clipboard.writeText(window.location.href);
                 showNotification('Link copied to clipboard!', 'success');
-            } catch (err) {
+            } catch {
                 showNotification('Failed to copy link', 'error');
             }
         }

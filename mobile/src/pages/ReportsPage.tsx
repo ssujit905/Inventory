@@ -5,7 +5,7 @@ import { useAuthStore } from '../hooks/useAuthStore';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { IndianRupee, TrendingUp, Package, Wallet, ArrowUpRight, BarChart3 } from 'lucide-react';
 
 type FinanceStats = {
@@ -347,17 +347,33 @@ export default function ReportsPage() {
                 margin
             });
 
-            // Calculate Monthly Trends (Last 6 months)
+            // Full-history month range: from the earliest recorded finance
+            // activity through the current month, so every month of data is
+            // plotted. Long histories scroll horizontally inside the charts.
             const now = new Date();
-            const last6Months = eachMonthOfInterval({
-                start: subMonths(now, 5),
-                end: now
+            const earliestCandidates: Date[] = [];
+            deliveredSalesMap.forEach((s) => {
+                const d = new Date(s.date);
+                if (!isNaN(d.getTime())) earliestCandidates.push(startOfMonth(d));
             });
+            (incomeEntries || []).forEach((i: any) => {
+                const d = new Date(i.income_date);
+                if (!isNaN(d.getTime())) earliestCandidates.push(startOfMonth(d));
+            });
+            (expensesData || []).forEach((e: any) => {
+                const d = new Date(e.expense_date);
+                if (!isNaN(d.getTime())) earliestCandidates.push(startOfMonth(d));
+            });
+            const earliestMonth = earliestCandidates.length > 0
+                ? earliestCandidates.reduce((a, b) => (a < b ? a : b))
+                : startOfMonth(subMonths(now, 11));
+            const rangeStart = earliestMonth > now ? startOfMonth(subMonths(now, 11)) : earliestMonth;
+            const allMonths = eachMonthOfInterval({ start: rangeStart, end: now });
 
-            const trendData = last6Months.map(month => {
+            const trendData = allMonths.map(month => {
                 const mStart = startOfMonth(month);
                 const mEnd = endOfMonth(month);
-                const mLabel = format(month, 'MMM');
+                const mLabel = format(month, 'MMM yy');
 
                 const mSalesRevenue = Array.from(deliveredSalesMap.values())
                     .filter(s => {
@@ -384,17 +400,12 @@ export default function ReportsPage() {
 
             setMonthlyData(trendData);
 
-            const last12Months = eachMonthOfInterval({
-                start: subMonths(now, 11),
-                end: now
-            });
-
-            const gpTrendData = last12Months.map(month => {
+            const gpTrendData = allMonths.map(month => {
                 const key = format(month, 'yyyy-MM');
                 const gp = monthProfitMap.get(key) || 0;
                 const ops = monthOpsMap.get(key) || 0;
                 return {
-                    name: format(month, 'MMM'),
+                    name: format(month, 'MMM yy'),
                     grossProfit: gp,
                     netProfit: gp - ops,
                     operations: ops
@@ -460,11 +471,12 @@ export default function ReportsPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="h-[240px] w-full -ml-4">
+                        <div className="overflow-x-auto pb-2">
+                            <div style={{ width: '100%', minWidth: `${Math.max(monthlyData.length * 56, 320)}px`, height: 240 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={monthlyData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.2} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} />
                                     <Tooltip
                                         cursor={{ fill: 'transparent' }}
@@ -474,6 +486,7 @@ export default function ReportsPage() {
                                     <Bar dataKey="expenses" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={12} name="Expenses" />
                                 </BarChart>
                             </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
@@ -492,29 +505,22 @@ export default function ReportsPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="h-[240px] w-full -ml-4">
+                        <div className="overflow-x-auto pb-2">
+                            <div style={{ width: '100%', minWidth: `${Math.max(grossProfitMonthlyData.length * 56, 320)}px`, height: 240 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={grossProfitMonthlyData}>
-                                    <defs>
-                                        <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.12} />
-                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                        </linearGradient>
-                                        <linearGradient id="netProfitGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.12} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
+                                <BarChart data={grossProfitMonthlyData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.2} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} />
                                     <Tooltip
+                                        cursor={{ fill: 'transparent' }}
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
                                     />
-                                    <Area type="monotone" dataKey="grossProfit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#profitGradient)" name="Gross Profit" />
-                                    <Area type="monotone" dataKey="netProfit" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#netProfitGradient)" name="Net Profit" />
-                                </AreaChart>
+                                    <Bar dataKey="grossProfit" fill="#10b981" radius={[4, 4, 0, 0]} barSize={12} name="Gross Profit" />
+                                    <Bar dataKey="netProfit" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={12} name="Net Profit" />
+                                </BarChart>
                             </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
@@ -529,24 +535,21 @@ export default function ReportsPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="h-[240px] w-full -ml-4">
+                        <div className="overflow-x-auto pb-2">
+                            <div style={{ width: '100%', minWidth: `${Math.max(grossProfitMonthlyData.length * 56, 320)}px`, height: 240 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={grossProfitMonthlyData}>
-                                    <defs>
-                                        <linearGradient id="opsGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.12} />
-                                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
+                                <BarChart data={grossProfitMonthlyData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.2} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#94A3B8' }} />
                                     <Tooltip
+                                        cursor={{ fill: 'transparent' }}
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
                                     />
-                                    <Area type="monotone" dataKey="operations" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#opsGradient)" name="Op Cost" />
-                                </AreaChart>
+                                    <Bar dataKey="operations" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={12} name="Op Cost" />
+                                </BarChart>
                             </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
                 </div>

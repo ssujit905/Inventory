@@ -32,8 +32,8 @@ export async function safeFetch(fetchFn, options = {}) {
                     result.error.code === '504' ||
                     result.error.status >= 500;
 
-                if (!isNetworkOr5xx && attempt > 0) {
-                    // Stop retrying 4xx client errors
+                if (!isNetworkOr5xx) {
+                    // Do not retry 4xx client errors or database constraint rejections
                     return result;
                 }
             } else {

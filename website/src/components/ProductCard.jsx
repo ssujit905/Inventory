@@ -1,15 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
 import { MapPin, Sparkles, Truck } from 'lucide-react';
+import { thumbUrl } from '../lib/imageUrl';
 
 const ProductCard = ({ product }) => {
 
     const isSoldOut = product.is_sold_out || product.isSoldOut === true;
     const originalPrice = product.original_price || product.originalPrice;
-    
-    const discount = originalPrice
-        ? Math.round(((originalPrice - product.price) / originalPrice) * 100)
-        : 0;
 
     return (
         <div style={{
@@ -40,7 +36,7 @@ const ProductCard = ({ product }) => {
         >
             <Link to={`/product/${product.id}`} style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
                 <img
-                    src={product.image}
+                    src={thumbUrl(product.image)}
                     alt={product.title}
                     loading="lazy"
                     decoding="async"

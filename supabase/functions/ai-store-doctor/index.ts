@@ -127,11 +127,60 @@ async function callAi(
   throw new Error(lastError)
 }
 
+// Rate limiting: 10 requests per minute per IP
+const ipHits = new Map<string, number[]>()
+function checkRateLimit(ip: string, limit = 10, windowMs = 60000): boolean {
+  const now = Date.now()
+  const timestamps = (ipHits.get(ip) || []).filter(t => now - t < windowMs)
+  if (timestamps.length >= limit) return false
+  timestamps.push(now)
+  ipHits.set(ip, timestamps)
+  return true
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: corsHeaders })
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
 
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  if (clientIp !== 'unknown' && !checkRateLimit(clientIp, 10, 60000)) {
+    return jsonResponse({ error: 'Rate limit exceeded: maximum 10 requests per minute. Please wait.' }, 429)
+  }
+
   try {
+    const url = Deno.env.get('SUPABASE_URL')
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    if (!url || !anonKey) {
+      return jsonResponse({ error: 'Server configuration error: missing Supabase credentials' }, 500)
+    }
+
+    // Authenticate caller: require valid JWT
+    const authHeader = req.headers.get('Authorization') || ''
+    if (!authHeader.toLowerCase().startsWith('bearer ')) {
+      return jsonResponse({ error: 'Not authenticated. Please log in.' }, 401)
+    }
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    })
+    const { data: callerData, error: callerError } = await userClient.auth.getUser()
+    const caller = callerError ? null : callerData?.user
+    if (!caller) {
+      return jsonResponse({ error: 'Session expired or invalid. Please log in again.' }, 401)
+    }
+
+    // Authorize caller: must be admin, staff, or vendor
+    const supa = supaAdmin()
+    const { data: callerProfile, error: profileErr } = await supa
+      .from('profiles')
+      .select('role')
+      .eq('id', caller.id)
+      .maybeSingle()
+    if (profileErr) throw profileErr
+    if (!callerProfile || !['admin', 'staff', 'vendor'].includes(callerProfile.role)) {
+      return jsonResponse({ error: 'Access denied: staff, vendor, or admin role required.' }, 403)
+    }
+
     const { action, apiKey: clientKey, baseUrl: clientBaseUrl, model: clientModel, messages, temperature, max_tokens } = await req.json()
 
     if (action !== 'diagnose' && action !== 'chat') {

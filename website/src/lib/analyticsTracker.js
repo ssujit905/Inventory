@@ -21,15 +21,9 @@ export function getSessionId() {
 }
 
 // Track page visits
-let lastLoggedPath = '';
-let pageStartTime = Date.now();
-
 export async function trackPageView(path, productId = null, productTitle = null) {
     try {
-        // Compute dwell time for previous page if available
         const sid = getSessionId();
-        lastLoggedPath = path;
-        pageStartTime = Date.now();
 
         await supabase.from('website_page_visits').insert({
             session_id: sid,
@@ -39,7 +33,7 @@ export async function trackPageView(path, productId = null, productTitle = null)
             referrer: typeof document !== 'undefined' ? (document.referrer || '') : '',
             dwell_seconds: 0
         });
-    } catch (err) {
+    } catch {
         // Silently ignore telemetry failure
     }
 }
@@ -68,7 +62,7 @@ export async function trackSearch(query, resultsCount = 0) {
             search_query: query.trim(),
             results_count: Number(resultsCount) || 0
         });
-    } catch (err) {
+    } catch {
         // Silently ignore
     }
 }
@@ -87,7 +81,7 @@ export async function trackFunnelEvent(eventName, data = {}) {
             cart_total: Number(data.cartTotal) || 0,
             metadata: data.metadata || {}
         });
-    } catch (err) {
+    } catch {
         // Silently ignore
     }
 }

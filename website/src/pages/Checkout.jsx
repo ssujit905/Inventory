@@ -9,8 +9,8 @@ import { trackFunnelEvent } from '../lib/analyticsTracker';
 
 const Checkout = () => {
     const isSubmittingRef = useRef(false);
-    const { cart, cartTotal, clearCart, clearSelectedItems } = useCart();
-    const { customer, register, refreshCustomer } = useCustomer();
+    const { cart, cartTotal, clearSelectedItems } = useCart();
+    const { customer, refreshCustomer } = useCustomer();
     const { showNotification } = useNotification();
     const navigate = useNavigate();
     const location = useLocation();
@@ -47,9 +47,6 @@ const Checkout = () => {
     // the success screen and Pixel must use it, never the client estimate.
     const [placedTotal, setPlacedTotal] = useState(null);
     const [saving, setSaving] = useState(false);
-    const [pin, setPin] = useState('');
-    const [creatingAccount, setCreatingAccount] = useState(false);
-    const [accountCreated, setAccountCreated] = useState(false);
     const [cartReady, setCartReady] = useState(false);
     const [checkoutError, setCheckoutError] = useState(null);
     const [txnRef, setTxnRef] = useState('');
@@ -78,7 +75,7 @@ const Checkout = () => {
         return () => window.removeEventListener('pageshow', clearPaymentRedirect);
     }, []);
 
-    // Telemetry: record begin_checkout funnel step
+    // Telemetry: record begin_checkout funnel step once per mount.
     useEffect(() => {
         if (checkoutItems.length > 0) {
             trackFunnelEvent('begin_checkout', {
@@ -89,16 +86,20 @@ const Checkout = () => {
                 }
             });
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // paymentAvailabilityKey mirrors the derived availability object.
     useEffect(() => {
         setFormData(current => {
             if (paymentAvailability[current.paymentMethod]) return current;
             return { ...current, paymentMethod: availablePaymentMethods[0] || '' };
         });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [paymentAvailabilityKey]);
 
-    // Load delivery branches and autofill customer data
+    // Load delivery branches and autofill customer data.
+    // Re-runs on login change; cart edits mid-checkout don't refetch branches.
     useEffect(() => {
         const fetchBranchesAndAutofill = async () => {
             // 1. Fetch cities, scoped to the order's source:
@@ -171,6 +172,7 @@ const Checkout = () => {
             setLoadingBranches(false);
         };
         fetchBranchesAndAutofill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customer]);
 
     // Update selected branch when city changes
@@ -180,11 +182,12 @@ const Checkout = () => {
         setFormData(f => ({ ...f, city: cityName }));
     };
 
-    // Fix hydration race & Sync live coin balance on mount
+    // Fix hydration race & Sync live coin balance on mount.
     useEffect(() => {
         const timer = setTimeout(() => setCartReady(true), 100);
         refreshCustomer();
         return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Redirect if cart is empty (and NOT a Buy Now and order not placed)
@@ -437,6 +440,8 @@ const Checkout = () => {
 
                 // COD: show local success screen
                 setOrderNumber(result.order_number);
+                // The Bank Transfer success box quotes this as the payment ref.
+                setTxnRef(result.order_number);
                 setIsOrdered(true);
                 showNotification('Order placed successfully!', 'success');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -460,21 +465,6 @@ const Checkout = () => {
         }
     };
 
-
-    const handleCreateAccount = async () => {
-        if (pin.length < 4) return showNotification('Please enter a 4-digit PIN', 'warning');
-        setCreatingAccount(true);
-        try {
-            const result = await register(formData.fullName, formData.phone, pin, formData.address, formData.city);
-            if (!result.success) throw new Error(result.error || 'Could not create account');
-            setAccountCreated(true);
-            showNotification('Account created! Your order is saved.', 'success');
-        } catch (err) {
-            showNotification('Could not link account: ' + (err.message || 'Please try again'), 'error');
-        } finally {
-            setCreatingAccount(false);
-        }
-    };
 
     return (
         <div className="section" style={{ background: '#f8fafc', minHeight: '90vh', paddingTop: '1rem', paddingBottom: '3.5rem' }}>

@@ -11,7 +11,12 @@ const Shop = () => {
     const navigate = useNavigate();
     
     // States
-    const [searchQuery, setSearchQuery] = useState('');
+    // The URL (?q=) is the source of truth for search — derived during
+    // render, no sync effect needed.
+    const searchQuery = useMemo(
+        () => new URLSearchParams(location.search).get('q') || '',
+        [location.search]
+    );
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [sortBy, setSortBy] = useState('Newest');
     const [showFilters, setShowFilters] = useState(false);
@@ -21,11 +26,6 @@ const Shop = () => {
         const cats = ['All', ...new Set(products.map(p => p.category))];
         return cats;
     }, [products]);
-
-    useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        setSearchQuery(params.get('q') || '');
-    }, [location.search]);
 
     // Filtering & Sorting Logic
     const filteredProducts = useMemo(() => {

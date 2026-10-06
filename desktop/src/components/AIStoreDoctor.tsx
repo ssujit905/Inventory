@@ -149,7 +149,14 @@ export default function AIStoreDoctor() {
         }
     };
 
-    const formatBold = (text: string) => text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold">$1</strong>');
+    const escapeHtml = (str: string) =>
+        str.replace(/&/g, '&amp;')
+           .replace(/</g, '&lt;')
+           .replace(/>/g, '&gt;')
+           .replace(/"/g, '&quot;')
+           .replace(/'/g, '&#039;');
+
+    const formatBold = (text: string) => escapeHtml(text).replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold">$1</strong>');
 
     const renderMarkdown = (md: string, compact = false) => {
         if (!md) return null;

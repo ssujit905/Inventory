@@ -1,17 +1,30 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://abmsiyczgmdhsaebjsbk.supabase.co'
-const SUPABASE_Key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFibXNpeWN6Z21kaHNhZWJqc2JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNDY5NTMsImV4cCI6MjA4NTYyMjk1M30._iYMW2hbewo4QS73MMA167BB91ZKSFx6zCmDDZDVLxo'
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_Key)
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('ERROR: Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment.')
+    console.error('Usage: SUPABASE_URL=... SUPABASE_ANON_KEY=... ADMIN_EMAIL=... ADMIN_PASSWORD=... node scripts/create-admin.js')
+    process.exit(1)
+}
+
+const email = process.env.ADMIN_EMAIL || process.argv[2]
+const password = process.env.ADMIN_PASSWORD || process.argv[3]
+
+if (!email || !password) {
+    console.error('ERROR: Admin email and password must be provided via environment variables or CLI arguments.')
+    console.error('Usage: ADMIN_EMAIL="admin@example.com" ADMIN_PASSWORD="secure_password" node scripts/create-admin.js')
+    console.error('   or: node scripts/create-admin.js "admin@example.com" "secure_password"')
+    process.exit(1)
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 async function createAdmin() {
-    console.log('Attempting to create admin user...')
+    console.log(`Attempting to set up admin user: ${email}...`)
 
-    const email = 'ssujit905@gmail.com'
-    const password = 'Sujitsam@1'
-
-    // 1. Try to Sign In first (since user might exist)
+    // 1. Try to Sign In first (if user already exists)
     let { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -19,7 +32,7 @@ async function createAdmin() {
 
     // If sign in fails, try signing up
     if (error) {
-        console.log('User not found, signing up...')
+        console.log('User not found or credentials mismatched, attempting sign up...')
         const signUpResult = await supabase.auth.signUp({
             email,
             password,
@@ -30,7 +43,7 @@ async function createAdmin() {
 
     if (error) {
         console.error('Error authenticating:', error.message)
-        return
+        process.exit(1)
     }
 
     const user = data.user
@@ -38,37 +51,38 @@ async function createAdmin() {
 
     if (!user) {
         console.error('User creation failed (no user returned).')
-        return
+        process.exit(1)
     }
 
-    console.log('User created with ID:', user.id)
+    console.log('User authenticated with ID:', user.id)
 
     if (!session) {
-        console.warn('WARNING: No session returned. Email confirmation might be required.')
-        console.warn('Cannot automatically insert Profile row safely via Client (RLS requires active session).')
-        console.warn('Please check your email to confirm, specifically for:', email)
+        console.warn('WARNING: No session returned. Email confirmation may be required.')
+        console.warn('Please confirm the email if required by Supabase settings.')
         return
     }
 
-    // 2. Insert Profile
-    console.log('Session active. Attempting to create Admin Profile...')
+    // 2. Insert or update Admin Profile
+    console.log('Ensuring Admin Profile exists...')
 
     const { error: profileError } = await supabase
         .from('profiles')
-        .insert([
-            {
-                id: user.id,
-                role: 'admin',
-                full_name: 'Admin User'
-            }
-        ])
+        .upsert({
+            id: user.id,
+            role: 'admin',
+            full_name: 'Admin User',
+            email: email
+        })
 
     if (profileError) {
         console.error('Error creating profile:', profileError.message)
-        console.log('Tip: Does the "profiles" table exist? Did you run the schema SQL?')
+        process.exit(1)
     } else {
-        console.log('SUCCESS: Admin profile created!')
+        console.log('SUCCESS: Admin profile verified and ready!')
     }
 }
 
-createAdmin()
+createAdmin().catch((err) => {
+    console.error('Fatal error creating admin:', err)
+    process.exit(1)
+})

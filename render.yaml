@@ -26,7 +26,7 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false # optional; enables product writes + privileged reads
       - key: VERIFY_TOKEN
-        sync: false # must match Meta app Verify Token (current: my_secure_token_123)
+        sync: false # must match the Verify Token set in your Meta App Dashboard
       - key: PAGE_ACCESS_TOKEN
         sync: false
       - key: FACEBOOK_APP_SECRET

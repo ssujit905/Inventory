@@ -399,14 +399,29 @@ export default function WebsiteSettingsPage() {
         if (isReadOnly) return;
         const file = e.target.files?.[0];
         if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            e.target.value = '';
+            return showToast('Please choose an image file', 'error');
+        }
 
         setUploading(key);
         try {
-            const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+            // Hero banners are wide — allow 1920px so they stay sharp on desktop.
+            let body: File | Blob = file;
+            let contentType: string | undefined;
+            try {
+                body = await compressImage(file, 1920);
+                contentType = 'image/jpeg';
+            } catch {
+                // Unsupported format — upload the original so save never breaks.
+            }
+            const base = file.name.replace(/\s+/g, '_').replace(/\.[^.]+$/, '');
+            const origExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}_${base}${contentType ? '.jpg' : (origExt ? `.${origExt}` : '')}`;
             const { error: uploadError } = await supabaseWithTimeout(
                 supabase.storage
                     .from('website-images')
-                    .upload(fileName, file),
+                    .upload(fileName, body, { contentType }),
                 120000 // Give large images up to 2 mins
             );
 
