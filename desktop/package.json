@@ -1,12 +1,14 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/entry.js",
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && vite",
     "build": "tsc -b && vite build && electron-builder",
+    "build:unsigned": "tsc -b && vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "open-app": "node scripts/open-app.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
