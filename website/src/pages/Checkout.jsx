@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useCart } from '../context/CartContext';
 import { Truck, CreditCard, ChevronLeft, Loader2, MapPin, Info, AlertTriangle, ArrowLeft, CheckCircle, ShoppingBag, ArrowRight, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 import { useCustomer } from '../context/CustomerContext';
 import { useNotification } from '../context/NotificationContext';
 import { trackFunnelEvent } from '../lib/analyticsTracker';
@@ -58,14 +59,45 @@ const Checkout = () => {
     const [selectedBranch, setSelectedBranch] = useState(null);
     const [useCoins, setUseCoins] = useState(false);
 
-    const [formData, setFormData] = useState({
-        fullName: '',
-        phone: '',
-        phone2: '',
-        address: '',
-        city: '',
-        paymentMethod: 'COD'
+    const [formData, setFormData] = useState(() => {
+        try {
+            const savedDraft = sessionStorage.getItem('shopy_checkout_draft');
+            if (savedDraft) {
+                const parsed = JSON.parse(savedDraft);
+                if (parsed && typeof parsed === 'object') {
+                    return {
+                        fullName: parsed.fullName || '',
+                        phone: parsed.phone || '',
+                        phone2: parsed.phone2 || '',
+                        address: parsed.address || '',
+                        city: parsed.city || '',
+                        paymentMethod: parsed.paymentMethod || 'COD'
+                    };
+                }
+            }
+        } catch {
+            // Ignore storage errors in private browsing
+        }
+        return {
+            fullName: '',
+            phone: '',
+            phone2: '',
+            address: '',
+            city: '',
+            paymentMethod: 'COD'
+        };
     });
+
+    // Save checkout form draft to handle process death, page reload, or switching tabs (Term 11)
+    useEffect(() => {
+        try {
+            if (formData.fullName || formData.phone || formData.address) {
+                sessionStorage.setItem('shopy_checkout_draft', JSON.stringify(formData));
+            }
+        } catch {
+            // Ignore storage errors
+        }
+    }, [formData]);
 
     // A native payment-form POST can place this page in the browser's back/forward cache.
     // Clear the transient gateway overlay when a shopper returns with the Back button.
@@ -120,16 +152,20 @@ const Checkout = () => {
             } else {
                 branchQuery = branchQuery.is('vendor_id', null);
             }
-            const { data: scopedData } = await branchQuery.order('city', { ascending: true });
+            const { data: scopedData } = await safeFetch(() =>
+                branchQuery.order('city', { ascending: true })
+            );
 
             let loadedBranches = scopedData || [];
             // Vendor hasn't set up delivery areas yet — fall back to store branches
             if (singleVendor && loadedBranches.length === 0) {
-                const { data: fallback } = await supabase
-                    .from('website_delivery_branches')
-                    .select('*')
-                    .is('vendor_id', null)
-                    .order('city', { ascending: true });
+                const { data: fallback } = await safeFetch(() =>
+                    supabase
+                        .from('website_delivery_branches')
+                        .select('*')
+                        .is('vendor_id', null)
+                        .order('city', { ascending: true })
+                );
                 loadedBranches = fallback || [];
             }
             setBranches(loadedBranches);
@@ -137,13 +173,15 @@ const Checkout = () => {
             // 2. Fetch last order to autofill if logged in
             let lastOrderDetails = null;
             if (customer) {
-                const { data: lastOrder } = await supabase
-                    .from('website_orders')
-                    .select('*')
-                    .eq('phone', customer.phone)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+                const { data: lastOrder } = await safeFetch(() =>
+                    supabase
+                        .from('website_orders')
+                        .select('*')
+                        .eq('phone', customer.phone)
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle()
+                );
                 
                 if (lastOrder) {
                     lastOrderDetails = lastOrder;
@@ -237,10 +275,12 @@ const Checkout = () => {
         setSaving(true);
         try {
             // 1. Live stock audit
-            const { data: latestStock, error: stockError } = await supabase
-                .from('website_variant_stock_view')
-                .select('variant_id, current_stock, sku, is_bundle')
-                .in('variant_id', checkoutItems.map(i => i.variant_id));
+            const { data: latestStock, error: stockError } = await safeFetch(() =>
+                supabase
+                    .from('website_variant_stock_view')
+                    .select('variant_id, current_stock, sku, is_bundle')
+                    .in('variant_id', checkoutItems.map(i => i.variant_id))
+            );
 
             if (stockError) throw stockError;
 
@@ -275,7 +315,9 @@ const Checkout = () => {
                 // 1. Server prices the order and freezes the quote in a payment
                 //    intent. Only variant ids + quantities leave the browser —
                 //    amounts are never trusted from here.
-                const { data: intent, error: intentError } = await supabase.rpc('create_payment_intent', {
+                //    Fail-fast timeout with NO auto-retry: retrying a payment
+                //    intent could double-charge on a slow connection.
+                const { data: intent, error: intentError } = await supabaseWithTimeout(supabase.rpc('create_payment_intent', {
                     p_customer_name: formData.fullName,
                     p_phone: formData.phone,
                     p_phone2: formData.phone2,
@@ -285,7 +327,7 @@ const Checkout = () => {
                     p_items: checkoutItems.map(item => ({ variant_id: item.variant_id, quantity: item.quantity })),
                     p_coins_used: appliedCoinDiscount,
                     p_ad_id: checkoutItems[0]?.ad_id || null
-                });
+                }));
                 if (intentError || !intent?.intent_token) {
                     if (/PRODUCT_SOLD_OUT|PRODUCT_UNAVAILABLE|PAYMENT_METHOD_NOT_ALLOWED|INVALID_VARIANT|INVALID_QUANTITY/.test(intentError?.message || '')) {
                         setCheckoutError(`This order can't be placed: ${intentError.message}. Please review your cart and try again.`);
@@ -298,14 +340,14 @@ const Checkout = () => {
                 sessionStorage.setItem('pending_esewa_intent', JSON.stringify({ intent_token: intent.intent_token }));
 
                 // 2. Edge function signs the INTENT totals (not browser amounts).
-                const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
+                const { data: gatewayPayment, error: gatewayError } = await supabaseWithTimeout(supabase.functions.invoke('payment-gateway', {
                     body: {
                         action: 'create-esewa-payment',
                         intentToken: intent.intent_token,
                         successUrl: `${window.location.origin}/payment-success`,
                         failureUrl: `${window.location.origin}/payment-failure`
                     }
-                });
+                }));
                 if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
                     throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the eSewa payment.');
                 }
@@ -330,7 +372,8 @@ const Checkout = () => {
             // ── Bank Transfer / Fonepay Payment Flow (Deferred Order Creation) ───────────────────────────
             if (formData.paymentMethod === 'Bank Transfer') {
                 // 1. Server-priced payment intent (amounts never leave the browser).
-                const { data: intent, error: intentError } = await supabase.rpc('create_payment_intent', {
+                //    No auto-retry — same double-charge rationale as eSewa above.
+                const { data: intent, error: intentError } = await supabaseWithTimeout(supabase.rpc('create_payment_intent', {
                     p_customer_name: formData.fullName,
                     p_phone: formData.phone,
                     p_phone2: formData.phone2,
@@ -340,7 +383,7 @@ const Checkout = () => {
                     p_items: checkoutItems.map(item => ({ variant_id: item.variant_id, quantity: item.quantity })),
                     p_coins_used: appliedCoinDiscount,
                     p_ad_id: checkoutItems[0]?.ad_id || null
-                });
+                }));
                 if (intentError || !intent?.intent_token) {
                     if (/PRODUCT_SOLD_OUT|PRODUCT_UNAVAILABLE|PAYMENT_METHOD_NOT_ALLOWED|INVALID_VARIANT|INVALID_QUANTITY/.test(intentError?.message || '')) {
                         setCheckoutError(`This order can't be placed: ${intentError.message}. Please review your cart and try again.`);
@@ -360,9 +403,9 @@ const Checkout = () => {
 
                 // 2. Edge signs the INTENT total; PRN is assigned server-side.
                 const returnUrl = `${window.location.origin}/payment-success`;
-                const { data: gatewayPayment, error: gatewayError } = await supabase.functions.invoke('payment-gateway', {
+                const { data: gatewayPayment, error: gatewayError } = await supabaseWithTimeout(supabase.functions.invoke('payment-gateway', {
                     body: { action: 'create-fonepay-payment', intentToken: intent.intent_token, date: dateStr, returnUrl }
-                });
+                }));
                 if (gatewayError || !gatewayPayment?.gatewayUrl || !gatewayPayment?.fields) {
                     throw new Error(gatewayError?.message || gatewayPayment?.error || 'Unable to prepare the Fonepay payment.');
                 }
@@ -384,8 +427,10 @@ const Checkout = () => {
                 return;
             }
 
-            // 3. For Non-eSewa Payments (COD, Bank Transfer): Create order immediately in DB
-            const { data: result, error: rpcError } = await supabase.rpc('create_atomic_website_order', {
+            // 3. For Non-eSewa Payments (COD, Bank Transfer): Create order immediately in DB.
+            //    No auto-retry: the RPC is not idempotent — a blind retry after
+            //    a response lost on a slow connection would create a duplicate order.
+            const { data: result, error: rpcError } = await supabaseWithTimeout(supabase.rpc('create_atomic_website_order', {
                 p_customer_name: formData.fullName,
                 p_phone: formData.phone,
                 p_phone2: formData.phone2,
@@ -397,7 +442,7 @@ const Checkout = () => {
                 p_items: orderItems,
                 p_coins_used: appliedCoinDiscount,
                 p_ad_id: checkoutItems[0]?.ad_id || null
-            });
+            }));
 
             setCheckoutError(null);
             if (rpcError) {
@@ -443,6 +488,7 @@ const Checkout = () => {
                 // The Bank Transfer success box quotes this as the payment ref.
                 setTxnRef(result.order_number);
                 setIsOrdered(true);
+                try { sessionStorage.removeItem('shopy_checkout_draft'); } catch { /* storage unavailable — draft simply won't clear */ }
                 showNotification('Order placed successfully!', 'success');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 if (!isBuyNow) clearSelectedItems();
@@ -458,7 +504,13 @@ const Checkout = () => {
                 dropReason: err.message || 'Submission error',
                 metadata: { paymentMethod: formData.paymentMethod }
             });
-            showNotification('Order failed: ' + (err.message || 'Please try again'), 'error');
+            const timedOut = /NETWORK_TIMEOUT|TimeoutError|AbortError/i.test(String(err?.message || ''));
+            showNotification(
+                timedOut
+                    ? 'Network timeout. Please check your connection and try again.'
+                    : 'Order failed: ' + (err.message || 'Please try again'),
+                'error'
+            );
         } finally {
             setSaving(false);
             isSubmittingRef.current = false;

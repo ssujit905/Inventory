@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Star, User, Loader2, MessageCircle, ChevronRight } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 
 const AllReviews = () => {
     const { id } = useParams();
@@ -14,16 +15,20 @@ const AllReviews = () => {
         const fetchAll = async () => {
             try {
                 const [productRes, ratingsRes] = await Promise.all([
-                    supabase
-                        .from('website_products')
-                        .select('title')
-                        .eq('id', id)
-                        .maybeSingle(),
-                    supabase
-                        .from('website_product_ratings')
-                        .select('*')
-                        .eq('product_id', id)
-                        .order('created_at', { ascending: false })
+                    safeFetch(() =>
+                        supabase
+                            .from('website_products')
+                            .select('title')
+                            .eq('id', id)
+                            .maybeSingle()
+                    ),
+                    safeFetch(() =>
+                        supabase
+                            .from('website_product_ratings')
+                            .select('*')
+                            .eq('product_id', id)
+                            .order('created_at', { ascending: false })
+                    )
                 ]);
 
                 if (productRes.error) throw productRes.error;

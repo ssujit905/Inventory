@@ -1,6 +1,6 @@
 import { Mail, Phone, MapPin, Send, Plus, Minus, MessageCircle, ChevronDown, ChevronRight, HelpCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 
 const Contact = () => {
     const [openFaq, setOpenFaq] = useState(0);
@@ -50,12 +50,13 @@ const Contact = () => {
         try {
             // SECURITY: contact messages go through a validated + throttled
             // RPC. Direct table inserts are revoked for the anon key.
-            const { data, error: err } = await supabase.rpc('submit_contact_message', {
+            // No auto-retry: the RPC is throttled (TOO_MANY_MESSAGES).
+            const { data, error: err } = await supabaseWithTimeout(supabase.rpc('submit_contact_message', {
                 p_name: formData.name,
                 p_email: formData.email,
                 p_phone: formData.phone,
                 p_message: formData.message
-            });
+            }));
             if (err || !data?.success) throw new Error(err?.message || data?.error || 'Failed to send message.');
             setSuccess(true);
             setFormData({ name: '', email: '', phone: '', message: '' });

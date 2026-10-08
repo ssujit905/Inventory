@@ -59,9 +59,21 @@ const Shop = () => {
         }
     }, [loading, searchQuery, filteredProducts.length]);
 
+    // Pagination (Term 14): chunked rendering eliminates Jank & GC pressure
+    const ITEMS_PER_PAGE = 24;
+    const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
+
+    useEffect(() => {
+        setVisibleCount(ITEMS_PER_PAGE);
+    }, [searchQuery, selectedCategory, sortBy]);
+
+    const displayedProducts = useMemo(() => {
+        return filteredProducts.slice(0, visibleCount);
+    }, [filteredProducts, visibleCount]);
+
     // Masonry Columns for Mobile
-    const leftColumn = filteredProducts.filter((_, idx) => idx % 2 === 0);
-    const rightColumn = filteredProducts.filter((_, idx) => idx % 2 !== 0);
+    const leftColumn = displayedProducts.filter((_, idx) => idx % 2 === 0);
+    const rightColumn = displayedProducts.filter((_, idx) => idx % 2 !== 0);
 
     return (
         <div className="shop-page" style={{ background: '#f8fafc', minHeight: '100vh' }}>
@@ -127,14 +139,49 @@ const Shop = () => {
                         ))}
                     </div>
                 ) : filteredProducts.length > 0 ? (
-                    <div className="shop-grid">
-                        <div className="grid-column" style={{ paddingTop: '12px' }}>
-                            {leftColumn.map(p => <ProductCard key={p.id} product={p} />)}
+                    <>
+                        <div className="shop-grid">
+                            <div className="grid-column" style={{ paddingTop: '12px' }}>
+                                {leftColumn.map(p => <ProductCard key={p.id} product={p} />)}
+                            </div>
+                            <div className="grid-column" style={{ marginTop: '-4px' }}>
+                                {rightColumn.map(p => <ProductCard key={p.id} product={p} />)}
+                            </div>
                         </div>
-                        <div className="grid-column" style={{ marginTop: '-4px' }}>
-                            {rightColumn.map(p => <ProductCard key={p.id} product={p} />)}
-                        </div>
-                    </div>
+
+                        {filteredProducts.length > visibleCount && (
+                            <div style={{ textAlign: 'center', marginTop: '2.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-gray)', fontWeight: '600' }}>
+                                    Showing {displayedProducts.length} of {filteredProducts.length} items
+                                </p>
+                                <button
+                                    onClick={() => setVisibleCount(c => c + ITEMS_PER_PAGE)}
+                                    style={{
+                                        padding: '0.85rem 2.25rem',
+                                        borderRadius: '100px',
+                                        border: '1.5px solid var(--primary-blue)',
+                                        background: 'white',
+                                        color: 'var(--primary-blue)',
+                                        fontWeight: '800',
+                                        fontSize: '0.9rem',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 4px 14px rgba(30, 41, 59, 0.08)',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => {
+                                        e.currentTarget.style.background = 'var(--primary-blue)';
+                                        e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseLeave={e => {
+                                        e.currentTarget.style.background = 'white';
+                                        e.currentTarget.style.color = 'var(--primary-blue)';
+                                    }}
+                                >
+                                    Load More Products ({filteredProducts.length - visibleCount} more)
+                                </button>
+                            </div>
+                        )}
+                    </>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '5rem 1rem' }}>
                         <div style={{ width: '80px', height: '80px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', boxShadow: 'var(--shadow-sm)' }}>

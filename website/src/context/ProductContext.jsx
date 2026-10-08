@@ -40,9 +40,11 @@ export const ProductProvider = ({ children }) => {
 
             if (data) {
                 // Fetch stock info for all products in one go to be efficient
-                const { data: stockData } = await supabase
-                    .from('website_variant_stock_view')
-                    .select('*');
+                const { data: stockData } = await safeFetch(() =>
+                    supabase
+                        .from('website_variant_stock_view')
+                        .select('*')
+                );
 
                 // Normalize to the shape the website expects
                 const normalized = data.map(p => {

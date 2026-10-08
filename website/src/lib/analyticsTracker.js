@@ -1,9 +1,12 @@
-import { supabase } from './supabase';
+import { supabase, supabaseWithTimeout } from './supabase';
 
 /**
  * Anonymous, non-blocking telemetry & funnel tracker for Shopy Nepal.
  * Errors are caught silently so tracking NEVER interferes with user shopping.
+ * Each insert is bounded by a short fail-fast timeout (no retry — telemetry
+ * must never stall the page or pile up on a slow connection).
  */
+const TELEMETRY_TIMEOUT_MS = 8000;
 
 const SESSION_KEY = 'sn_anon_session_id';
 
@@ -25,14 +28,14 @@ export async function trackPageView(path, productId = null, productTitle = null)
     try {
         const sid = getSessionId();
 
-        await supabase.from('website_page_visits').insert({
+        await supabaseWithTimeout(supabase.from('website_page_visits').insert({
             session_id: sid,
             page_path: path,
             product_id: productId ? Number(productId) : null,
             product_title: productTitle || null,
             referrer: typeof document !== 'undefined' ? (document.referrer || '') : '',
             dwell_seconds: 0
-        });
+        }), TELEMETRY_TIMEOUT_MS);
     } catch {
         // Silently ignore telemetry failure
     }
@@ -57,11 +60,11 @@ export async function trackSearch(query, resultsCount = 0) {
 
     try {
         const sid = getSessionId();
-        await supabase.from('website_search_logs').insert({
+        await supabaseWithTimeout(supabase.from('website_search_logs').insert({
             session_id: sid,
             search_query: query.trim(),
             results_count: Number(resultsCount) || 0
-        });
+        }), TELEMETRY_TIMEOUT_MS);
     } catch {
         // Silently ignore
     }
@@ -71,7 +74,7 @@ export async function trackSearch(query, resultsCount = 0) {
 export async function trackFunnelEvent(eventName, data = {}) {
     try {
         const sid = getSessionId();
-        await supabase.from('website_funnel_events').insert({
+        await supabaseWithTimeout(supabase.from('website_funnel_events').insert({
             session_id: sid,
             event_name: eventName,
             product_id: data.productId ? Number(data.productId) : null,
@@ -80,7 +83,7 @@ export async function trackFunnelEvent(eventName, data = {}) {
             drop_reason: data.dropReason || null,
             cart_total: Number(data.cartTotal) || 0,
             metadata: data.metadata || {}
-        });
+        }), TELEMETRY_TIMEOUT_MS);
     } catch {
         // Silently ignore
     }

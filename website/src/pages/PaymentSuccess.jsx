@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, ArrowRight, ShoppingBag, Calendar, CreditCard, Info } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
 import { useNotification } from '../context/NotificationContext';
 import { useCustomer } from '../context/CustomerContext';
 
@@ -87,9 +87,11 @@ const PaymentSuccess = () => {
                         return;
                     }
 
-                    const { data: completed, error: completeError } = await supabase.functions.invoke('payment-gateway', {
+                    // No auto-retry: completion creates the order server-side —
+                    // a blind retry after a lost response could double-create it.
+                    const { data: completed, error: completeError } = await supabaseWithTimeout(supabase.functions.invoke('payment-gateway', {
                         body: { action: 'complete-esewa-order', paymentDetails, intentToken: stored.intent_token }
-                    });
+                    }));
                     if (completeError || !completed?.success) {
                         throw new Error(completeError?.message || completed?.error || 'Payment verification failed.');
                     }
@@ -149,9 +151,10 @@ const PaymentSuccess = () => {
                     // The PRN is the server-assigned intent ref; completion binds
                     // amount + signature server-side and creates/marks the order
                     // there. No pending-order blob is trusted from the browser.
-                    const { data: fonepayDone, error: fonepayError } = await supabase.functions.invoke('payment-gateway', {
+                    // No auto-retry: same double-create rationale as eSewa above.
+                    const { data: fonepayDone, error: fonepayError } = await supabaseWithTimeout(supabase.functions.invoke('payment-gateway', {
                         body: { action: 'complete-fonepay-order', paymentDetails: fonepayDetails }
-                    });
+                    }));
                     if (fonepayError || !fonepayDone?.success) {
                         throw new Error(fonepayError?.message || fonepayDone?.error || 'Payment verification failed.');
                     }

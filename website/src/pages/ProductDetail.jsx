@@ -25,9 +25,11 @@ import {
     Store
 } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 import { storeSlug } from '../lib/storeSlug';
 import { useNotification } from '../context/NotificationContext';
+import { useProducts } from '../context/ProductContext';
 import { trackFunnelEvent } from '../lib/analyticsTracker';
 
 const ProductDetail = () => {
@@ -36,6 +38,7 @@ const ProductDetail = () => {
     const location = useLocation();
     const { addToCart, cart } = useCart();
     const { showNotification } = useNotification();
+    const { products } = useProducts();
     const [product, setProduct] = useState(null);
     const [variants, setVariants] = useState([]);
     const [selectedColor, setSelectedColor] = useState(null);
@@ -98,45 +101,70 @@ const ProductDetail = () => {
         : rawPrice;
 
     useEffect(() => {
+        let isMounted = true;
+
+        // Instant paint: If product is already available in ProductContext cache, paint immediately (Zero Jank / Instant UX)
+        if (products && products.length > 0 && !product) {
+            const cachedMatch = products.find(p => p.id === id);
+            if (cachedMatch) {
+                setProduct(cachedMatch);
+                setLoading(false);
+            }
+        }
+
         const fetchProductData = async () => {
             try {
-                // 1. Fetch Product Basic Info with Images
-                const { data: p } = await supabase
-                    .from('website_products')
-                    .select('*, website_product_images(*)')
-                    .eq('id', id)
-                    .single();
+                // 1. Fetch Product Basic Info with Images using retry-safe fetch
+                const { data: p, error: pErr } = await safeFetch(() =>
+                    supabase
+                        .from('website_products')
+                        .select('*, website_product_images(*)')
+                        .eq('id', id)
+                        .single()
+                );
                 
-                if (!p) return;
-                setProduct(p);
-                trackFunnelEvent('view_product', {
-                    productId: p.id,
-                    productTitle: p.title,
-                    metadata: { price: p.price, category: p.category, vendor_id: p.vendor_id }
-                });
+                if (!isMounted) return;
+                if (pErr) console.error("Product fetch error:", pErr);
+                if (p) {
+                    setProduct(p);
+                    trackFunnelEvent('view_product', {
+                        productId: p.id,
+                        productTitle: p.title,
+                        metadata: { price: p.price, category: p.category, vendor_id: p.vendor_id }
+                    });
+                }
 
                 // Fetch vendor store info if product belongs to a vendor
-                if (p.vendor_id) {
-                    const { data: vProfile } = await supabase
-                        .from('vendor_store_profiles')
-                        .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
-                        .eq('id', p.vendor_id)
-                        .maybeSingle();
+                if (p?.vendor_id) {
+                    const { data: vProfile } = await safeFetch(() =>
+                        supabase
+                            .from('vendor_store_profiles')
+                            .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
+                            .eq('id', p.vendor_id)
+                            .maybeSingle()
+                    );
+                    if (!isMounted) return;
                     if (vProfile) setVendorProfile(vProfile);
 
                     // Store stats: product count + average rating across the store
-                    const { data: storeProducts } = await supabase
-                        .from('website_products')
-                        .select('id')
-                        .eq('vendor_id', p.vendor_id)
-                        .eq('is_active', true);
+                    const { data: storeProducts } = await safeFetch(() =>
+                        supabase
+                            .from('website_products')
+                            .select('id')
+                            .eq('vendor_id', p.vendor_id)
+                            .eq('is_active', true)
+                    );
+                    if (!isMounted) return;
                     const productIds = (storeProducts || []).map(sp => sp.id);
                     setVendorProductCount(productIds.length);
                     if (productIds.length > 0) {
-                        const { data: storeRatings } = await supabase
-                            .from('website_product_ratings')
-                            .select('rating')
-                            .in('product_id', productIds);
+                        const { data: storeRatings } = await safeFetch(() =>
+                            supabase
+                                .from('website_product_ratings')
+                                .select('rating')
+                                .in('product_id', productIds)
+                        );
+                        if (!isMounted) return;
                         const all = storeRatings || [];
                         if (all.length > 0) {
                             const avg = all.reduce((s, r) => s + Number(r.rating), 0) / all.length;
@@ -146,7 +174,10 @@ const ProductDetail = () => {
                 }
 
                 // 2. Fetch Variants with real-time stock
-                const { data: v } = await supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id);
+                const { data: v } = await safeFetch(() =>
+                    supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id)
+                );
+                if (!isMounted) return;
                 setVariants(v || []);
 
                 // Auto-select if single/standard variant.
@@ -172,13 +203,17 @@ const ProductDetail = () => {
                     }
                 }
             } catch (err) {
-                console.error("Fetch error:", err);
+                if (isMounted) console.error("Fetch error:", err);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
         fetchProductData();
-    }, [id]);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [id, products]);
 
     // Ratings state
     const [ratings, setRatings] = useState([]);
@@ -205,11 +240,13 @@ const ProductDetail = () => {
 
     const fetchRatings = useCallback(async () => {
         try {
-            const { data, error } = await supabase
-                .from('website_product_ratings')
-                .select('*')
-                .eq('product_id', id)
-                .order('created_at', { ascending: false });
+            const { data, error } = await safeFetch(() =>
+                supabase
+                    .from('website_product_ratings')
+                    .select('*')
+                    .eq('product_id', id)
+                    .order('created_at', { ascending: false })
+            );
             
             if (error) throw error;
             setRatings(data || []);
@@ -330,7 +367,9 @@ const ProductDetail = () => {
         }
         setNotifyLoading(true);
         try {
-            const { error } = await supabase.from('product_notify_requests').insert([{
+            // No auto-retry: the insert may have landed server-side even if
+            // the response was lost on a slow connection.
+            const { error } = await supabaseWithTimeout(supabase.from('product_notify_requests').insert([{
                 product_id: product.id,
                 variant_id: currentVariant?.variant_id || null,
                 color: selectedColor || '',
@@ -338,7 +377,7 @@ const ProductDetail = () => {
                 customer_name: name,
                 phone,
                 address
-            }]);
+            }]));
             if (error) throw error;
             setNotifySent(true);
             showNotification('We will notify you when it is back in stock!', 'success');

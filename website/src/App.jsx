@@ -4,6 +4,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import { useSettings } from './context/SettingsContext';
 import ScrollToTop from './components/ScrollToTop';
+import NetworkStatus from './components/NetworkStatus';
 import { trackPageView } from './lib/analyticsTracker';
 
 // PERF: route-level code-splitting so the homepage doesn't ship Checkout,
@@ -69,6 +70,7 @@ function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <NetworkStatus />
       <ScrollToTop />
       {!hideGlobalElements && <Header />}
       <main style={{ flex: 1 }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 import ProductCard from '../components/ProductCard';
 import { storeSlug, isUuid } from '../lib/storeSlug';
 import { thumbUrl } from '../lib/imageUrl';
@@ -33,9 +34,11 @@ const StorePage = () => {
 
     const resolveSlug = async (slug) => {
         try {
-            const { data } = await supabase
-                .from('vendor_store_profiles')
-                .select('id, store_name, full_name');
+            const { data } = await safeFetch(() =>
+                supabase
+                    .from('vendor_store_profiles')
+                    .select('id, store_name, full_name')
+            );
             const match = (data || []).find(p => storeSlug(p) === slug);
             if (!match) {
                 setNotFound(true);
@@ -60,11 +63,13 @@ const StorePage = () => {
         setStoreReviews([]);
         try {
             // 1. Vendor store profile
-            const { data: vProfile } = await supabase
-                .from('vendor_store_profiles')
-                .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description, created_at')
-                .eq('id', id)
-                .maybeSingle();
+            const { data: vProfile } = await safeFetch(() =>
+                supabase
+                    .from('vendor_store_profiles')
+                    .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description, created_at')
+                    .eq('id', id)
+                    .maybeSingle()
+            );
             if (!vProfile) {
                 setNotFound(true);
                 return;
@@ -72,23 +77,27 @@ const StorePage = () => {
             setVendorProfile(vProfile);
 
             // 2. Store products (active only)
-            const { data: wpData } = await supabase
-                .from('website_products')
-                .select('*, website_product_images(*)')
-                .eq('vendor_id', id)
-                .eq('is_active', true)
-                .order('created_at', { ascending: false });
+            const { data: wpData } = await safeFetch(() =>
+                supabase
+                    .from('website_products')
+                    .select('*, website_product_images(*)')
+                    .eq('vendor_id', id)
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false })
+            );
 
             const rawProducts = wpData || [];
 
             // 3. Store rating + reviews = all ratings on the store's products only
             const productIds = rawProducts.map(p => p.id);
             if (productIds.length > 0) {
-                const { data: storeRatings } = await supabase
-                    .from('website_product_ratings')
-                    .select('id, product_id, rating, comment, customer_name, created_at')
-                    .in('product_id', productIds)
-                    .order('created_at', { ascending: false });
+                const { data: storeRatings } = await safeFetch(() =>
+                    supabase
+                        .from('website_product_ratings')
+                        .select('id, product_id, rating, comment, customer_name, created_at')
+                        .in('product_id', productIds)
+                        .order('created_at', { ascending: false })
+                );
                 const all = storeRatings || [];
                 setStoreReviews(all);
                 if (all.length > 0) {
@@ -100,9 +109,11 @@ const StorePage = () => {
             }
 
             // 4. Stock info for sold-out badges
-            const { data: stockData } = await supabase
-                .from('website_variant_stock_view')
-                .select('*');
+            const { data: stockData } = await safeFetch(() =>
+                supabase
+                    .from('website_variant_stock_view')
+                    .select('*')
+            );
 
             const normalized = rawProducts.map(p => {
                 const primaryImg = p.website_product_images?.find(i => i.is_primary) || p.website_product_images?.[0];

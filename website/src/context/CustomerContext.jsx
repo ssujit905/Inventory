@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- colocated provider + hook is the project convention */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 
 const CustomerContext = createContext();
 
@@ -32,10 +33,12 @@ export const CustomerProvider = ({ children }) => {
     const login = async (phone, pin) => {
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('customer_login', {
+            // Fail fast on slow connections. No auto-retry: the PIN RPCs are
+            // throttled server-side and a blind retry burns attempts.
+            const { data, error } = await supabaseWithTimeout(supabase.rpc('customer_login', {
                 p_phone: String(phone).trim(),
                 p_pin: String(pin).trim()
-            });
+            }));
 
             if (error || !data?.success) {
                 console.error('Login failure:', error || 'No data');
@@ -61,7 +64,8 @@ export const CustomerProvider = ({ children }) => {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
         
         try {
-            const { data, error } = await supabase.rpc('customer_register', { p_name: name, p_phone: cleanPhone, p_pin: String(pin), p_address: null, p_city: null });
+            // No auto-retry (same throttling rationale as login).
+            const { data, error } = await supabaseWithTimeout(supabase.rpc('customer_register', { p_name: name, p_phone: cleanPhone, p_pin: String(pin), p_address: null, p_city: null }));
             if (error || !data?.success) throw new Error(friendlyAuthError(data?.error || error?.message, 'Registration failed'));
             setCustomer(data.customer);
             sessionStorage.setItem('shopy_customer', JSON.stringify(data.customer));
@@ -78,12 +82,12 @@ export const CustomerProvider = ({ children }) => {
     const updateProfile = async (updates) => {
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('customer_update_profile', {
+            const { data, error } = await supabaseWithTimeout(supabase.rpc('customer_update_profile', {
                 p_token: sessionStorage.getItem('shopy_customer_session'),
                 p_name: updates.name || customer?.name || '',
                 p_address: updates.address,
                 p_city: updates.city
-            });
+            }));
 
             if (error || !data) throw error || new Error('Update failed');
 
@@ -111,7 +115,10 @@ export const CustomerProvider = ({ children }) => {
         const token = sessionStorage.getItem('shopy_customer_session');
         if (!token) return;
         try {
-            const { data, error } = await supabase.rpc('customer_session_profile', { p_token: token });
+            // Read-only: safe to retry with backoff on flaky connections.
+            const { data, error } = await safeFetch(() =>
+                supabase.rpc('customer_session_profile', { p_token: token })
+            );
             if (!error && data?.success && data.customer) {
                 setCustomer(data.customer);
                 try {
@@ -136,13 +143,14 @@ export const CustomerProvider = ({ children }) => {
     const setupPin = async (phone, pin, name = null, address = null, city = null) => {
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('customer_setup_pin', {
+            // No auto-retry (same throttling rationale as login).
+            const { data, error } = await supabaseWithTimeout(supabase.rpc('customer_setup_pin', {
                 p_phone: String(phone).trim(),
                 p_pin: String(pin).trim(),
                 p_name: name || null,
                 p_address: address || null,
                 p_city: city || null
-            });
+            }));
 
             if (error || !data?.success) {
                 throw new Error(friendlyAuthError(data?.error || error?.message, 'Failed to set up account'));

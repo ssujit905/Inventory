@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useCustomer } from '../context/CustomerContext';
 import { useSettings } from '../context/SettingsContext';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseWithTimeout } from '../lib/supabase';
+import { safeFetch } from '../lib/safeFetch';
 import { 
     Package, Phone, Lock, ChevronRight, 
     Truck, CheckCircle, Clock, AlertCircle, ShoppingBag, Coins,
@@ -77,10 +78,12 @@ const MyOrders = () => {
     // Fetch delivery branches for delivery time estimates
     useEffect(() => {
         const fetchBranches = async () => {
-            const { data } = await supabase
-                .from('website_delivery_branches')
-                .select('*')
-                .order('city', { ascending: true });
+            const { data } = await safeFetch(() =>
+                supabase
+                    .from('website_delivery_branches')
+                    .select('*')
+                    .order('city', { ascending: true })
+            );
             if (data && data.length > 0) {
                 setBranches(data);
             }
@@ -128,12 +131,13 @@ const MyOrders = () => {
 
         setPinLoading(true);
         try {
-            // Update PIN via RPC
-            const { data: success, error: updateError } = await supabase.rpc('customer_change_pin', {
+            // Update PIN via RPC (fail fast, no auto-retry: auth RPCs are
+            // rate-limited server-side and a blind retry burns attempts)
+            const { data: success, error: updateError } = await supabaseWithTimeout(supabase.rpc('customer_change_pin', {
                 p_token: sessionStorage.getItem('shopy_customer_session'),
                 p_current_pin: String(currentPin),
                 p_new_pin: String(newPin)
-            });
+            }));
 
             if (updateError || !success) throw updateError || new Error('Failed to update');
             
@@ -153,16 +157,18 @@ const MyOrders = () => {
     }, []);
 
     const fetchBranches = async () => {
-        const { data } = await supabase.from('website_delivery_branches').select('city, delivery_time');
+        const { data } = await safeFetch(() =>
+            supabase.from('website_delivery_branches').select('city, delivery_time')
+        );
         if (data) setBranches(data);
     };
 
     const fetchOrders = useCallback(async () => {
         setLoadingOrders(true);
         try {
-            const { data: res, error: ordersError } = await supabase.rpc('customer_orders', {
+            const { data: res, error: ordersError } = await safeFetch(() => supabase.rpc('customer_orders', {
                 p_token: sessionStorage.getItem('shopy_customer_session')
-            });
+            }));
 
             if (ordersError || !res.success) throw ordersError || new Error(res.error);
 
@@ -174,10 +180,12 @@ const MyOrders = () => {
                     .map(i => i.product_id))
             )];
             if (missingIds.length > 0) {
-                const { data: imgs } = await supabase
-                    .from('website_product_images')
-                    .select('product_id, image_url, is_primary')
-                    .in('product_id', missingIds);
+                const { data: imgs } = await safeFetch(() =>
+                    supabase
+                        .from('website_product_images')
+                        .select('product_id, image_url, is_primary')
+                        .in('product_id', missingIds)
+                );
                 if (imgs) {
                     const best = {};
                     imgs.forEach(img => {
@@ -194,9 +202,9 @@ const MyOrders = () => {
             setOrders(ordersWithImages);
 
             // Securely fetch returns via RPC
-            const { data: retRes, error: retError } = await supabase.rpc('customer_returns', {
+            const { data: retRes, error: retError } = await safeFetch(() => supabase.rpc('customer_returns', {
                 p_token: sessionStorage.getItem('shopy_customer_session')
-            });
+            }));
             
             if (!retError && retRes.success) {
                 const statusMap = {};
@@ -205,10 +213,12 @@ const MyOrders = () => {
             }
 
             // Ratings (Selecting order IDs for "Rated" badges can stay public for now if we allow public select on that table)
-            const { data: ratingsData } = await supabase
-                .from('website_product_ratings')
-                .select('order_id')
-                .eq('customer_phone', customer.phone);
+            const { data: ratingsData } = await safeFetch(() =>
+                supabase
+                    .from('website_product_ratings')
+                    .select('order_id')
+                    .eq('customer_phone', customer.phone)
+            );
             
             if (ratingsData) setRatedOrderIds(new Set(ratingsData.map(r => r.order_id).filter(Boolean)));
         } catch (err) {
@@ -243,11 +253,12 @@ const MyOrders = () => {
         try {
             // SECURITY: session token proves order ownership server-side.
             // Tokenless calls are rejected (NOT_AUTHORIZED).
-            const { error: cancelError } = await supabase.rpc('handle_website_order_cancellation', {
+            // No auto-retry: cancellation is a state-changing write.
+            const { error: cancelError } = await supabaseWithTimeout(supabase.rpc('handle_website_order_cancellation', {
                 p_order_id: cancellingOrderId,
                 p_reason: `CUSTOMER: ${String(cancelReason || '').trim().slice(0, 500)}`,
                 p_token: sessionStorage.getItem('shopy_customer_session')
-            });
+            }));
             if (cancelError) throw cancelError;
             
             await fetchOrders();
@@ -342,7 +353,12 @@ const MyOrders = () => {
             const mediaUrls = [];
             for (const f of returnFiles) {
                 const path = `returns/${selectedReturnOrder.id}/${Date.now()}-${f.name}.jpg`;
-                const { error: uploadError } = await supabase.storage.from('images').upload(path, f.file, { contentType: 'image/jpeg' });
+                // Fail fast on stalled uploads; the user retries explicitly
+                // (no auto-retry — a blind retry could double-upload).
+                const { error: uploadError } = await supabaseWithTimeout(
+                    supabase.storage.from('images').upload(path, f.file, { contentType: 'image/jpeg' }),
+                    24000
+                );
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(path);
                 mediaUrls.push({ url: publicUrl, type: 'image' });
@@ -350,13 +366,14 @@ const MyOrders = () => {
             // SECURITY: return requests go through the session-authed RPC,
             // which enforces ownership, delivered status, the 2-day window
             // and media binding server-side. Direct table inserts are revoked.
-            const { data, error: returnError } = await supabase.rpc('customer_request_return', {
+            // No auto-retry: duplicate submission would create a duplicate request.
+            const { data, error: returnError } = await supabaseWithTimeout(supabase.rpc('customer_request_return', {
                 p_token: sessionStorage.getItem('shopy_customer_session'),
                 p_order_id: selectedReturnOrder.id,
                 p_type: returnType,
                 p_message: returnMessage.trim(),
                 p_media: mediaUrls
-            });
+            }));
             if (returnError || !data?.success) {
                 throw new Error(returnError?.message || data?.error || 'Return request failed');
             }
@@ -386,13 +403,15 @@ const MyOrders = () => {
     const confirmRateProduct = async () => {
         setIsRating(true);
         try {
-            const { data: success, error: rateError } = await supabase.rpc('customer_submit_rating', {
+            // No auto-retry: rating grants coins — a blind retry after a
+            // lost response could double-award.
+            const { data: success, error: rateError } = await supabaseWithTimeout(supabase.rpc('customer_submit_rating', {
                 p_token: sessionStorage.getItem('shopy_customer_session'),
                 p_order_id: rateData.orderId,
                 p_product_id: rateData.productId,
                 p_rating: rateValue,
                 p_comment: rateComment
-            });
+            }));
 
             if (rateError || !success) throw rateError || new Error('Rating failed');
 
