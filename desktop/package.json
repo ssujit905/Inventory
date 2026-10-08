@@ -32,12 +32,9 @@
         {
           "target": "dmg",
           "arch": "universal"
-        },
-        {
-          "target": "zip",
-          "arch": "universal"
         }
       ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "compression": "maximum",
       "icon": "build/icon.png",
       "category": "public.app-category.business",
@@ -45,6 +42,30 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "format": "UDZO",
+      "backgroundColor": "#f5f5f7",
+      "iconSize": 160,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "internetEnabled": false,
+      "writeUpdateInfo": false
     },
     "win": {
       "target": "nsis",
