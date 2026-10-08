@@ -4,6 +4,7 @@ import { Package, LayoutDashboard, ShoppingCart, Users, FileText, LogOut, Bell, 
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useSearchStore } from '../hooks/useSearchStore';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import OfflineBanner from '../components/OfflineBanner';
 import { supabase } from '../lib/supabase';
 import { getVendorId } from '../lib/vendorHelpers';
 
@@ -29,7 +30,13 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
     useEffect(() => {
         setIsMenuOpen(false);
-        sessionStorage.setItem('mobile_last_path', location.pathname);
+        // localStorage (not sessionStorage) so the last screen survives an
+        // Android process kill; cleared on explicit logout below.
+        try {
+            localStorage.setItem('mobile_last_path', location.pathname);
+        } catch {
+            // Storage unavailable — resume simply won't restore the path
+        }
     }, [location.pathname]);
 
     useEffect(() => {
@@ -99,7 +106,10 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         {
             channelName: 'mobile-count-updates',
             tables: ['product_lots', 'website_orders', 'website_order_returns', 'product_notify_requests'],
-            pollMs: 8000
+            // Relaxed: this layout never unmounts, so an 8s poll meant 4 count
+            // queries every 8s for the whole session. Realtime pushes instant
+            // updates; the poll is only a fallback. Saves radio + battery.
+            pollMs: 30000
         }
     );
 
@@ -170,6 +180,11 @@ export default function DashboardLayout({ children, role }: { children: React.Re
     }, [query, isSearchOpen]);
 
     const handleLogout = () => {
+        try {
+            localStorage.removeItem('mobile_last_path');
+        } catch {
+            // ignore
+        }
         signOut();
         navigate('/', { replace: true });
     };
@@ -189,7 +204,11 @@ export default function DashboardLayout({ children, role }: { children: React.Re
         if (isRefreshing) return;
         setIsRefreshing(true);
         setPullDistance(64);
-        sessionStorage.setItem('mobile_last_path', location.pathname);
+        try {
+            localStorage.setItem('mobile_last_path', location.pathname);
+        } catch {
+            // ignore
+        }
         setTimeout(() => {
             window.location.reload();
         }, 300);
@@ -238,6 +257,7 @@ export default function DashboardLayout({ children, role }: { children: React.Re
 
     return (
         <div className="flex flex-col h-screen w-full bg-gray-50 dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
+            <OfflineBanner />
             {/* MOBILE TOP BAR */}
             <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sticky top-0 z-30">
                 {/* Left: Menu */}

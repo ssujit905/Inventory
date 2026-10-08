@@ -17,7 +17,12 @@ export default function LoginPage() {
         try {
             await signIn(email, password);
         } catch (err: any) {
-            setError(err.message || 'Failed to sign in');
+            const raw = String(err?.message || '');
+            setError(
+                /NETWORK_TIMEOUT|TimeoutError|AbortError/i.test(raw)
+                    ? 'Network timeout. Please check your connection and try again.'
+                    : (err.message || 'Failed to sign in')
+            );
         } finally {
             setLoading(false);
         }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseWithTimeout } from '../lib/supabase'
 import { type Profile } from '../types/database'
 import type { User } from '@supabase/supabase-js'
 
@@ -42,11 +42,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
 
         try {
-            const { data: profile, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .maybeSingle();
+            // Bounded: on a stalled mobile connection getSession must fail fast
+            // instead of hanging cold start (the global fetch cap is the backstop).
+            const { data: profile, error: profileError } = await supabaseWithTimeout(
+                supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', user.id)
+                    .maybeSingle(),
+                10000
+            );
 
             if (profileError || !profile) {
                 set({ profile: buildFallbackProfile() });
@@ -60,10 +65,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             }
 
             if (isForceAdmin && (currentProfile.role !== 'admin' || currentProfile.permissions !== 'read_write')) {
-                await supabase
-                    .from('profiles')
-                    .update({ role: 'admin', permissions: 'read_write' })
-                    .eq('id', user.id);
+                await supabaseWithTimeout(
+                    supabase
+                        .from('profiles')
+                        .update({ role: 'admin', permissions: 'read_write' })
+                        .eq('id', user.id),
+                    10000
+                );
                 set({ profile: { ...currentProfile, role: 'admin', permissions: 'read_write' } });
                 return;
             }
@@ -84,7 +92,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 if (get().loading) set({ loading: false });
             }, 10000);
 
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            // Bounded: a stalled connection must not hang cold start forever.
+            // On timeout data is null, so read session defensively — the
+            // catch below fails open to the login screen instead of hanging.
+            const sessionRes = await supabaseWithTimeout(
+                supabase.auth.getSession(),
+                8000
+            );
+            const session = sessionRes.data?.session;
+            const sessionError = sessionRes.error;
             if (sessionError) throw sessionError;
 
             if (session?.user) {
@@ -121,15 +137,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     signIn: async (email, password) => {
         signingIn = true;
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            // Bounded: without this the login button spins forever on a
+            // stalled mobile connection instead of showing an error.
+            const { data, error } = await supabaseWithTimeout(
+                supabase.auth.signInWithPassword({ email, password }),
+                15000
+            );
             if (error) throw error;
 
             if (data?.user) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', data.user.id)
-                    .single();
+                const { data: profile } = await supabaseWithTimeout(
+                    supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', data.user.id)
+                        .single(),
+                    10000
+                );
 
                 set({ user: data.user });
                 await get().refreshProfile();
@@ -143,7 +167,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     signOut: async () => {
         try {
             set({ user: null, profile: null });
-            await supabase.auth.signOut();
+            // Bounded but non-critical: local state is already cleared above.
+            await supabaseWithTimeout(supabase.auth.signOut(), 8000);
         } catch (error) {
             console.error('Sign out error:', error);
         }

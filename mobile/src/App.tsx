@@ -40,7 +40,15 @@ const PageFallback = () => (
 
 function App() {
   const { user, profile, initialize, loading } = useAuthStore();
-  const rawPersistedPath = sessionStorage.getItem('mobile_last_path') || '/';
+  // localStorage so the last screen survives an Android process kill
+  // (sessionStorage is wiped with the WebView).
+  const rawPersistedPath = (() => {
+    try {
+      return localStorage.getItem('mobile_last_path') || '/';
+    } catch {
+      return '/';
+    }
+  })();
   const persistedPath = rawPersistedPath === '/admin/search' ? '/admin/dashboard' : rawPersistedPath;
 
   useEffect(() => {

@@ -33,6 +33,12 @@ export function useRealtimeRefresh(
         if (!enabled || tables.length === 0) return;
 
         const runRefresh = async () => {
+            // Battery: never poll while the WebView is backgrounded/hidden.
+            // The focus/visibility handler below triggers a fresh sync the
+            // moment the user returns, so no updates are lost.
+            if (typeof document !== 'undefined' && document.hidden) {
+                return;
+            }
             if (inFlightRef.current) {
                 queuedRef.current = true;
                 return;

@@ -7,7 +7,83 @@ if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Missing Supabase Environment Variables. Check .env file.')
 }
 
+// Hard cap on EVERY request (including auth token refresh). Prevents the
+// "infinite spinner" bug where a request in flight during sleep/app-switch
+// hangs forever and even deadlocks the Supabase auth lock.
+// 25s matches the desktop + website clients.
+const REQUEST_TIMEOUT_MS = 25000
+
+function getTimeoutSignal(ms: number): { signal: AbortSignal; cleanup?: () => void } {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        return { signal: AbortSignal.timeout(ms) }
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+        try {
+            controller.abort(new DOMException('TimeoutError', 'TimeoutError'))
+        } catch {
+            controller.abort()
+        }
+    }, ms)
+    return { signal: controller.signal, cleanup: () => clearTimeout(timer) }
+}
+
+function combineSignals(a?: AbortSignal | null, b?: AbortSignal | null): { signal: AbortSignal; cleanup?: () => void } {
+    if (!a) return { signal: b as AbortSignal }
+    if (!b) return { signal: a }
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
+        try {
+            return { signal: AbortSignal.any([a, b]) }
+        } catch {
+            // fall through to manual combine below
+        }
+    }
+    const controller = new AbortController()
+    const onAbort = () => {
+        try {
+            controller.abort(a.aborted ? a.reason : b.reason)
+        } catch {
+            controller.abort()
+        }
+    }
+    if (a.aborted || b.aborted) {
+        onAbort()
+        return { signal: controller.signal }
+    }
+    a.addEventListener('abort', onAbort, { once: true })
+    b.addEventListener('abort', onAbort, { once: true })
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            a.removeEventListener('abort', onAbort)
+            b.removeEventListener('abort', onAbort)
+        },
+    }
+}
+
+const fetchWithTimeout: typeof fetch = (input, init) => {
+    const timeout = getTimeoutSignal(REQUEST_TIMEOUT_MS)
+    const combined = combineSignals(init?.signal as AbortSignal | null | undefined, timeout.signal)
+    const cleanup = () => {
+        timeout.cleanup?.()
+        combined.cleanup?.()
+    }
+    return fetch(input, { ...init, signal: combined.signal }).then(
+        (res) => {
+            cleanup()
+            return res
+        },
+        (err) => {
+            cleanup()
+            throw err
+        }
+    )
+}
+
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
+    global: {
+        fetch: fetchWithTimeout
+    },
     auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -28,10 +104,11 @@ export async function supabaseWithTimeout<T = any>(
     request: Promise<{ data: T | null; error: any }> | any,
     timeoutMs: number = 30000
 ): Promise<{ data: T | null; error: any }> {
+    let timer: ReturnType<typeof setTimeout> | undefined
     const timeoutPromise = new Promise<{ data: null; error: any }>((_, reject) => {
-        setTimeout(() => reject({ 
-            data: null, 
-            error: { message: 'NETWORK_TIMEOUT', status: 408 } 
+        timer = setTimeout(() => reject({
+            data: null,
+            error: { message: 'NETWORK_TIMEOUT', status: 408 }
         }), timeoutMs);
     });
 
@@ -39,6 +116,8 @@ export async function supabaseWithTimeout<T = any>(
         return await Promise.race([request, timeoutPromise]);
     } catch (err: any) {
         return { data: null, error: err.error || err };
+    } finally {
+        clearTimeout(timer);
     }
 }
 

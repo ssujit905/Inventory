@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleGoHome = () => {
     try {
-      sessionStorage.removeItem('mobile_last_path');
+      localStorage.removeItem('mobile_last_path');
     } catch {
       // ignore
     }
