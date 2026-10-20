@@ -103,28 +103,103 @@ const ProductDetail = () => {
     useEffect(() => {
         let isMounted = true;
 
-        // Instant paint: If product is already available in ProductContext cache, paint immediately (Zero Jank / Instant UX)
+        const initVariantSelection = (vList) => {
+            if (!vList || vList.length === 0) return;
+            const choosable = vList.filter(vi =>
+                (vi.color !== 'Standard' && vi.color !== 'Combo') ||
+                (vi.size !== 'Universal' && vi.size !== 'Package')
+            );
+            const firstColor = vList[0]?.color;
+            if (firstColor) setSelectedColor(prev => prev || firstColor);
+            const sizesForColor = vList.filter(vi => vi.color === firstColor);
+            if (sizesForColor.length === 1) {
+                const only = sizesForColor[0];
+                if (choosable.length <= 1 || only.current_stock > 0) {
+                    setSelectedSize(prev => prev || only.size);
+                }
+            }
+        };
+
+        // Instant paint: If product is already available in ProductContext cache, paint immediately (0ms UX)
         if (products && products.length > 0 && !product) {
-            const cachedMatch = products.find(p => p.id === id);
+            const cachedMatch = products.find(p => String(p.id) === String(id));
             if (cachedMatch) {
                 setProduct(cachedMatch);
+                if (cachedMatch.variations && cachedMatch.variations.length > 0) {
+                    setVariants(cachedMatch.variations);
+                    initVariantSelection(cachedMatch.variations);
+                }
                 setLoading(false);
             }
         }
 
-        const fetchProductData = async () => {
+        const fetchVendorInfo = async (vendorId) => {
             try {
-                // 1. Fetch Product Basic Info with Images using retry-safe fetch
-                const { data: p, error: pErr } = await safeFetch(() =>
+                const { data: vProfile } = await safeFetch(() =>
+                    supabase
+                        .from('vendor_store_profiles')
+                        .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
+                        .eq('id', vendorId)
+                        .maybeSingle()
+                );
+                if (!isMounted) return;
+                if (vProfile) setVendorProfile(vProfile);
+
+                const { data: storeProducts } = await safeFetch(() =>
                     supabase
                         .from('website_products')
-                        .select('*, website_product_images(*)')
-                        .eq('id', id)
-                        .single()
+                        .select('id')
+                        .eq('vendor_id', vendorId)
+                        .eq('is_active', true)
                 );
-                
                 if (!isMounted) return;
-                if (pErr) console.error("Product fetch error:", pErr);
+                const productIds = (storeProducts || []).map(sp => sp.id);
+                setVendorProductCount(productIds.length);
+                if (productIds.length > 0) {
+                    const { data: storeRatings } = await safeFetch(() =>
+                        supabase
+                            .from('website_product_ratings')
+                            .select('rating')
+                            .in('product_id', productIds)
+                    );
+                    if (!isMounted) return;
+                    const all = storeRatings || [];
+                    if (all.length > 0) {
+                        const avg = all.reduce((s, r) => s + Number(r.rating), 0) / all.length;
+                        setVendorRating({ avg, count: all.length });
+                    }
+                }
+            } catch (vErr) {
+                console.warn("Non-critical vendor fetch error:", vErr);
+            }
+        };
+
+        const fetchProductData = async () => {
+            try {
+                // Fetch product info and variant stock in PARALLEL (cuts network latency in half)
+                const [productRes, variantsRes] = await Promise.all([
+                    safeFetch(() =>
+                        supabase
+                            .from('website_products')
+                            .select('*, website_product_images(*)')
+                            .eq('id', id)
+                            .single()
+                    ),
+                    safeFetch(() =>
+                        supabase
+                            .from('website_variant_stock_view')
+                            .select('*')
+                            .eq('parent_product_id', id)
+                    )
+                ]);
+
+                if (!isMounted) return;
+
+                const p = productRes.data;
+                const v = variantsRes.data;
+
+                if (productRes.error) console.error("Product fetch error:", productRes.error);
+
                 if (p) {
                     setProduct(p);
                     trackFunnelEvent('view_product', {
@@ -134,73 +209,17 @@ const ProductDetail = () => {
                     });
                 }
 
-                // Fetch vendor store info if product belongs to a vendor
-                if (p?.vendor_id) {
-                    const { data: vProfile } = await safeFetch(() =>
-                        supabase
-                            .from('vendor_store_profiles')
-                            .select('id, full_name, store_name, avatar_url, is_verified, phone, whatsapp, address, city, description')
-                            .eq('id', p.vendor_id)
-                            .maybeSingle()
-                    );
-                    if (!isMounted) return;
-                    if (vProfile) setVendorProfile(vProfile);
-
-                    // Store stats: product count + average rating across the store
-                    const { data: storeProducts } = await safeFetch(() =>
-                        supabase
-                            .from('website_products')
-                            .select('id')
-                            .eq('vendor_id', p.vendor_id)
-                            .eq('is_active', true)
-                    );
-                    if (!isMounted) return;
-                    const productIds = (storeProducts || []).map(sp => sp.id);
-                    setVendorProductCount(productIds.length);
-                    if (productIds.length > 0) {
-                        const { data: storeRatings } = await safeFetch(() =>
-                            supabase
-                                .from('website_product_ratings')
-                                .select('rating')
-                                .in('product_id', productIds)
-                        );
-                        if (!isMounted) return;
-                        const all = storeRatings || [];
-                        if (all.length > 0) {
-                            const avg = all.reduce((s, r) => s + Number(r.rating), 0) / all.length;
-                            setVendorRating({ avg, count: all.length });
-                        }
-                    }
+                if (v && v.length > 0) {
+                    setVariants(v);
+                    initVariantSelection(v);
                 }
 
-                // 2. Fetch Variants with real-time stock
-                const { data: v } = await safeFetch(() =>
-                    supabase.from('website_variant_stock_view').select('*').eq('parent_product_id', id)
-                );
-                if (!isMounted) return;
-                setVariants(v || []);
+                // UNBLOCK UI IMMEDIATELY: product is ready for user interaction
+                setLoading(false);
 
-                // Auto-select if single/standard variant.
-                // But never auto-complete an OUT-OF-STOCK selection when the
-                // customer still has a real choice — otherwise the notify
-                // form would show before they pick a variation.
-                if (v && v.length > 0) {
-                    const choosable = v.filter(vi =>
-                        (vi.color !== 'Standard' && vi.color !== 'Combo') ||
-                        (vi.size !== 'Universal' && vi.size !== 'Package')
-                    );
-                    const firstColor = v[0].color;
-                    setSelectedColor(firstColor);
-                    // If there's only one size for this color (or it's Universal), auto-select it
-                    const sizesForColor = v.filter(vi => vi.color === firstColor);
-                    if (sizesForColor.length === 1) {
-                        const only = sizesForColor[0];
-                        if (choosable.length <= 1 || only.current_stock > 0) {
-                            setSelectedSize(only.size);
-                        }
-                        // else: leave size unselected so the customer picks
-                        // a variation first instead of landing on the form
-                    }
+                // Fetch secondary vendor stats asynchronously without holding up the screen
+                if (p?.vendor_id) {
+                    fetchVendorInfo(p.vendor_id);
                 }
             } catch (err) {
                 if (isMounted) console.error("Fetch error:", err);
@@ -208,6 +227,7 @@ const ProductDetail = () => {
                 if (isMounted) setLoading(false);
             }
         };
+
         fetchProductData();
 
         return () => {
@@ -264,20 +284,30 @@ const ProductDetail = () => {
 
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     
+    const images = useMemo(() => {
+        if (product?.website_product_images?.length) {
+            return product.website_product_images;
+        }
+        if (product?.images?.length) {
+            return product.images.map(img => ({ image_url: img.url || img.image_url, label: img.label }));
+        }
+        if (product?.image) {
+            return [{ image_url: product.image, label: '' }];
+        }
+        return [];
+    }, [product?.website_product_images, product?.images, product?.image]);
+
     const combinedMedia = useMemo(() => {
         const items = [];
         if (product?.video_url) {
             items.push({ type: 'video', url: product.video_url });
         }
-        if (product?.website_product_images) {
-            product.website_product_images.forEach(img => {
-                items.push({ type: 'image', ...img });
-            });
-        }
+        images.forEach(img => {
+            items.push({ type: 'image', ...img });
+        });
         return items;
-    }, [product?.video_url, product?.website_product_images]);
+    }, [product?.video_url, images]);
 
-    const images = product?.website_product_images || [];
     const activeMedia = combinedMedia[activeImageIndex];
 
     // While product is still loading, show a spinner

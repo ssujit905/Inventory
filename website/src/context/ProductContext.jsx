@@ -92,7 +92,10 @@ export const ProductProvider = ({ children }) => {
                         sold: p.sold_count,
                         sold_count: p.sold_count,
                         ad_id: p.ad_id, // Ensure ad_id is available in the context
-                        variations: productVariants
+                        variations: productVariants,
+                        website_product_images: p.website_product_images || [],
+                        vendor_id: p.vendor_id,
+                        video_url: p.video_url
                     };
                 });
                 setProducts(normalized);
