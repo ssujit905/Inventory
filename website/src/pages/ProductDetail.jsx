@@ -233,11 +233,6 @@ const ProductDetail = () => {
         setDescriptionOverflows(el.scrollHeight > el.clientHeight + 1);
     }, [product?.description, descriptionExpanded]);
 
-    useEffect(() => {
-        if (id) fetchRatings();
-    }, [id, fetchRatings]);
-
-
     const fetchRatings = useCallback(async () => {
         try {
             const { data, error } = await safeFetch(() =>
@@ -256,6 +251,10 @@ const ProductDetail = () => {
             setLoadingRatings(false);
         }
     }, [id]);
+
+    useEffect(() => {
+        if (id) fetchRatings();
+    }, [id, fetchRatings]);
 
     const averageRating = useMemo(() => {
         if (ratings.length === 0) return 0;

@@ -6,6 +6,7 @@
   "main": "electron/entry.js",
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && vite",
+    "dev:web": "cross-env VITE_ELECTRON=0 vite",
     "build": "tsc -b && vite build && electron-builder",
     "build:unsigned": "tsc -b && vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "open-app": "node scripts/open-app.cjs",

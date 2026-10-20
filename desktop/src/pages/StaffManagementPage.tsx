@@ -423,35 +423,28 @@ export default function StaffManagementPage() {
         ) : null;
 
     return (
-        <DashboardLayout role="admin">
-            <div className="p-12 space-y-10 max-w-[1600px] mx-auto font-sans">
+        <DashboardLayout role={currentUserProfile?.role === 'admin' ? 'admin' : 'staff'}>
+            <div className="max-w-7xl mx-auto space-y-6 pb-12">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-gray-900 p-10 rounded-[2.5rem] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-none">
-                    <div className="flex items-center gap-6">
-                        <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-white flex items-center justify-center shadow-lg shadow-primary/30">
-                            <UserPlus size={32} />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tight font-outfit">Personnel & Vendor Management</h1>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">Manage system administrators, staff access, and vendor partners</p>
-                        </div>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">Personnel & Vendor Management</h1>
+                        <p className="text-gray-400 font-medium text-xs">Manage system administrators, staff access, and vendor partners.</p>
                     </div>
 
-                    {!isReadOnly && (
-                        <button
-                            onClick={() => setIsAddModalOpen(true)}
-                            className="px-8 py-5 bg-primary text-white font-black rounded-2xl shadow-xl shadow-primary/30 hover:bg-primary/90 active:scale-95 transition-all flex items-center justify-center gap-3 text-sm tracking-wide"
-                        >
-                            <UserPlus size={20} />
-                            Enlist New Account
-                        </button>
-                    )}
+                    <button
+                        onClick={() => !isReadOnly && setIsAddModalOpen(true)}
+                        disabled={isReadOnly}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${isReadOnly ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary/90'}`}
+                    >
+                        <UserPlus size={16} strokeWidth={2.5} />
+                        {isReadOnly ? 'Read Only Mode' : 'Enlist New Account'}
+                    </button>
                 </div>
 
                 {message && (
-                    <div className={`p-6 rounded-2xl text-sm font-bold flex items-center gap-3 animate-in fade-in duration-200 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}>
-                        <AlertCircle size={20} />
+                    <div className={`p-4 rounded-xl text-xs font-bold flex items-center gap-3 animate-in fade-in duration-200 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        <AlertCircle size={16} />
                         {message.text}
                     </div>
                 )}
@@ -567,165 +560,181 @@ export default function StaffManagementPage() {
 
                 {/* Add Staff Modal */}
                 {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 max-h-[85vh] flex flex-col">
-                            <div className="p-12 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-primary/5 to-transparent">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[90vh] flex flex-col">
+                            <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-3xl font-black text-gray-900 dark:text-gray-100 font-outfit">Enlist New Account</h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.2em] mt-2">Initialize Staff, Admin, or Vendor Account</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Enlist New Account</h2>
+                                    <p className="text-xs text-gray-400 font-medium">Initialize staff, admin, or vendor account</p>
                                 </div>
                                 <button
                                     onClick={() => setIsAddModalOpen(false)}
-                                    className="h-14 w-14 flex items-center justify-center rounded-[1.5rem] bg-gray-100 dark:bg-gray-800 hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all"
+                                    className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800"
                                 >
-                                    <X size={28} />
+                                    <X size={20} strokeWidth={1.5} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleAddStaff} className="p-12 space-y-8 overflow-y-auto custom-scrollbar flex-1">
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
-                                            <div className="relative">
-                                                <Edit2 className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
+                            <form onSubmit={handleAddStaff} className="p-8 space-y-5 overflow-y-auto flex-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Edit2 size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={newName}
+                                                onChange={e => setNewName(e.target.value)}
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                                placeholder="e.g. Sujit Singh"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Assign Role</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <Shield size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <select
+                                                required
+                                                value={newRole}
+                                                onChange={e => setNewRole(e.target.value as any)}
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="staff">Staff Personnel</option>
+                                                <option value="vendor">Vendor Partner</option>
+                                                <option value="admin">System Admin</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {newRole === 'vendor' && (
+                                        <div className="col-span-2 space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-bold text-purple-600 uppercase tracking-widest ml-1">Vendor Store Name *</label>
+                                            <div className="relative group">
+                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-purple-400">
+                                                    <Store size={16} strokeWidth={1.5} />
+                                                </div>
                                                 <input
-                                                    required
+                                                    required={newRole === 'vendor'}
                                                     type="text"
-                                                    value={newName}
-                                                    onChange={e => setNewName(e.target.value)}
-                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
-                                                    placeholder="e.g. Sujit Singh"
+                                                    value={newStoreName}
+                                                    onChange={e => setNewStoreName(e.target.value)}
+                                                    className="w-full pl-11 pr-4 py-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 focus:border-purple-400 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                                    placeholder="e.g. Himalayan Fashion Hub"
                                                 />
                                             </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Assign Rank / Role</label>
-                                            <div className="relative">
-                                                <Shield className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <select
-                                                    required
-                                                    value={newRole}
-                                                    onChange={e => setNewRole(e.target.value as any)}
-                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none"
+                                    )}
+
+                                    {newRole === 'vendor' && (
+                                        <div className="col-span-2 space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-bold text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewPlan('basic')}
+                                                    className={`text-left px-4 py-3 rounded-xl border transition-all ${newPlan === 'basic' ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-200'}`}
                                                 >
-                                                    <option value="staff">Staff Personnel</option>
-                                                    <option value="vendor">Vendor Partner</option>
-                                                    <option value="admin">System Admin</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {newRole === 'vendor' && (
-                                            <div className="space-y-2 md:col-span-2 animate-in fade-in duration-200">
-                                                <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Store Name *</label>
-                                                <div className="relative">
-                                                    <Store className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-purple-400" />
-                                                    <input
-                                                        required={newRole === 'vendor'}
-                                                        type="text"
-                                                        value={newStoreName}
-                                                        onChange={e => setNewStoreName(e.target.value)}
-                                                        className="w-full h-16 pl-14 pr-6 bg-purple-50/50 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
-                                                        placeholder="e.g. Himalayan Fashion Hub"
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {newRole === 'vendor' && (
-                                            <div className="space-y-3 md:col-span-2 animate-in fade-in duration-200">
-                                                <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setNewPlan('basic')}
-                                                        className={`text-left p-5 rounded-2xl border-2 transition-all ${newPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
-                                                    >
-                                                        <p className={`font-black text-sm ${newPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
-                                                        <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus: dashboard, inventory, stock in, sales, products, orders, returns, delivery, settings & staff.</p>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setNewPlan('full')}
-                                                        className={`text-left p-5 rounded-2xl border-2 transition-all ${newPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
-                                                    >
-                                                        <p className={`font-black text-sm ${newPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
-                                                        <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Everything — adds expenses, income, profit, finance, website reports & print center.</p>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-2 md:col-span-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
-                                            <div className="relative">
-                                                <UserCheck className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                                <select
-                                                    required
-                                                    value={newPermissions}
-                                                    onChange={e => setNewPermissions(e.target.value as any)}
-                                                    className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none"
+                                                    <p className={`font-bold text-sm ${newPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                    <p className="text-[10px] font-medium text-gray-400 mt-0.5">Core selling menus only.</p>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewPlan('full')}
+                                                    className={`text-left px-4 py-3 rounded-xl border transition-all ${newPlan === 'full' ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-200'}`}
                                                 >
-                                                    <option value="read_write">Read & Write Access</option>
-                                                    <option value="read_only">Read Only Access</option>
-                                                </select>
+                                                    <p className={`font-bold text-sm ${newPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                    <p className="text-[10px] font-medium text-gray-400 mt-0.5">All menus including finance.</p>
+                                                </button>
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
 
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Official Email Address</label>
-                                        <div className="relative">
-                                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input
+                                    <div className="col-span-2 space-y-1.5">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                                <UserCheck size={16} strokeWidth={1.5} />
+                                            </div>
+                                            <select
                                                 required
-                                                type="email"
-                                                value={newEmail}
-                                                onChange={e => setNewEmail(e.target.value)}
-                                                className="w-full h-16 pl-14 pr-6 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
-                                                placeholder="personnel@company.com"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
-                                        <div className="relative">
-                                            <Key className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input
-                                                required
-                                                type={showPassword ? 'text' : 'password'}
-                                                value={newPassword}
-                                                onChange={e => setNewPassword(e.target.value)}
-                                                className="w-full h-16 pl-14 pr-16 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
-                                                placeholder="••••••••"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
+                                                value={newPermissions}
+                                                onChange={e => setNewPermissions(e.target.value as any)}
+                                                className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all appearance-none cursor-pointer"
                                             >
-                                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                            </button>
+                                                <option value="read_write">Read & Write Access</option>
+                                                <option value="read_only">Read Only Access</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    disabled={actionLoading}
-                                    className="w-full h-20 bg-primary text-white font-black text-lg rounded-[2rem] shadow-2xl shadow-primary/40 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
-                                >
-                                    {actionLoading ? (
-                                        <>
-                                            <div className="animate-spin h-6 w-6 border-4 border-white border-t-transparent rounded-full"></div>
-                                            Creating Account...
-                                        </>
-                                    ) : (
-                                        <>Issue Official Credentials</>
-                                    )}
-                                </button>
+                                <div className="col-span-2 space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Official Email Address</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <Mail size={16} strokeWidth={1.5} />
+                                        </div>
+                                        <input
+                                            required
+                                            type="email"
+                                            value={newEmail}
+                                            onChange={e => setNewEmail(e.target.value)}
+                                            className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="personnel@company.com"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="col-span-2 space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <Key size={16} strokeWidth={1.5} />
+                                        </div>
+                                        <input
+                                            required
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={newPassword}
+                                            onChange={e => setNewPassword(e.target.value)}
+                                            className="w-full pl-11 pr-12 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
+                                            placeholder="••••••••"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddModalOpen(false)}
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={actionLoading}
+                                        className="flex-[2] py-3 px-6 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {actionLoading ? (
+                                            <><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />Creating Account...</>
+                                        ) : (
+                                            'Issue Official Credentials'
+                                        )}
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -853,49 +862,53 @@ export default function StaffManagementPage() {
 
                 {/* Edit Profile Modal */}
                 {editingProfile && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-gray-950/80 backdrop-blur-xl animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-[3rem] shadow-3xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10 max-h-[90vh] flex flex-col">
-                            <div className="p-10 border-b dark:border-gray-800 flex items-center justify-between bg-gradient-to-br from-purple-500/5 to-transparent">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-gray-100 dark:border-gray-800 max-h-[90vh] flex flex-col">
+                            <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100 font-outfit">Edit Account</h2>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.15em] mt-1">
-                                        {editingProfile.role === 'vendor' ? 'Vendor Partner' : editingProfile.role} — Update credentials & access
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Account</h2>
+                                    <p className="text-xs text-gray-400 font-medium">
+                                        {editingProfile.role === 'vendor' ? 'Vendor Partner' : editingProfile.role === 'admin' ? 'System Admin' : 'Staff'} — Update credentials & access
                                     </p>
                                 </div>
                                 <button
                                     onClick={() => setEditingProfile(null)}
-                                    className="h-12 w-12 flex items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all"
+                                    className="h-10 w-10 rounded-xl bg-white dark:bg-gray-900 flex items-center justify-center text-gray-400 hover:text-red-500 transition-all shadow-sm border border-gray-100 dark:border-gray-800"
                                 >
                                     <X size={22} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleEditSave} className="p-10 space-y-6 overflow-y-auto flex-1">
+                            <form onSubmit={handleEditSave} className="p-8 space-y-6 overflow-y-auto flex-1">
                                 {/* Name */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
-                                    <div className="relative">
-                                        <Edit2 className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <Edit2 size={16} strokeWidth={1.5} />
+                                        </div>
                                         <input
                                             required
                                             type="text"
                                             value={editName}
                                             onChange={e => setEditName(e.target.value)}
-                                            className="w-full h-14 pl-12 pr-5 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                            className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                         />
                                     </div>
                                 </div>
 
                                 {/* Email */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <Mail size={16} strokeWidth={1.5} />
+                                        </div>
                                         <input
                                             type="email"
                                             value={editEmail}
                                             onChange={e => setEditEmail(e.target.value)}
-                                            className="w-full h-14 pl-12 pr-5 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                            className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                             placeholder="email@example.com"
                                         />
                                     </div>
@@ -903,15 +916,17 @@ export default function StaffManagementPage() {
 
                                 {/* Store Name (vendor only) */}
                                 {editingProfile.role === 'vendor' && (
-                                    <div className="space-y-2 animate-in fade-in">
-                                        <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Store Name</label>
-                                        <div className="relative">
-                                            <Store className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-400" />
+                                    <div className="space-y-1.5 animate-in fade-in">
+                                        <label className="text-[10px] font-bold text-purple-600 uppercase tracking-widest ml-1">Store Name</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-purple-400">
+                                                <Store size={16} strokeWidth={1.5} />
+                                            </div>
                                             <input
                                                 type="text"
                                                 value={editStoreName}
                                                 onChange={e => setEditStoreName(e.target.value)}
-                                                className="w-full h-14 pl-12 pr-5 bg-purple-50/50 dark:bg-purple-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                                className="w-full pl-11 pr-4 py-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 focus:border-purple-400 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                                 placeholder="Store name"
                                             />
                                         </div>
@@ -919,14 +934,16 @@ export default function StaffManagementPage() {
                                 )}
 
                                 {/* Permissions */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
-                                    <div className="relative">
-                                        <UserCheck className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Access Level</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <UserCheck size={16} strokeWidth={1.5} />
+                                        </div>
                                         <select
                                             value={editPermissions}
                                             onChange={e => setEditPermissions(e.target.value as any)}
-                                            className="w-full h-14 pl-12 pr-5 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-black text-gray-900 dark:text-gray-100 transition-all appearance-none"
+                                            className="w-full pl-11 pr-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all appearance-none cursor-pointer"
                                         >
                                             <option value="read_write">Read & Write Access</option>
                                             <option value="read_only">Read Only Access</option>
@@ -936,71 +953,74 @@ export default function StaffManagementPage() {
 
                                 {/* Plan (vendor only) */}
                                 {editingProfile.role === 'vendor' && (
-                                    <div className="space-y-2 animate-in fade-in">
-                                        <label className="text-[10px] font-black text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
+                                    <div className="space-y-1.5 animate-in fade-in">
+                                        <label className="text-[10px] font-bold text-purple-600 uppercase tracking-widest ml-1">Vendor Plan</label>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
                                                 type="button"
                                                 onClick={() => setEditPlan('basic')}
-                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'basic' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                                className={`text-left px-4 py-3 rounded-xl border transition-all ${editPlan === 'basic' ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-200'}`}
                                             >
-                                                <p className={`font-black text-sm ${editPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
-                                                <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">Core selling menus only.</p>
+                                                <p className={`font-bold text-sm ${editPlan === 'basic' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Basic</p>
+                                                <p className="text-[10px] font-medium text-gray-400 mt-0.5">Core selling menus only.</p>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setEditPlan('full')}
-                                                className={`text-left p-4 rounded-2xl border-2 transition-all ${editPlan === 'full' ? 'border-primary bg-primary/5 shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-200'}`}
+                                                className={`text-left px-4 py-3 rounded-xl border transition-all ${editPlan === 'full' ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-gray-200'}`}
                                             >
-                                                <p className={`font-black text-sm ${editPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
-                                                <p className="text-[10px] font-bold text-gray-400 mt-1 leading-relaxed">All menus including finance.</p>
+                                                <p className={`font-bold text-sm ${editPlan === 'full' ? 'text-primary' : 'text-gray-900 dark:text-gray-100'}`}>Full</p>
+                                                <p className="text-[10px] font-medium text-gray-400 mt-0.5">All menus including finance.</p>
                                             </button>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* New Password */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Set New Password <span className="text-gray-300">(leave blank to keep current)</span></label>
-                                    <div className="relative">
-                                        <Key className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Set New Password <span className="text-gray-300 normal-case">(leave blank to keep current)</span></label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
+                                            <Key size={16} strokeWidth={1.5} />
+                                        </div>
                                         <input
                                             type={showEditPassword ? 'text' : 'password'}
                                             value={editNewPassword}
                                             onChange={e => setEditNewPassword(e.target.value)}
-                                            className="w-full h-14 pl-12 pr-14 bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/30 rounded-2xl outline-none font-bold text-gray-900 dark:text-gray-100 transition-all"
+                                            className="w-full pl-11 pr-12 py-3 bg-gray-50 dark:bg-gray-800/50 border border-transparent focus:border-primary/30 focus:bg-white dark:focus:bg-gray-800 rounded-xl text-sm font-medium text-gray-900 dark:text-gray-100 outline-none transition-all"
                                             placeholder="New password (optional)"
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowEditPassword(!showEditPassword)}
-                                            className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors"
                                         >
                                             {showEditPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 ml-1 font-medium">
-                                        Saving with a new password resets this person's login immediately (min 6 characters).
-                                    </p>
+                                    <p className="text-xs text-gray-400 ml-1">Min 6 characters. Resets login immediately.</p>
                                 </div>
 
-                                <button
-                                    type="submit"
-                                    disabled={actionLoading}
-                                    className="w-full h-16 bg-primary text-white font-black text-base rounded-2xl shadow-lg shadow-primary/30 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
-                                >
-                                    {actionLoading ? (
-                                        <>
-                                            <div className="animate-spin h-5 w-5 border-3 border-white border-t-transparent rounded-full"></div>
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save size={18} />
-                                            Save Changes
-                                        </>
-                                    )}
-                                </button>
+                                <div className="flex gap-4 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingProfile(null)}
+                                        className="flex-1 py-3 px-6 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={actionLoading}
+                                        className="flex-[2] py-3 px-6 bg-primary text-white rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {actionLoading ? (
+                                            <><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />Saving...</>
+                                        ) : (
+                                            <><Save size={14} />Save Changes</>
+                                        )}
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>

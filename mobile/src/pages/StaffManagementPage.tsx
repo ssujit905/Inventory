@@ -473,7 +473,8 @@ data: {
                         return (
                             <div key={p.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden active:scale-[0.99] transition-all">
                                 {/* Card Header Strip */}
-                                <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
+                                <div className="px-3.5 pt-3 pb-2.5 space-y-1.5 border-b border-gray-50 dark:border-gray-800/60">
+                                    {/* Date Row */}
                                     <div className="flex items-center gap-2.5">
                                         <span className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-black flex-shrink-0">
                                             {displayIndex}
@@ -482,18 +483,22 @@ data: {
                                             Member since {format(new Date(p.created_at), 'MMM dd, yyyy')}
                                         </span>
                                     </div>
-                                    <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${roleBadgeClass(p)}`}>
+
+                                    {/* Down Row After Date: Vendor Role & Plan Badges */}
+                                    <div className="flex items-center gap-1.5 flex-wrap pl-[34px]">
+                                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${roleBadgeClass(p)}`}>
                                             {roleBadgeIcon(p)} {roleLabel(p)}
                                         </div>
-                                    {p.role === 'vendor' && (
-                                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'}`}>
-                                            {p.plan === 'basic' ? 'Basic' : 'Full'} Plan
-                                        </span>
-                                    )}
+                                        {p.role === 'vendor' && (
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${p.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'}`}>
+                                                {p.plan === 'basic' ? 'Basic' : 'Full'} Plan
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Main Info Section */}
-                                <div className="px-3.5 pb-3">
+                                <div className="px-3.5 pt-3 pb-3">
                                     <div className="flex items-center gap-3">
                                         <div className={`h-11 w-11 rounded-xl flex items-center justify-center font-black text-lg border border-gray-100 dark:border-gray-700 ${
                                             p.role === 'vendor' ? 'bg-purple-50 text-purple-600' : 'bg-gray-50 dark:bg-gray-800 text-primary'
@@ -501,17 +506,28 @@ data: {
                                             {p.role === 'vendor' ? <Store size={20} /> : (p.full_name?.[0] || 'U')}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</h3>
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{p.full_name || 'Anonymous User'}</h3>
+                                                    {p.is_verified && (
+                                                        <button
+                                                            type="button"
+                                                            disabled={isReadOnly}
+                                                            onClick={() => !isReadOnly && toggleVendorVerified(p, setProfiles, (msg, type) => setMessage({ type: type || 'success', text: msg }))}
+                                                            title={!isReadOnly ? "Click to toggle verification" : undefined}
+                                                            className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 active:scale-95 transition-all disabled:cursor-default flex-shrink-0"
+                                                        >
+                                                            <ShieldCheck size={9} /> Verified
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {p.store_name && (
-                                                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-purple-50 text-purple-700">
-                                                        {p.store_name}
-                                                    </span>
-                                                )}
-                                                {p.is_verified && (
-                                                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                        <ShieldCheck size={9} /> Verified
-                                                    </span>
+                                                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                                        <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 dark:bg-purple-950/30 dark:border-purple-800">
+                                                            <Store size={10} className="text-purple-600" />
+                                                            {p.store_name}
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </div>
                                             {p.email && (
@@ -529,8 +545,8 @@ data: {
                                 </div>
 
                                 {/* Detail Strip */}
-                                <div className="flex items-center gap-0 border-t border-gray-50 dark:border-gray-800">
-                                    <div className="flex-1 px-3.5 py-2.5 border-r border-gray-50 dark:border-gray-800">
+                                <div className="flex items-center justify-between border-t border-gray-50 dark:border-gray-800">
+                                    <div className="px-3.5 py-2.5">
                                         <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Access Control</p>
                                         <div className="flex items-center gap-1.5 mt-0.5">
                                             <div className={`h-1.5 w-1.5 rounded-full ${p.permissions === 'read_write' ? 'bg-blue-500' : 'bg-amber-500'}`} />
@@ -539,40 +555,25 @@ data: {
                                             </p>
                                         </div>
                                     </div>
-                                    {p.role === 'vendor' && !isReadOnly && (
+
+                                    <div className="flex items-center">
                                         <button
-                                            onClick={() => toggleVendorVerified(p, setProfiles, (msg, type) => setMessage({ type: type || 'success', text: msg }))}
-                                            title={p.is_verified ? 'Remove verified badge' : 'Verify this vendor store'}
-                                            className={`px-3 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase transition-all border-l border-gray-50 dark:border-gray-800 ${
-                                                p.is_verified
-                                                    ? 'text-emerald-600 bg-emerald-50/50 hover:bg-emerald-50'
-                                                    : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-500/5'
-                                            }`}
+                                            onClick={() => setDetailsProfile(p)}
+                                            title="View all details"
+                                            className="px-3.5 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
                                         >
-                                            <ShieldCheck size={12} />
-                                            {p.is_verified ? 'Verified' : 'Verify'}
+                                            <Eye size={12} />
+                                            View
                                         </button>
-                                    )}
-                                    <button
-                                        onClick={() => setDetailsProfile(p)}
-                                        title="View all details"
-                                        className="px-3 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
-                                    >
-                                        <Eye size={12} />
-                                        View
-                                    </button>
-                                    {!isReadOnly && (
-                                        <button
-                                            onClick={() => openEditModal(p)}
-                                            className="px-4 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
-                                        >
-                                            <Edit2 size={12} />
-                                            Edit
-                                        </button>
-                                    )}
-                                    <div className="flex-1 px-3.5 py-2.5 text-right border-l border-gray-50 dark:border-gray-800">
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
-                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-tight mt-0.5">Active</p>
+                                        {!isReadOnly && (
+                                            <button
+                                                onClick={() => openEditModal(p)}
+                                                className="px-4 py-2.5 flex items-center gap-1.5 text-[10px] font-black uppercase text-gray-500 hover:text-primary hover:bg-primary/5 transition-all border-l border-gray-50 dark:border-gray-800"
+                                            >
+                                                <Edit2 size={12} />
+                                                Edit
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -860,6 +861,11 @@ data: {
                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${roleBadgeClass(detailsProfile)}`}>
                                                 {roleBadgeIcon(detailsProfile)} {roleLabel(detailsProfile)}
                                             </span>
+                                            {detailsProfile.role === 'vendor' && (
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${detailsProfile.plan === 'basic' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'}`}>
+                                                    {detailsProfile.plan === 'basic' ? 'Basic' : 'Full'} Plan
+                                                </span>
+                                            )}
                                         </h2>
                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest mt-0.5 ${
                                             detailsProfile.permissions === 'read_write'

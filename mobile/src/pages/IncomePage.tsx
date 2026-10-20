@@ -12,7 +12,7 @@ type IncomeEntry = {
     description: string;
     amount: number;
     income_date: string;
-    category: 'income' | 'investment' | 'operation';
+    category: 'income' | 'investment' | 'operation' | 'vat' | 'loan_interest';
     created_at: string;
     recorded_by?: string;
 };
@@ -30,7 +30,7 @@ export default function IncomePage() {
     const [incomeDate, setIncomeDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState<number>(0);
-    const [category, setCategory] = useState<'income' | 'investment' | 'operation'>('income');
+    const [category, setCategory] = useState<'income' | 'investment' | 'operation' | 'vat' | 'loan_interest'>('income');
 
     const isVendorStaff = profile?.role === 'staff' && Boolean(profile?.vendor_id);
 
@@ -285,9 +285,13 @@ export default function IncomePage() {
                                                         ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800'
                                                         : entry.category === 'operation'
                                                             ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800'
-                                                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800'
+                                                            : entry.category === 'vat'
+                                                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/10 dark:border-purple-800'
+                                                                : entry.category === 'loan_interest'
+                                                                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/10 dark:border-rose-800'
+                                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800'
                                                         }`}>
-                                                        {entry.category}
+                                                        {entry.category === 'loan_interest' ? 'Loan Interest' : entry.category === 'vat' ? 'VAT' : entry.category}
                                                     </span>
                                                     {canEditEntry(entry) && (
                                                         <button
@@ -367,6 +371,8 @@ export default function IncomePage() {
                                             <option value="income">Income</option>
                                             {!isStaff && <option value="investment">Investment</option>}
                                             {!isStaff && <option value="operation">Operation</option>}
+                                            {!isStaff && <option value="vat">VAT</option>}
+                                            {!isStaff && <option value="loan_interest">Loan Interest</option>}
                                         </select>
                                     </div>
 
