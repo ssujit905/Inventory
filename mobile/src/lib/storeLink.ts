@@ -11,7 +11,7 @@ export const storeSlug = (storeName: string, id: string) => {
   return short ? `${base}-${short}` : base;
 };
 
-export const WEBSITE_BASE_URL = (import.meta.env.VITE_WEBSITE_URL as string) || 'http://localhost:5174';
+export const WEBSITE_BASE_URL = ((import.meta.env.VITE_WEBSITE_URL as string) || 'https://shopynepal.vercel.app').replace(/\/+$/, '');
 
 export const buildStoreLink = (storeName: string, id: string) =>
   `${WEBSITE_BASE_URL}/store/${storeSlug(storeName, id)}`;

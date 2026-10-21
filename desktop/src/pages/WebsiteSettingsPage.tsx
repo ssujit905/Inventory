@@ -3,7 +3,7 @@ import DashboardLayout from '../layouts/DashboardLayout';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { supabase, supabaseWithTimeout, warmUpSupabase } from '../lib/supabase';
 import { getVendorId, isVendorMember } from '../lib/vendorHelpers';
-import { buildStoreLink } from '../lib/storeLink';
+import { buildStoreLink, WEBSITE_BASE_URL } from '../lib/storeLink';
 import { Globe, Save, Loader2, Check, AlertTriangle, Type, Phone, Mail, MapPin, Share2, Image, Zap, Search, X, Trash2, CreditCard, Store, ShieldCheck, Camera, Link2, Copy, ExternalLink } from 'lucide-react';
 
 interface Setting {
@@ -702,7 +702,7 @@ export default function WebsiteSettingsPage() {
                         {/* Live Preview Banner */}
                         <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl">
                             <p className="text-sm font-bold text-primary">💡 Changes here update your website instantly once saved.</p>
-                            <p className="text-xs text-gray-500 mt-1">Your website at <code className="text-primary">localhost:5176</code> reads all values from this settings panel.</p>
+                            <p className="text-xs text-gray-500 mt-1">Your website at <code className="text-primary">{WEBSITE_BASE_URL.replace(/^https?:\/\//, '')}</code> reads all values from this settings panel.</p>
                         </div>
                     </>
                 )}
