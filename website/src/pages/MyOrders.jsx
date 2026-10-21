@@ -878,8 +878,9 @@ const MyOrders = () => {
                                             })()}
                                             {/* Return button on the right — 2-day window only */}
                                             {(() => {
-                                                const daysSinceDelivery = (Date.now() - new Date(order.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-                                                const withinWindow = daysSinceDelivery <= 2;
+                                                const deliveredAt = order.delivered_at || order.updated_at;
+                                                const daysSinceDelivery = (Date.now() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60 * 24);
+                                                const withinWindow = deliveredAt && daysSinceDelivery <= 2;
                                                 if (requestedReturnStatuses[order.id]) {
                                                     return (
                                                         <span style={{ fontSize: '0.75rem', color: 'var(--primary-blue)', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', background: '#f8fafc', padding: '0.4rem 0.8rem', borderRadius: '100px', border: '1px solid var(--border-color)' }}>

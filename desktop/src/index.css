@@ -101,11 +101,30 @@
   }
 
   /* Keep date inputs readable in dark mode */
-  .dark input[type="date"]::-webkit-datetime-edit,
-  .dark input[type="datetime-local"]::-webkit-datetime-edit,
-  .dark input[type="month"]::-webkit-datetime-edit,
-  .dark input[type="time"]::-webkit-datetime-edit {
-    color: rgb(243 244 246);
+  @media (prefers-color-scheme: dark) {
+    input[type="date"]::-webkit-datetime-edit,
+    input[type="datetime-local"]::-webkit-datetime-edit,
+    input[type="month"]::-webkit-datetime-edit,
+    input[type="time"]::-webkit-datetime-edit {
+      color: rgb(243 244 246);
+    }
+
+    /* Make the native calendar/clock picker icon visible in dark mode */
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    input[type="month"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      opacity: 0.8;
+      cursor: pointer;
+    }
+
+    input[type="date"]::-webkit-calendar-picker-indicator:hover,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+    input[type="month"]::-webkit-calendar-picker-indicator:hover,
+    input[type="time"]::-webkit-calendar-picker-indicator:hover {
+      opacity: 1;
+    }
   }
 
   /* Improve autofill contrast in dark mode */

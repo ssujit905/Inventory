@@ -1150,14 +1150,14 @@ export default function SalesPage() {
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Customer Full Name *</label>
                                         <div className="relative">
                                             <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold" placeholder="Customer Name" />
+                                            <input required type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-bold text-gray-900 dark:text-gray-100" placeholder="Customer Name" />
                                         </div>
                                     </div>
                                     <div className="space-y-2 lg:col-span-1 md:col-span-2">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phone Number 1 * (10 Digits)</label>
                                         <div className="relative">
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-300" />
-                                            <input required type="text" maxLength={10} value={phone1} onChange={e => setPhone1(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest" placeholder="1234567890" />
+                                            <input required type="text" maxLength={10} value={phone1} onChange={e => setPhone1(e.target.value.replace(/\D/g, ''))} className="w-full h-12 pl-12 pr-4 bg-gray-50 dark:bg-gray-800 border-2 dark:border-gray-800 rounded-xl outline-none focus:border-primary/50 font-black tracking-widest text-gray-900 dark:text-gray-100" placeholder="1234567890" />
                                         </div>
                                     </div>
 

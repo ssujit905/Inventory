@@ -605,7 +605,7 @@ export default function WebsiteSettingsPage() {
                                         type="text"
                                         readOnly
                                         value={profile?.id ? buildStoreLink(vendorForm.store_name || vendorForm.contact_person, profile.id) : ''}
-                                        className="flex-1 h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-600 dark:text-gray-300 truncate outline-none"
+                                        className="flex-1 h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-600 dark:text-gray-100 truncate outline-none"
                                     />
                                     <div className="flex gap-2">
                                         <button
@@ -640,7 +640,7 @@ export default function WebsiteSettingsPage() {
                                         type="text" required value={vendorForm.store_name}
                                         onChange={(e) => setVendorForm({ ...vendorForm, store_name: e.target.value })}
                                         placeholder="e.g. Himalayan Traders"
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -649,7 +649,7 @@ export default function WebsiteSettingsPage() {
                                         type="text" value={vendorForm.contact_person}
                                         onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
                                         placeholder="Manager Full Name"
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -658,7 +658,7 @@ export default function WebsiteSettingsPage() {
                                         type="tel" required value={vendorForm.phone}
                                         onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
                                         placeholder="98XXXXXXXX"
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -667,7 +667,7 @@ export default function WebsiteSettingsPage() {
                                         type="tel" value={vendorForm.whatsapp}
                                         onChange={(e) => setVendorForm({ ...vendorForm, whatsapp: e.target.value })}
                                         placeholder="98XXXXXXXX"
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1.5 sm:col-span-2">
@@ -676,7 +676,7 @@ export default function WebsiteSettingsPage() {
                                         type="text" value={vendorForm.address}
                                         onChange={(e) => setVendorForm({ ...vendorForm, address: e.target.value })}
                                         placeholder="Store location in Nepal"
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                                 <div className="space-y-1.5 sm:col-span-2">
@@ -685,7 +685,7 @@ export default function WebsiteSettingsPage() {
                                         rows={3} value={vendorForm.description}
                                         onChange={(e) => setVendorForm({ ...vendorForm, description: e.target.value })}
                                         placeholder="Brief description of your vendor store for online customers..."
-                                        className="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium outline-none"
+                                        className="w-full p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
                                     />
                                 </div>
                             </div>
@@ -770,7 +770,7 @@ export default function WebsiteSettingsPage() {
                                                     readOnly={isReadOnly}
                                                     placeholder={field.placeholder}
                                                     rows={3}
-                                                    className={`w-full px-4 py-3 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                                    className={`w-full px-4 py-3 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
                                                 />
                                             ) : (field as any).type === 'datetime' ? (
                                                 <input
@@ -779,14 +779,14 @@ export default function WebsiteSettingsPage() {
                                                     onChange={e => !isReadOnly && update(field.key, e.target.value.replace('T', ' '))}
                                                     readOnly={isReadOnly}
                                                     placeholder={field.placeholder}
-                                                    className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                                    className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none font-bold ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
                                                 />
                                             ) : (field as any).type === 'select' ? (
                                                 <select
                                                     value={settings[field.key] || ''}
                                                     onChange={e => !isReadOnly && update(field.key, e.target.value)}
                                                     disabled={isReadOnly}
-                                                    className={`w-full h-11 px-4 rounded-xl border text-sm font-bold focus:ring-2 focus:ring-primary/30 outline-none cursor-pointer ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                                    className={`w-full h-11 px-4 rounded-xl border text-sm font-bold focus:ring-2 focus:ring-primary/30 outline-none cursor-pointer ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
                                                 >
                                                     {(field as any).options?.map((opt: any) => (
                                                         <option key={opt.value} value={opt.value}>
@@ -801,7 +801,7 @@ export default function WebsiteSettingsPage() {
                                                     onChange={e => !isReadOnly && update(field.key, e.target.value)}
                                                     readOnly={isReadOnly}
                                                     placeholder={field.placeholder}
-                                                    className={`w-full h-11 px-4 rounded-xl border text-sm font-mono focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                                    className={`w-full h-11 px-4 rounded-xl border text-sm font-mono focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
                                                 />
                                             ) : (field as any).type === 'toggle' ? (
                                                 <div 
@@ -822,7 +822,7 @@ export default function WebsiteSettingsPage() {
                                                     onChange={e => !isReadOnly && update(field.key, e.target.value)}
                                                     readOnly={isReadOnly}
                                                     placeholder={field.placeholder}
-                                                    className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}
+                                                    className={`w-full h-11 px-4 rounded-xl border text-sm focus:ring-2 focus:ring-primary/30 outline-none ${isReadOnly ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
                                                 />
                                             )}
 
@@ -837,7 +837,7 @@ export default function WebsiteSettingsPage() {
                                                 <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Pick Product for Flash Sale</label>
                                                 <div className="flex gap-3">
                                                     <select 
-                                                        className={`flex-1 h-14 px-4 rounded-2xl border-2 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold transition-all appearance-none ${isReadOnly ? 'border-gray-50 text-gray-300 cursor-not-allowed' : 'border-gray-100 dark:border-gray-800 cursor-pointer'}`}
+                                                        className={`flex-1 h-14 px-4 rounded-2xl border-2 bg-white dark:bg-gray-900 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none font-bold text-gray-900 dark:text-gray-100 transition-all appearance-none ${isReadOnly ? 'border-gray-50 text-gray-300 cursor-not-allowed' : 'border-gray-100 dark:border-gray-800 cursor-pointer'}`}
                                                         onChange={(e) => {
                                                             if (isReadOnly) return;
                                                             const p = products.find(prod => prod.id === Number(e.target.value));
@@ -893,7 +893,7 @@ export default function WebsiteSettingsPage() {
                                                                             type="number"
                                                                             value={p.discount}
                                                                             onChange={(e) => updateProductDiscount(p.id, Number(e.target.value))}
-                                                                            className="w-full h-10 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-bold focus:border-primary outline-none"
+                                                                            className="w-full h-10 px-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-bold text-gray-900 dark:text-gray-100 focus:border-primary outline-none"
                                                                             placeholder="0"
                                                                         />
                                                                     </div>

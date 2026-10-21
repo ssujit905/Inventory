@@ -815,41 +815,41 @@ export default function WebsiteProductsPage() {
 
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Product Title *</label>
-                                    <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Premium Cotton T-Shirt" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Product Title *</label>
+                                    <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Premium Cotton T-Shirt" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Description</label>
-                                    <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Product description..." className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Description</label>
+                                    <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Product description..." className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Category</label>
-                                        <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Category</label>
+                                        <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30">
                                             {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Ship From</label>
-                                        <select value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Ship From</label>
+                                        <select value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30">
                                             {CITIES.map(c => <option key={c}>{c}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">Delivery Days</label>
-                                        <input value={form.delivery_days} onChange={e => setForm(f => ({ ...f, delivery_days: e.target.value }))} placeholder="2-4" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Delivery Days</label>
+                                        <input value={form.delivery_days} onChange={e => setForm(f => ({ ...f, delivery_days: e.target.value }))} placeholder="2-4" className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30" />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                                         Ads Attribution <span className="text-[10px] font-normal text-gray-400 capitalize">(Optional)</span>
                                     </label>
                                     <select 
                                         value={form.ad_id || ''} 
                                         onChange={e => setForm(f => ({ ...f, ad_id: e.target.value || null }))} 
-                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                        className="w-full h-11 px-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
                                     >
                                         <option value="">-- No Ad Assigned --</option>
                                         {adsOptions.map(ad => (
@@ -860,27 +860,27 @@ export default function WebsiteProductsPage() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2">
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="accent-primary" />
                                         Active
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.is_featured} onChange={e => setForm(f => ({ ...f, is_featured: e.target.checked }))} className="accent-amber-500" />
                                         Featured
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.show_shopinepal} onChange={e => setForm(f => ({ ...f, show_shopinepal: e.target.checked }))} className="accent-primary" />
                                         ShopiNepal Badge
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.is_cod} onChange={e => setForm(f => ({ ...f, is_cod: e.target.checked }))} className="accent-emerald-500" />
                                         COD Available
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.is_prepaid} onChange={e => setForm(f => ({ ...f, is_prepaid: e.target.checked }))} className="accent-blue-500" />
                                         Prepaid
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700 dark:text-gray-100">
                                         <input type="checkbox" checked={form.is_prebook} onChange={e => setForm(f => ({ ...f, is_prebook: e.target.checked }))} className="accent-amber-500" />
                                         Pre-booking
                                     </label>
@@ -949,7 +949,7 @@ export default function WebsiteProductsPage() {
                                                                 value={v.color} 
                                                                 onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, color: e.target.value } : vi))}
                                                                 placeholder="e.g. Red" 
-                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold text-gray-900 dark:text-gray-100" 
                                                             />
                                                         </div>
                                                         <div className="col-span-2">
@@ -958,7 +958,7 @@ export default function WebsiteProductsPage() {
                                                                 value={v.size} 
                                                                 onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, size: e.target.value } : vi))}
                                                                 placeholder="M" 
-                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold" 
+                                                                className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold text-gray-900 dark:text-gray-100" 
                                                             />
                                                         </div>
                                                     </>
@@ -979,7 +979,7 @@ export default function WebsiteProductsPage() {
                                                         value={v.sku} 
                                                         onChange={e => setVariants(vs => vs.map((vi, i) => i === idx ? { ...vi, sku: e.target.value } : vi))}
                                                         placeholder="SKU"
-                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold" 
+                                                        className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-900 dark:text-gray-100" 
                                                     />
                                                 </div>
                                                 {isCombo ? (
@@ -1001,7 +1001,7 @@ export default function WebsiteProductsPage() {
                                                                         return vi;
                                                                     }));
                                                                 }}
-                                                                className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
+                                                                className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-900 dark:text-gray-100"
                                                             >
                                                                 <option value="">-- Add SKU to Combo --</option>
                                                                 {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
@@ -1037,7 +1037,7 @@ export default function WebsiteProductsPage() {
                                                                     sku: invItem ? invItem.sku : vi.sku 
                                                                 } : vi));
                                                             }}
-                                                            className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold"
+                                                            className="w-full h-9 px-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[10px] font-bold text-gray-900 dark:text-gray-100"
                                                         >
                                                             <option value="">-- Link SKU --</option>
                                                             {inventoryItems.map(inv => <option key={inv.id} value={inv.id}>{inv.name} ({inv.sku})</option>)}
@@ -1077,7 +1077,7 @@ export default function WebsiteProductsPage() {
 
                             <div className="grid grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Product Images</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Product Images</label>
                                     <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => e.target.files && handleImageFiles(e.target.files)} />
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                         {form.images.map((img, i) => (
@@ -1118,7 +1118,7 @@ export default function WebsiteProductsPage() {
                                                     value={img.label} 
                                                     onChange={e => setForm(f => ({ ...f, images: f.images.map((im, idx) => idx === i ? { ...im, label: e.target.value } : im) }))}
                                                     placeholder="Label (e.g. Black)"
-                                                    className="w-full h-8 px-2 text-[11px] font-bold rounded-lg border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                    className="w-full h-8 px-2 text-[11px] font-bold text-gray-900 dark:text-gray-100 rounded-lg border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30"
                                                 />
                                             </div>
                                         ))}
@@ -1131,7 +1131,7 @@ export default function WebsiteProductsPage() {
 
                                 {/* Video Section */}
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Product Video (Optional)</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Product Video (Optional)</label>
                                     <div className="relative group">
                                         <div className={`aspect-square rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 text-center ${form.video_url || form.video_file ? 'border-primary bg-primary/5' : 'border-gray-100 dark:border-gray-800 hover:border-primary/40'}`}>
                                             {(form.video_file || form.video_url) ? (
